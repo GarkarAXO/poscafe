@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Coffee, ShieldCheck, KeyRound, Store, ArrowRight, Loader2, Sparkles } from 'lucide-react'
 
-type LoginMode = 'tenant' | 'pin' | 'platform'
+type LoginMode = 'tenant' | 'pin'
 
 export default function LoginForm() {
   const router = useRouter()
@@ -46,9 +47,6 @@ export default function LoginForm() {
       } else if (mode === 'pin') {
         endpoint = '/api/auth/pin'
         payload = { pin }
-      } else if (mode === 'platform') {
-        endpoint = '/api/auth/platform-login'
-        payload = { email: login, password }
       }
 
       const res = await fetch(endpoint, {
@@ -66,9 +64,7 @@ export default function LoginForm() {
       }
 
       // Redirección inteligente según el rol y permisos
-      if (mode === 'platform') {
-        router.push('/admin')
-      } else if (mode === 'pin') {
+      if (mode === 'pin') {
         const userRoles = result.data?.user?.roleCodes || []
         if (userRoles.includes('WAITER')) {
           router.push('/comandera')
@@ -78,6 +74,7 @@ export default function LoginForm() {
       } else {
         router.push('/dashboard')
       }
+      router.refresh()
     } catch {
       setError('Error de conexión con el servidor')
       setLoading(false)
@@ -85,7 +82,7 @@ export default function LoginForm() {
   }
 
   // Botones de prueba rápida con datos de la semilla
-  const fillDemo = (type: 'owner' | 'cashier' | 'waiter' | 'superadmin') => {
+  const fillDemo = (type: 'owner' | 'cashier' | 'waiter') => {
     setError(null)
     if (type === 'owner') {
       setMode('tenant')
@@ -97,10 +94,6 @@ export default function LoginForm() {
     } else if (type === 'waiter') {
       setMode('pin')
       setPin('4321')
-    } else if (type === 'superadmin') {
-      setMode('platform')
-      setLogin('admin@poscafe.app')
-      setPassword('SuperAdmin2026!')
     }
   }
 
@@ -124,22 +117,22 @@ export default function LoginForm() {
           <p className="text-xs text-slate-400 mt-1">Plataforma POS e inventarios multisucursal</p>
         </div>
 
-        {/* Mode Selector Tabs */}
-        <div className="grid grid-cols-3 gap-1 bg-slate-950/60 p-1 rounded-xl mb-6 border border-slate-800/80 text-xs font-medium">
+        {/* Mode Selector Tabs (2 tabs: Negocio vs Terminal PIN) */}
+        <div className="grid grid-cols-2 gap-1 bg-slate-950/60 p-1 rounded-xl mb-6 border border-slate-800/80 text-xs font-medium">
           <button
             type="button"
             onClick={() => {
               setMode('tenant')
               setError(null)
             }}
-            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg transition-all cursor-pointer ${
               mode === 'tenant'
                 ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             <Store className="w-3.5 h-3.5" />
-            <span>Negocio</span>
+            <span>Negocio / Admin</span>
           </button>
 
           <button
@@ -148,7 +141,7 @@ export default function LoginForm() {
               setMode('pin')
               setError(null)
             }}
-            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg transition-all cursor-pointer ${
               mode === 'pin'
                 ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
                 : 'text-slate-400 hover:text-slate-200'
@@ -156,22 +149,6 @@ export default function LoginForm() {
           >
             <KeyRound className="w-3.5 h-3.5" />
             <span>Terminal PIN</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMode('platform')
-              setError(null)
-            }}
-            className={`flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all cursor-pointer ${
-              mode === 'platform'
-                ? 'bg-slate-700 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Super Admin</span>
           </button>
         </div>
 
@@ -182,7 +159,7 @@ export default function LoginForm() {
           </div>
         )}
 
-        {/* Forms */}
+        {/* Form: Negocio (Dueño / Gerente / Empleado con contraseña) */}
         {mode === 'tenant' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -220,6 +197,7 @@ export default function LoginForm() {
           </form>
         )}
 
+        {/* Form: Terminal PIN */}
         {mode === 'pin' && (
           <div className="space-y-4">
             <div className="text-center">
@@ -266,80 +244,50 @@ export default function LoginForm() {
           </div>
         )}
 
-        {mode === 'platform' && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Correo Super Admin</label>
-              <input
-                type="email"
-                value={login}
-                onChange={(e) => setLogin(e.target.value)}
-                placeholder="admin@poscafe.app"
-                required
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Contraseña Maestra</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Entrar a Panel SaaS'}
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-        )}
-
         {/* Demo Fast Access Buttons */}
         <div className="mt-8 pt-5 border-t border-slate-800/80">
           <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5 mb-2.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            Prueba rápida con usuarios de la semilla:
+            Accesos de prueba de la cafetería:
           </p>
 
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div className="grid grid-cols-3 gap-2 text-[11px]">
             <button
               type="button"
               onClick={() => fillDemo('owner')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-950/60 hover:bg-violet-950/40 border border-slate-800 hover:border-violet-500/50 text-slate-300 text-left transition-all cursor-pointer"
+              className="px-2 py-1.5 rounded-lg bg-slate-950/60 hover:bg-violet-950/40 border border-slate-800 hover:border-violet-500/50 text-slate-300 text-left transition-all cursor-pointer"
             >
-              👑 <strong className="text-violet-400">Dueño:</strong> Rodrigo
+              👑 <strong className="text-violet-400">Dueño</strong>
+              <span className="block text-[10px] text-slate-500">Rodrigo</span>
             </button>
             <button
               type="button"
               onClick={() => fillDemo('cashier')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-950/60 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 text-slate-300 text-left transition-all cursor-pointer"
+              className="px-2 py-1.5 rounded-lg bg-slate-950/60 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 text-slate-300 text-left transition-all cursor-pointer"
             >
-              💳 <strong className="text-amber-400">Cajero:</strong> PIN 1234
+              💳 <strong className="text-amber-400">Cajero</strong>
+              <span className="block text-[10px] text-slate-500">PIN 1234</span>
             </button>
             <button
               type="button"
               onClick={() => fillDemo('waiter')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-950/60 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 text-slate-300 text-left transition-all cursor-pointer"
+              className="px-2 py-1.5 rounded-lg bg-slate-950/60 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 text-slate-300 text-left transition-all cursor-pointer"
             >
-              🍽️ <strong className="text-amber-400">Mesero:</strong> PIN 4321
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('superadmin')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-950/60 hover:bg-slate-800/60 border border-slate-800 text-slate-300 text-left transition-all cursor-pointer"
-            >
-              🛡️ <strong className="text-slate-300">Super Admin</strong>
+              🍽️ <strong className="text-amber-400">Mesero</strong>
+              <span className="block text-[10px] text-slate-500">PIN 4321</span>
             </button>
           </div>
+        </div>
+
+        {/* Discreet link to Platform Master Console */}
+        <div className="mt-5 pt-3 border-t border-slate-800/50 text-center">
+          <Link
+            href="/admin/login"
+            className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+            <span>¿Administrador SaaS? Ingresar al Master Console</span>
+          </Link>
         </div>
       </div>
     </div>

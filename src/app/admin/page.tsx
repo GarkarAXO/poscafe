@@ -10,7 +10,7 @@ export default async function AdminPlatformPage() {
   const session = await getSession()
 
   if (!session || !session.isPlatformAdmin) {
-    redirect('/login')
+    redirect('/admin/login')
   }
 
   const businesses = await prisma.business.findMany({

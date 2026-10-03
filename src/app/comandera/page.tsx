@@ -29,6 +29,8 @@ import {
   UserCheck,
   UserPlus,
   ReceiptText,
+  ShieldCheck,
+  LogOut,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 
@@ -154,6 +156,74 @@ export default function ComanderaPage() {
 
   // Modal para imprimir ticket de cobro (pre-cuenta)
   const [showBillReceiptModal, setShowBillReceiptModal] = useState(false)
+
+  // Terminal Lock / Waiter Shift Relevo states
+  const [isTerminalLocked, setIsTerminalLocked] = useState(false)
+  const [unlockPin, setUnlockPin] = useState('')
+  const [unlockError, setUnlockError] = useState<string | null>(null)
+  const [unlocking, setUnlocking] = useState(false)
+
+  const handleKeypadPressUnlock = (val: string) => {
+    if (val === 'C') {
+      setUnlockPin('')
+      setUnlockError(null)
+    } else if (val === 'DEL') {
+      setUnlockPin((prev) => prev.slice(0, -1))
+      setUnlockError(null)
+    } else {
+      if (unlockPin.length < 4) {
+        const next = unlockPin + val
+        setUnlockPin(next)
+        setUnlockError(null)
+        if (next.length === 4) {
+          handleUnlockTerminal(next)
+        }
+      }
+    }
+  }
+
+  const handleUnlockTerminal = async (pinToVerify?: string) => {
+    const pinVal = pinToVerify || unlockPin
+    if (!pinVal || pinVal.length < 4) {
+      setUnlockError('Ingresa los 4 dígitos del PIN')
+      return
+    }
+
+    setUnlocking(true)
+    setUnlockError(null)
+
+    try {
+      const res = await fetch('/api/auth/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin: pinVal,
+          branch_id: activeBranch?.id,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (!json.success || !json.data) {
+        setUnlockError(json.error?.message || 'PIN no asignado a esta sucursal')
+        setUnlockPin('')
+        return
+      }
+
+      const newUser = json.data.user
+      setCurrentUser((prev: any) => ({
+        ...prev,
+        ...newUser,
+      }))
+      setIsTerminalLocked(false)
+      setUnlockPin('')
+      notify.success('Relevo Exitoso', `Operando como: ${newUser.name}`)
+    } catch {
+      setUnlockError('Error de conexión al validar PIN')
+    } finally {
+      setUnlocking(false)
+    }
+  }
 
   // Cargar datos
   const loadComanderaData = async () => {
@@ -616,14 +686,19 @@ export default function ComanderaPage() {
           )}
 
           {/* Bloquear / Salir a Relevo de PIN */}
-          <Link
-            href="/logout"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-red-500/20 border border-slate-700 hover:border-red-500/30 text-xs text-slate-300 hover:text-red-400 transition-all"
-            title="Bloquear pantalla para relevo de mesero"
+          <button
+            type="button"
+            onClick={() => {
+              setUnlockPin('')
+              setUnlockError(null)
+              setIsTerminalLocked(true)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/30 text-xs text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
+            title="Bloquear pantalla o relevar mesero"
           >
             <Lock className="w-3.5 h-3.5" />
-            <span>Bloquear</span>
-          </Link>
+            <span>Bloquear / Relevo</span>
+          </button>
         </div>
       </header>
 
@@ -1583,6 +1658,94 @@ export default function ComanderaPage() {
                 <Printer className="w-4 h-4" />
                 <span>Imprimir Ticket</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FULLSCREEN DE BLOQUEO DE TERMINAL Y RELEVO RÁPIDO */}
+      {isTerminalLocked && (
+        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-5 shadow-2xl text-center animate-in zoom-in-95">
+            <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/30 text-violet-400 flex items-center justify-center mx-auto shadow-lg shadow-violet-500/10">
+              <Lock className="w-7 h-7" />
+            </div>
+
+            <div>
+              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] text-violet-300 mb-2 font-medium">
+                <Store className="w-3 h-3" />
+                <span>{activeBranch?.name || 'Comandera'}</span>
+              </div>
+              <h2 className="text-xl font-bold text-white tracking-tight">Comandera Bloqueada</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Ingresa tu PIN de 4 dígitos para relevar o continuar turno
+              </p>
+              {currentUser && (
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Último mesero: <span className="text-slate-300 font-medium">{currentUser.name}</span>
+                </p>
+              )}
+            </div>
+
+            {/* Error */}
+            {unlockError && (
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium animate-in fade-in">
+                {unlockError}
+              </div>
+            )}
+
+            {/* PIN indicators */}
+            <div className="flex justify-center gap-3 my-2">
+              {[0, 1, 2, 3].map((idx) => (
+                <div
+                  key={idx}
+                  className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all ${
+                    unlockPin.length > idx
+                      ? 'border-violet-500 bg-violet-500/10 text-violet-400 shadow-md shadow-violet-500/20'
+                      : 'border-slate-800 bg-slate-950/60 text-slate-600'
+                  }`}
+                >
+                  {unlockPin.length > idx ? '•' : ''}
+                </div>
+              ))}
+            </div>
+
+            {/* Teclado numérico */}
+            <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => handleKeypadPressUnlock(val)}
+                  disabled={unlocking}
+                  className="py-3 rounded-xl bg-slate-950/90 hover:bg-slate-800 border border-slate-800/80 text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {val === 'DEL' ? '⌫' : val}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleUnlockTerminal()}
+              disabled={unlocking || unlockPin.length < 4}
+              className="w-full py-2.5 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-violet-600/20 transition-all disabled:opacity-40 cursor-pointer"
+            >
+              {unlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+              <span>Desbloquear Comandera</span>
+            </button>
+
+            {/* Opción de cerrar sesión general */}
+            <div className="pt-2 border-t border-slate-800/80">
+              <form action="/api/auth/logout" method="POST">
+                <button
+                  type="submit"
+                  className="w-full text-[11px] text-slate-500 hover:text-red-400 flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Salir al Login Principal (Cerrar Sesión)</span>
+                </button>
+              </form>
             </div>
           </div>
         </div>

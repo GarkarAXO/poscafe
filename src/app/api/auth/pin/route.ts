@@ -20,7 +20,11 @@ export async function POST(request: Request) {
     // Caso A: Se especifica user_id
     if (user_id) {
       user = await prisma.user.findFirst({
-        where: { id: user_id, active: true },
+        where: {
+          id: user_id,
+          active: true,
+          ...(branch_id ? { userBranches: { some: { branchId: branch_id } } } : {}),
+        },
         include: {
           business: { select: { id: true, name: true, businessType: true, active: true } },
           userBranches: { include: { branch: true } },
@@ -30,7 +34,15 @@ export async function POST(request: Request) {
 
       if (!user || !user.pinHash) {
         return NextResponse.json(
-          { success: false, error: { code: 'AUTH_FAILED', message: 'PIN o usuario no válido' } },
+          {
+            success: false,
+            error: {
+              code: 'AUTH_FAILED',
+              message: branch_id
+                ? 'El usuario no está asignado a esta sucursal o no tiene PIN'
+                : 'PIN o usuario no válido',
+            },
+          },
           { status: 401 }
         )
       }
