@@ -1,23 +1,63 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Coffee, KeyRound, Store, ArrowRight, Loader2, Sparkles, User, Lock } from 'lucide-react'
+import { Coffee, KeyRound, Store, ArrowRight, Loader2, User, Lock, Eye, EyeOff, Laptop } from 'lucide-react'
+import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
 
 type LoginMode = 'tenant' | 'pin'
 
 export default function LoginForm() {
   const router = useRouter()
   const [mode, setMode] = useState<LoginMode>('tenant')
+  const [deviceConfig, setDeviceConfig] = useState<TerminalDeviceConfig | null>(null)
 
   // Form states
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // PIN keypad helper
+  // Detectar si este dispositivo físico está configurado como terminal de una sucursal
+  useEffect(() => {
+    const config = getTerminalDeviceConfig()
+    if (config) {
+      setDeviceConfig(config)
+      setMode('pin')
+    }
+  }, [])
+
+  // Soporte de teclado físico de escritorio en modo PIN (teclas 0-9, Backspace, Enter, Esc)
+  useEffect(() => {
+    if (mode !== 'pin') return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key >= '0' && e.key <= '9') {
+        if (pin.length < 6) {
+          const next = pin + e.key
+          setPin(next)
+          if (next.length === 4) {
+            handleQuickSubmit(next)
+          }
+        }
+      } else if (e.key === 'Backspace') {
+        setPin((prev) => prev.slice(0, -1))
+      } else if (e.key === 'Escape') {
+        setPin('')
+      } else if (e.key === 'Enter' && pin.length >= 4) {
+        handleSubmit()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mode, pin, deviceConfig])
+
+  // PIN keypad helper (táctil para pantallas touch)
   const handleKeypadPress = (val: string) => {
     if (val === 'C') {
       setPin('')
@@ -25,12 +65,54 @@ export default function LoginForm() {
       setPin((prev) => prev.slice(0, -1))
     } else {
       if (pin.length < 6) {
-        setPin((prev) => prev + val)
+        const next = pin + val
+        setPin(next)
+        if (next.length === 4) {
+          handleQuickSubmit(next)
+        }
       }
     }
   }
 
-  // Submit Handler
+  const handleQuickSubmit = async (pinValue: string) => {
+    setError(null)
+    setLoading(true)
+
+    try {
+      const payload: Record<string, any> = { pin: pinValue }
+      if (deviceConfig?.branchId) {
+        payload.branch_id = deviceConfig.branchId
+      }
+
+      const res = await fetch('/api/auth/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const result = await res.json()
+
+      if (!result.success) {
+        setError(result.error?.message || 'PIN no autorizado')
+        setLoading(false)
+        setPin('')
+        return
+      }
+
+      const userRoles = result.data?.user?.roleCodes || []
+      if (userRoles.includes('WAITER')) {
+        router.push('/comandera')
+      } else {
+        router.push('/pos')
+      }
+      router.refresh()
+    } catch {
+      setError('Error de conexión con el servidor')
+      setLoading(false)
+    }
+  }
+
+  // Submit Handler general
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     setError(null)
@@ -45,7 +127,10 @@ export default function LoginForm() {
         payload = { login, password }
       } else if (mode === 'pin') {
         endpoint = '/api/auth/pin'
-        payload = { pin }
+        payload = {
+          pin,
+          ...(deviceConfig?.branchId ? { branch_id: deviceConfig.branchId } : {}),
+        }
       }
 
       const res = await fetch(endpoint, {
@@ -80,22 +165,6 @@ export default function LoginForm() {
     }
   }
 
-  // Botones de prueba rápida con datos de la semilla
-  const fillDemo = (type: 'owner' | 'cashier' | 'waiter') => {
-    setError(null)
-    if (type === 'owner') {
-      setMode('tenant')
-      setLogin('propietario@cafearoma.demo')
-      setPassword('Owner2026!')
-    } else if (type === 'cashier') {
-      setMode('pin')
-      setPin('1234')
-    } else if (type === 'waiter') {
-      setMode('pin')
-      setPin('4321')
-    }
-  }
-
   return (
     <div className="min-h-screen bg-[#F3E9DC] text-[#5E3023] flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-[#C08552] selection:text-white">
       {/* Warm Ambient Coffee Glows */}
@@ -106,7 +175,7 @@ export default function LoginForm() {
 
       <div className="relative w-full max-w-md bg-white/95 border border-[#E6D5C3] rounded-3xl p-7 sm:p-9 backdrop-blur-xl shadow-2xl shadow-[#5E3023]/15">
         {/* Brand Header */}
-        <div className="flex flex-col items-center text-center mb-7">
+        <div className="flex flex-col items-center text-center mb-6">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#7A3E2D] flex items-center justify-center shadow-lg shadow-[#5E3023]/25 mb-3.5 transform hover:scale-105 transition-transform duration-300">
             <Coffee className="w-8 h-8 text-[#F3E9DC]" />
           </div>
@@ -120,6 +189,32 @@ export default function LoginForm() {
             Sistema artesanal de comandas, cobro e inventario
           </p>
         </div>
+
+        {/* Banner de Dispositivo Fijo Vinculado */}
+        {deviceConfig && (
+          <div className="mb-5 p-3 rounded-2xl bg-[#C08552]/10 border border-[#C08552]/30 flex items-center justify-between gap-3 text-left">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#C08552] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Laptop className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-[#5E3023]">
+                  {deviceConfig.terminalName || 'Terminal de Cobro'}
+                </p>
+                <p className="text-[11px] text-[#895737]">
+                  Sucursal fija: <strong className="text-[#5E3023]">{deviceConfig.branchName}</strong>
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/pos')}
+              className="px-3 py-1.5 rounded-xl bg-[#5E3023] hover:bg-[#472218] text-[#F3E9DC] text-[11px] font-bold shrink-0 transition-all cursor-pointer shadow-xs"
+            >
+              Abrir POS
+            </button>
+          </div>
+        )}
 
         {/* Mode Selector Tabs (Crema, Caramelo, Espresso) */}
         <div className="grid grid-cols-2 gap-1.5 bg-[#F3E9DC]/70 p-1.5 rounded-2xl mb-6 border border-[#E6D5C3] text-xs font-semibold">
@@ -163,7 +258,7 @@ export default function LoginForm() {
           </div>
         )}
 
-        {/* Form: Modo Administración (Dueño / Gerente / Empleado con contraseña) */}
+        {/* Form: Modo Administración (Dueño / Gerente con contraseña) */}
         {mode === 'tenant' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -175,9 +270,9 @@ export default function LoginForm() {
                   type="text"
                   value={login}
                   onChange={(e) => setLogin(e.target.value)}
-                  placeholder="propietario@cafearoma.demo"
+                  placeholder="usuario@cafeteria.com"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
+                  className="w-full pl-10 pr-3.5 py-3 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
                 />
                 <User className="w-4 h-4 text-[#A88C7D] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -189,21 +284,34 @@ export default function LoginForm() {
               </label>
               <div className="relative">
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
+                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
                 />
                 <Lock className="w-4 h-4 text-[#A88C7D] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A88C7D] hover:text-[#5E3023] p-1.5 transition-colors cursor-pointer"
+                  title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-[#5E3023] hover:bg-[#472218] text-[#F3E9DC] font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#5E3023]/25 transition-all disabled:opacity-50 cursor-pointer mt-2"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#5E3023] hover:bg-[#472218] text-[#F3E9DC] font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#5E3023]/25 transition-all disabled:opacity-50 cursor-pointer mt-2"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin text-[#F3E9DC]" /> : 'Ingresar a Cafetería'}
               <ArrowRight className="w-4 h-4" />
@@ -211,7 +319,7 @@ export default function LoginForm() {
           </form>
         )}
 
-        {/* Form: Terminal PIN (Cajeros y Meseros) */}
+        {/* Form: Terminal PIN (Cajeros y Meseros con pantalla Touch o Teclado Escritorio) */}
         {mode === 'pin' && (
           <div className="space-y-4">
             <div className="text-center">
@@ -222,7 +330,7 @@ export default function LoginForm() {
                 {[0, 1, 2, 3].map((idx) => (
                   <div
                     key={idx}
-                    className={`w-11 h-11 rounded-2xl border flex items-center justify-center text-lg font-bold transition-all ${
+                    className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all ${
                       pin.length > idx
                         ? 'border-[#C08552] bg-[#C08552]/15 text-[#5E3023] shadow-md shadow-[#C08552]/20'
                         : 'border-[#DECEBD] bg-[#FDFBF9] text-[#A88C7D]'
@@ -232,16 +340,21 @@ export default function LoginForm() {
                   </div>
                 ))}
               </div>
+              <p className="text-[11px] text-[#895737] font-medium">
+                {deviceConfig
+                  ? `Vinculado a: ${deviceConfig.branchName}`
+                  : 'Puedes usar la pantalla táctil o el teclado físico'}
+              </p>
             </div>
 
-            {/* Keypad táctil cálido */}
+            {/* Keypad táctil optimizado para Touch (botones amplios h-14) */}
             <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
                 <button
                   key={val}
                   type="button"
                   onClick={() => handleKeypadPress(val)}
-                  className="py-3 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border border-[#DECEBD] text-sm font-bold text-[#5E3023] transition-all shadow-sm active:scale-95 cursor-pointer"
+                  className="h-14 rounded-2xl bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border border-[#DECEBD] text-lg font-bold text-[#5E3023] transition-all shadow-xs active:scale-95 cursor-pointer flex items-center justify-center select-none"
                 >
                   {val === 'DEL' ? '⌫' : val}
                 </button>
@@ -252,48 +365,13 @@ export default function LoginForm() {
               type="button"
               onClick={() => handleSubmit()}
               disabled={loading || pin.length < 4}
-              className="w-full py-3 px-4 rounded-xl bg-[#C08552] hover:bg-[#A96F3F] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#C08552]/30 transition-all disabled:opacity-50 cursor-pointer mt-2"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#C08552] hover:bg-[#A96F3F] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#C08552]/30 transition-all disabled:opacity-50 cursor-pointer mt-2"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Entrar a Terminal'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         )}
-
-        {/* Demo Fast Access Buttons */}
-        <div className="mt-8 pt-5 border-t border-[#E6D5C3]/80">
-          <p className="text-[11px] font-bold text-[#895737] flex items-center gap-1.5 mb-2.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#C08552]" />
-            Accesos rápidos de demostración:
-          </p>
-
-          <div className="grid grid-cols-3 gap-2 text-[11px]">
-            <button
-              type="button"
-              onClick={() => fillDemo('owner')}
-              className="px-2.5 py-2 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] hover:border-[#C08552] text-[#5E3023] text-left transition-all shadow-xs cursor-pointer"
-            >
-              👑 <strong className="text-[#5E3023]">Dueño</strong>
-              <span className="block text-[10px] text-[#895737]">Rodrigo</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('cashier')}
-              className="px-2.5 py-2 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] hover:border-[#C08552] text-[#5E3023] text-left transition-all shadow-xs cursor-pointer"
-            >
-              💳 <strong className="text-[#C08552]">Cajero</strong>
-              <span className="block text-[10px] text-[#895737]">PIN 1234</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('waiter')}
-              className="px-2.5 py-2 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] hover:border-[#C08552] text-[#5E3023] text-left transition-all shadow-xs cursor-pointer"
-            >
-              🍽️ <strong className="text-[#C08552]">Mesero</strong>
-              <span className="block text-[10px] text-[#895737]">PIN 4321</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   )

@@ -28,11 +28,12 @@ import {
   Printer,
   UserCheck,
   UserPlus,
-  ReceiptText,
   ShieldCheck,
   LogOut,
+  Laptop,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
+import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
 
 interface TableItem {
   id: string
@@ -162,6 +163,45 @@ export default function ComanderaPage() {
   const [unlockPin, setUnlockPin] = useState('')
   const [unlockError, setUnlockError] = useState<string | null>(null)
   const [unlocking, setUnlocking] = useState(false)
+  const [terminalDevice, setTerminalDevice] = useState<TerminalDeviceConfig | null>(null)
+
+  useEffect(() => {
+    const config = getTerminalDeviceConfig()
+    if (config) {
+      setTerminalDevice(config)
+    }
+  }, [])
+
+  // Escucha de teclado físico para computadoras con teclado/numpad
+  useEffect(() => {
+    if (!isTerminalLocked) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key >= '0' && e.key <= '9') {
+        if (unlockPin.length < 4) {
+          const next = unlockPin + e.key
+          setUnlockPin(next)
+          setUnlockError(null)
+          if (next.length === 4) {
+            handleUnlockTerminal(next)
+          }
+        }
+      } else if (e.key === 'Backspace') {
+        setUnlockPin((prev) => prev.slice(0, -1))
+        setUnlockError(null)
+      } else if (e.key === 'Escape') {
+        setUnlockPin('')
+        setUnlockError(null)
+      } else if (e.key === 'Enter' && unlockPin.length === 4) {
+        handleUnlockTerminal()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isTerminalLocked, unlockPin, activeBranch, terminalDevice])
 
   const handleKeypadPressUnlock = (val: string) => {
     if (val === 'C') {
@@ -198,7 +238,7 @@ export default function ComanderaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pin: pinVal,
-          branch_id: activeBranch?.id,
+          branch_id: terminalDevice?.branchId || activeBranch?.id,
         }),
       })
 
@@ -1710,7 +1750,7 @@ export default function ComanderaPage() {
               ))}
             </div>
 
-            {/* Teclado numérico */}
+            {/* Teclado numérico táctil optimizado para Touch (botones amplios h-14) */}
             <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
                 <button
@@ -1718,7 +1758,7 @@ export default function ComanderaPage() {
                   type="button"
                   onClick={() => handleKeypadPressUnlock(val)}
                   disabled={unlocking}
-                  className="py-3 rounded-xl bg-slate-950/90 hover:bg-slate-800 border border-slate-800/80 text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  className="h-14 rounded-2xl bg-slate-950/90 hover:bg-slate-800 border border-slate-800/80 text-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none"
                 >
                   {val === 'DEL' ? '⌫' : val}
                 </button>
@@ -1729,7 +1769,7 @@ export default function ComanderaPage() {
               type="button"
               onClick={() => handleUnlockTerminal()}
               disabled={unlocking || unlockPin.length < 4}
-              className="w-full py-2.5 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-violet-600/20 transition-all disabled:opacity-40 cursor-pointer"
+              className="w-full py-3.5 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-violet-600/20 transition-all disabled:opacity-40 cursor-pointer"
             >
               {unlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               <span>Desbloquear Comandera</span>

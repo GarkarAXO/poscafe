@@ -4,16 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ShieldCheck,
   KeyRound,
   Store,
   Lock,
   ArrowRight,
   Loader2,
-  CheckCircle2,
-  User,
   Coffee,
-  RotateCcw,
+  CheckCircle2,
 } from 'lucide-react'
 
 export default function LogoutPage() {
@@ -103,35 +100,36 @@ export default function LogoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 selection:bg-amber-500 selection:text-black">
-      {/* Background Ambient Glow */}
+    <div className="min-h-screen bg-[#F3E9DC] text-[#5E3023] flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-[#C08552] selection:text-white">
+      {/* Warm Ambient Coffee Glows */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-600/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-[#C08552]/15 rounded-full blur-[130px]"></div>
+        <div className="absolute bottom-10 right-1/4 w-[400px] h-[400px] bg-[#5E3023]/10 rounded-full blur-[110px]"></div>
       </div>
 
-      <div className="relative w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6">
+      <div className="relative w-full max-w-md bg-white/95 border border-[#E6D5C3] rounded-3xl p-7 sm:p-9 backdrop-blur-xl shadow-2xl shadow-[#5E3023]/15 space-y-6">
         {/* Header de Cierre */}
         <div className="flex flex-col items-center text-center space-y-2">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10 mb-1">
-            <CheckCircle2 className="w-8 h-8" />
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#7A3E2D] flex items-center justify-center shadow-lg shadow-[#5E3023]/25 mb-1 transform hover:scale-105 transition-transform duration-300">
+            <Coffee className="w-8 h-8 text-[#F3E9DC]" />
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-xs font-medium">
-            <Lock className="w-3.5 h-3.5 text-amber-400" />
-            Terminal Bloqueada
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#C08552]/15 border border-[#C08552]/30 text-[#C08552] text-xs font-semibold">
+            <Lock className="w-3.5 h-3.5" />
+            <span>Turno Concluido • Terminal en Pausa</span>
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-white">Sesión Finalizada</h1>
-          <p className="text-xs text-slate-400 max-w-xs">
-            Tu sesión ha sido cerrada correctamente. La terminal está lista para el siguiente
-            operador.
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#5E3023]">
+            ¡Hasta Pronto!
+          </h1>
+          <p className="text-xs text-[#895737] max-w-xs font-medium">
+            Tu sesión ha sido cerrada correctamente. La terminal está lista para el siguiente turno.
           </p>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center font-medium animate-shake">
+          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs text-center font-medium animate-in fade-in">
             {error}
           </div>
         )}
@@ -139,23 +137,23 @@ export default function LogoutPage() {
         {/* Sección de Reingreso Rápido con PIN */}
         <div className="space-y-4 pt-1">
           <div className="text-center">
-            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <span className="text-xs font-bold text-[#5E3023] uppercase tracking-wider">
               Relevo Rápido / Ingreso con PIN
             </span>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Cajero o mesero: ingresa tu PIN para continuar
+            <p className="text-[11px] text-[#895737] mt-0.5 font-medium">
+              Cajero o mesero: ingresa tu PIN para retomar turno
             </p>
           </div>
 
           {/* PIN Dots Display */}
-          <div className="flex justify-center items-center gap-3 py-2 bg-slate-950/80 rounded-2xl border border-slate-800">
+          <div className="flex justify-center items-center gap-3.5 py-3 bg-[#FDFBF9] rounded-2xl border border-[#DECEBD]">
             {[0, 1, 2, 3].map((idx) => (
               <div
                 key={idx}
                 className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
                   pin.length > idx
-                    ? 'bg-amber-400 scale-110 shadow-sm shadow-amber-400/50'
-                    : 'bg-slate-800 border border-slate-700'
+                    ? 'bg-[#C08552] scale-125 shadow-sm shadow-[#C08552]/40'
+                    : 'bg-[#E6D7C8]'
                 }`}
               />
             ))}
@@ -168,12 +166,12 @@ export default function LogoutPage() {
                 key={val}
                 type="button"
                 onClick={() => handleKeypadPress(val)}
-                className={`h-12 rounded-xl text-base font-bold transition-all cursor-pointer ${
+                className={`h-12 rounded-xl text-base font-bold transition-all shadow-xs cursor-pointer ${
                   val === 'C'
-                    ? 'bg-slate-800/60 hover:bg-slate-800 text-red-400 text-xs'
+                    ? 'bg-[#FDFBF9] hover:bg-rose-50 border border-[#DECEBD] text-rose-600 text-xs'
                     : val === 'DEL'
-                    ? 'bg-slate-800/60 hover:bg-slate-800 text-slate-400 text-xs'
-                    : 'bg-slate-800 hover:bg-slate-700 text-white active:scale-95 shadow-sm'
+                    ? 'bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] text-[#895737] text-xs'
+                    : 'bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border border-[#DECEBD] text-[#5E3023] active:scale-95'
                 }`}
               >
                 {val === 'DEL' ? '⌫' : val}
@@ -186,10 +184,10 @@ export default function LogoutPage() {
             type="button"
             onClick={() => handleUnlockWithPin()}
             disabled={loading || pin.length < 4}
-            className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="w-full py-3 rounded-xl bg-[#C08552] hover:bg-[#A96F3F] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#C08552]/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin text-white" />
             ) : (
               <>
                 <KeyRound className="w-4 h-4" />
@@ -197,51 +195,26 @@ export default function LogoutPage() {
               </>
             )}
           </button>
-
-          {/* Demo Quick PINs */}
-          <div className="flex items-center justify-center gap-2 pt-1">
-            <span className="text-[10px] text-slate-500">Prueba rápida:</span>
-            <button
-              type="button"
-              onClick={() => {
-                setPin('1234')
-                handleUnlockWithPin('1234')
-              }}
-              className="px-2.5 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-[11px] text-amber-400 border border-slate-700 transition-all cursor-pointer"
-            >
-              Cajero (1234)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPin('4321')
-                handleUnlockWithPin('4321')
-              }}
-              className="px-2.5 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-800 text-[11px] text-violet-400 border border-slate-700 transition-all cursor-pointer"
-            >
-              Mesero (4321)
-            </button>
-          </div>
         </div>
 
         {/* Separator */}
-        <div className="relative border-t border-slate-800">
-          <span className="absolute left-1/2 -top-2.5 -translate-x-1/2 bg-slate-900 px-3 text-[10px] uppercase tracking-wider text-slate-500">
-            o acceder con credenciales
+        <div className="relative border-t border-[#E6D5C3]">
+          <span className="absolute left-1/2 -top-2.5 -translate-x-1/2 bg-white px-3 text-[10px] uppercase font-bold tracking-wider text-[#A88C7D]">
+            o volver a administración
           </span>
         </div>
 
         {/* Action Links */}
-        <div className="space-y-2">
+        <div>
           <Link
             href="/login"
-            className="w-full py-2.5 px-4 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 flex items-center justify-between transition-all"
+            className="w-full py-3 px-4 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] text-[#5E3023] text-xs font-bold border border-[#DECEBD] hover:border-[#C08552] flex items-center justify-between transition-all shadow-xs"
           >
             <span className="flex items-center gap-2">
-              <Store className="w-3.5 h-3.5 text-violet-400" />
+              <Store className="w-4 h-4 text-[#C08552]" />
               Iniciar sesión con Correo y Contraseña
             </span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ArrowRight className="w-4 h-4 text-[#5E3023]" />
           </Link>
         </div>
       </div>

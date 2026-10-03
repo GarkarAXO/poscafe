@@ -34,8 +34,16 @@ import {
   ReceiptText,
   ShieldAlert,
   ArrowRightLeft,
+  Laptop,
+  Settings,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
+import {
+  getTerminalDeviceConfig,
+  saveTerminalDeviceConfig,
+  clearTerminalDeviceConfig,
+  TerminalDeviceConfig,
+} from '@/lib/terminal-device'
 
 interface Table {
   id: string
@@ -135,6 +143,77 @@ export default function PosTerminalPage() {
   const [unlockError, setUnlockError] = useState<string | null>(null)
   const [unlocking, setUnlocking] = useState(false)
 
+  // Terminal Device / Branch Binding State
+  const [terminalDevice, setTerminalDevice] = useState<TerminalDeviceConfig | null>(null)
+  const [showDeviceConfigModal, setShowDeviceConfigModal] = useState(false)
+  const [deviceTerminalNameInput, setDeviceTerminalNameInput] = useState('')
+
+  // Cargar configuración de dispositivo fijo al montar
+  useEffect(() => {
+    const config = getTerminalDeviceConfig()
+    if (config) {
+      setTerminalDevice(config)
+      setDeviceTerminalNameInput(config.terminalName)
+    }
+  }, [])
+
+  // Escucha de teclado físico (0-9, Backspace, Esc, Enter) para usuarios de escritorio
+  useEffect(() => {
+    if (!isTerminalLocked) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key >= '0' && e.key <= '9') {
+        if (unlockPin.length < 4) {
+          const next = unlockPin + e.key
+          setUnlockPin(next)
+          setUnlockError(null)
+          if (next.length === 4) {
+            handleUnlockTerminal(next)
+          }
+        }
+      } else if (e.key === 'Backspace') {
+        setUnlockPin((prev) => prev.slice(0, -1))
+        setUnlockError(null)
+      } else if (e.key === 'Escape') {
+        setUnlockPin('')
+        setUnlockError(null)
+      } else if (e.key === 'Enter' && unlockPin.length === 4) {
+        handleUnlockTerminal()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isTerminalLocked, unlockPin, activeBranch, terminalDevice])
+
+  const handleSaveDeviceBinding = () => {
+    if (!activeBranch) {
+      notify.error('Error', 'No hay una sucursal activa seleccionada')
+      return
+    }
+    const config: TerminalDeviceConfig = {
+      branchId: activeBranch.id,
+      branchName: activeBranch.name,
+      terminalName: deviceTerminalNameInput.trim() || 'Caja Principal',
+      isFixedTerminal: true,
+      configuredAt: new Date().toISOString(),
+    }
+    saveTerminalDeviceConfig(config)
+    setTerminalDevice(config)
+    setShowDeviceConfigModal(false)
+    notify.success('Dispositivo Vinculado', `Este equipo ha quedado fijado como ${config.terminalName} para ${activeBranch.name}`)
+  }
+
+  const handleUnbindDevice = () => {
+    clearTerminalDeviceConfig()
+    setTerminalDevice(null)
+    setDeviceTerminalNameInput('')
+    setShowDeviceConfigModal(false)
+    notify.info('Dispositivo Liberado', 'Este equipo ya no está fijado a una sucursal.')
+  }
+
   const handleKeypadPressUnlock = (val: string) => {
     if (val === 'C') {
       setUnlockPin('')
@@ -170,7 +249,7 @@ export default function PosTerminalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pin: pinVal,
-          branch_id: activeBranch?.id,
+          branch_id: terminalDevice?.branchId || activeBranch?.id,
         }),
       })
 
@@ -757,6 +836,23 @@ export default function PosTerminalPage() {
               )}
             </h1>
           </div>
+
+          {/* Badge / Botón de Fijación de Terminal */}
+          <button
+            type="button"
+            onClick={() => setShowDeviceConfigModal(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              terminalDevice
+                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700'
+            }`}
+            title="Configurar este equipo como terminal fija de la sucursal"
+          >
+            <Laptop className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">
+              {terminalDevice ? terminalDevice.terminalName : 'Fijar Dispositivo'}
+            </span>
+          </button>
         </div>
 
         {/* User Info & Logout */}
@@ -1957,13 +2053,17 @@ export default function PosTerminalPage() {
             </div>
 
             <div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] text-amber-300 mb-2 font-medium">
-                <Store className="w-3 h-3" />
-                <span>{activeBranch?.name || 'Terminal POS'}</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-amber-300 mb-2 font-medium">
+                <Laptop className="w-3.5 h-3.5" />
+                <span>
+                  {terminalDevice?.terminalName
+                    ? `${terminalDevice.terminalName} • ${activeBranch?.name}`
+                    : (activeBranch?.name || 'Terminal POS')}
+                </span>
               </div>
               <h2 className="text-xl font-bold text-white tracking-tight">Terminal Bloqueada</h2>
               <p className="text-xs text-slate-400 mt-1">
-                Ingresa tu PIN de 4 dígitos para desbloquear o relevar turno
+                Ingresa tu PIN de 4 dígitos (pantalla táctil o teclado físico)
               </p>
               {sessionUser && (
                 <p className="text-[11px] text-slate-500 mt-1">
@@ -1995,7 +2095,7 @@ export default function PosTerminalPage() {
               ))}
             </div>
 
-            {/* Teclado numérico */}
+            {/* Teclado numérico táctil optimizado para Touch (botones amplios h-14) */}
             <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
                 <button
@@ -2003,7 +2103,7 @@ export default function PosTerminalPage() {
                   type="button"
                   onClick={() => handleKeypadPressUnlock(val)}
                   disabled={unlocking}
-                  className="py-3 rounded-xl bg-slate-950/90 hover:bg-slate-800 border border-slate-800/80 text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  className="h-14 rounded-2xl bg-slate-950/90 hover:bg-slate-800 border border-slate-800/80 text-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none"
                 >
                   {val === 'DEL' ? '⌫' : val}
                 </button>
@@ -2014,14 +2114,23 @@ export default function PosTerminalPage() {
               type="button"
               onClick={() => handleUnlockTerminal()}
               disabled={unlocking || unlockPin.length < 4}
-              className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-40 cursor-pointer"
+              className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-40 cursor-pointer"
             >
               {unlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               <span>Desbloquear Terminal</span>
             </button>
 
-            {/* Opción de cerrar sesión general */}
-            <div className="pt-2 border-t border-slate-800/80">
+            {/* Acciones secundarias en bloqueo */}
+            <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowDeviceConfigModal(true)}
+                className="w-full text-[11px] text-slate-400 hover:text-amber-300 flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>Configurar / Vincular este Dispositivo</span>
+              </button>
+
               <form action="/api/auth/logout" method="POST">
                 <button
                   type="submit"
@@ -2031,6 +2140,85 @@ export default function PosTerminalPage() {
                   <span>Salir al Login Principal (Cerrar Sesión)</span>
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIGURACIÓN Y FIJACIÓN DE DISPOSITIVO / TERMINAL */}
+      {showDeviceConfigModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-5 shadow-2xl text-left animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center">
+                  <Laptop className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Vincular Dispositivo Fijo</h3>
+                  <p className="text-xs text-slate-400">Modo Terminal de Sucursal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeviceConfigModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+                <p className="font-bold mb-1">¿Cómo funciona el Modo Terminal?</p>
+                <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                  Al fijar este equipo, la tablet o computadora recordará permanentemente que pertenece a <strong>{activeBranch?.name}</strong>. Los cajeros y meseros solo necesitarán teclear su PIN de 4 dígitos para operar, sin pedir usuario ni contraseñas.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Nombre de la Terminal en esta Sucursal
+                </label>
+                <input
+                  type="text"
+                  value={deviceTerminalNameInput}
+                  onChange={(e) => setDeviceTerminalNameInput(e.target.value)}
+                  placeholder="Ej: Caja Principal 1, Tablet Barra, Caja Terraza"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Sucursal Asignada
+                </label>
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 flex items-center justify-between">
+                  <span className="font-medium text-white">{activeBranch?.name}</span>
+                  <span className="text-[10px] text-amber-400 font-mono">Código: {activeBranch?.code}</span>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveDeviceBinding}
+                  className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                >
+                  <Laptop className="w-4 h-4" />
+                  <span>Guardar y Fijar como Terminal</span>
+                </button>
+
+                {terminalDevice && (
+                  <button
+                    type="button"
+                    onClick={handleUnbindDevice}
+                    className="w-full py-2 rounded-xl text-xs text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition-all cursor-pointer"
+                  >
+                    Desvincular Dispositivo (Usar como equipo móvil libre)
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
