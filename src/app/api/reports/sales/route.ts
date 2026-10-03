@@ -143,7 +143,7 @@ export async function GET(request: Request) {
           difference: cut.difference !== null ? Number(cut.difference) : null,
           notes: cut.notes,
         })),
-        recentOrders: orders.slice(0, 15).map((o) => ({
+        recentOrders: orders.slice(0, 15).map((o: any) => ({
           id: o.id,
           orderNumber: o.orderNumber,
           branchName: o.branch.name,

@@ -49,11 +49,11 @@ export async function GET() {
       orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
     })
 
-    const activeUsersCount = users.filter((u) => u.active).length
+    const activeUsersCount = users.filter((u: any) => u.active).length
 
     return NextResponse.json({
       success: true,
-      data: users.map((u) => ({
+      data: users.map((u: any) => ({
         id: u.id,
         name: u.name,
         email: u.email,
@@ -62,7 +62,7 @@ export async function GET() {
         hasPin: Boolean(u.pinHash),
         lastLoginAt: u.lastLoginAt,
         createdAt: u.createdAt,
-        roles: u.roles.map((ur) => ({
+        roles: u.roles.map((ur: any) => ({
           id: ur.role.id,
           name: ur.role.name,
           code: ur.role.code,
@@ -72,7 +72,7 @@ export async function GET() {
           canAuthorizeCourtesies: ur.role.canAuthorizeCourtesies,
           canAuthorizeCancellations: ur.role.canAuthorizeCancellations,
         })),
-        branches: u.userBranches.map((ub) => ({
+        branches: u.userBranches.map((ub: any) => ({
           id: ub.branch.id,
           name: ub.branch.name,
           code: ub.branch.code,
@@ -255,7 +255,7 @@ export async function POST(request: Request) {
     const passwordHash = await bcrypt.hash(password, 10)
 
     // Crear usuario en transacción
-    const newUser = await prisma.$transaction(async (tx) => {
+    const newUser = await prisma.$transaction(async (tx: any) => {
       const user = await tx.user.create({
         data: {
           businessId: session.businessId!,
@@ -277,7 +277,7 @@ export async function POST(request: Request) {
       })
 
       // Asignar sucursales
-      const finalDefaultBranchId = defaultBranchId && validBranches.some((b) => b.id === defaultBranchId)
+      const finalDefaultBranchId = defaultBranchId && validBranches.some((b: any) => b.id === defaultBranchId)
         ? defaultBranchId
         : validBranches[0].id
 

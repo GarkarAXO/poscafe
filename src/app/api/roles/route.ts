@@ -33,7 +33,7 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    const customRoleCodes = businessRoles.map((r) => r.code)
+    const customRoleCodes = businessRoles.map((r: any) => r.code)
 
     // 2. Obtener roles del sistema que NO hayan sido personalizados por este negocio
     const systemRoles = await prisma.role.findMany({
@@ -63,7 +63,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      data: roles.map((r) => ({
+      data: roles.map((r: any) => ({
         id: r.id,
         name: r.name,
         code: r.code,

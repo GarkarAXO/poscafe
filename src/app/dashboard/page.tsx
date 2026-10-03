@@ -30,7 +30,7 @@ export default async function DashboardPage() {
   if (!business) return null
 
   const activeBranch =
-    business.branches.find((b) => b.id === session.activeBranchId) || business.branches[0]
+    business.branches.find((b: any) => b.id === session.activeBranchId) || business.branches[0]
 
   const settings = business.settings
   const isMultiBranch = settings?.multiBranchEnabled !== false
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            {business.branches.map((b) => {
+            {business.branches.map((b: any) => {
               const isCurrent = b.id === activeBranch?.id
               return (
                 <div

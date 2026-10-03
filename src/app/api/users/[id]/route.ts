@@ -103,7 +103,7 @@ export async function PUT(
       }
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       // 1. Actualizar datos base del usuario
       await tx.user.update({
         where: { id: userId },
@@ -143,7 +143,7 @@ export async function PUT(
 
         if (validBranches.length > 0) {
           await tx.userBranch.deleteMany({ where: { userId } })
-          const finalDefault = defaultBranchId && validBranches.some((b) => b.id === defaultBranchId)
+          const finalDefault = defaultBranchId && validBranches.some((b: any) => b.id === defaultBranchId)
             ? defaultBranchId
             : validBranches[0].id
 
