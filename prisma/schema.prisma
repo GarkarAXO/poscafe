@@ -1,0 +1,1024 @@
+// Prisma Schema — Sistema POS e Inventario SaaS Multisucursal
+// Adaptado a PostgreSQL con Driver Adapters y arquitectura Multi-Tenant
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// 1. NIVEL PLATAFORMA SAAS (SUPER ADMIN)
+// ==========================================
+
+model PlatformUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("platform_users")
+}
+
+model Plan {
+  id              String         @id @default(uuid())
+  code            String         @unique // ej: BASIC, PRO, ENTERPRISE
+  name            String
+  description     String?
+  priceMonthly    Decimal        @db.Decimal(12, 2)
+  priceYearly     Decimal        @db.Decimal(12, 2)
+  maxBranches     Int            @default(1)
+  maxUsers        Int            @default(5)
+  maxWarehouses   Int            @default(1)
+  hasApiAccess    Boolean        @default(false)
+  hasWebhooks     Boolean        @default(false)
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  subscriptions   Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id         String             @id @default(uuid())
+  businessId String             @unique
+  planId     String
+  status     SubscriptionStatus @default(TRIAL)
+  startDate  DateTime           @default(now())
+  endDate    DateTime?
+  trialEndsAt DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  plan     Plan     @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+// ==========================================
+// 2. TENANT / NEGOCIO Y CONFIGURACIÓN
+// ==========================================
+
+enum BusinessType {
+  CAFE
+  RESTAURANT
+  BAR
+  RETAIL
+  BAKERY
+  DARK_KITCHEN
+  OTHER
+}
+
+model Business {
+  id           String        @id @default(uuid())
+  name         String
+  legalName    String?
+  taxId        String?
+  phone        String?
+  email        String?
+  timezone     String        @default("America/Mexico_City")
+  currencyCode String        @default("MXN")
+  businessType BusinessType  @default(CAFE)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  settings           BusinessSetting?
+  subscription       Subscription?
+  branches           Branch[]
+  users              User[]
+  roles              Role[]
+  categories         Category[]
+  products           Product[]
+  modifierGroups     ModifierGroup[]
+  inventoryItems     InventoryItem[]
+  suppliers          Supplier[]
+  measurementUnits   MeasurementUnit[]
+  expenseCategories  ExpenseCategory[]
+  apiKeys            TenantApiKey[]
+  webhookSubscriptions WebhookSubscription[]
+  auditLogs          AuditLog[]
+
+  @@index([active])
+  @@map("businesses")
+}
+
+model BusinessSetting {
+  id         String   @id @default(uuid())
+  businessId String   @unique
+
+  // Identidad visual
+  logoUrl        String?
+  faviconUrl     String?
+  ticketLogoUrl  String?
+  primaryColor   String?  @default("#7c3aed")
+  secondaryColor String?  @default("#4f46e5")
+  accentColor    String?  @default("#f59e0b")
+  fontFamily     String?  @default("Inter")
+  darkMode       Boolean  @default(false)
+
+  // Módulos activables (Arquitectura Modular SaaS)
+  multiBranchEnabled   Boolean  @default(true)
+  canCustomizeColors   Boolean  @default(true)
+  inventoryEnabled     Boolean  @default(true)
+  recipesEnabled       Boolean  @default(true)
+  tablesEnabled        Boolean  @default(true)
+  waitersEnabled       Boolean  @default(true)
+  kitchenEnabled       Boolean  @default(false)
+  purchasesEnabled     Boolean  @default(true)
+  expensesEnabled      Boolean  @default(true)
+  digitalMenuEnabled   Boolean  @default(true)
+  displaysEnabled      Boolean  @default(true)
+  cashRegisterEnabled  Boolean  @default(true)
+  discountsEnabled     Boolean  @default(true)
+  courtesiesEnabled    Boolean  @default(true)
+  negativeStockEnabled Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@map("business_settings")
+}
+
+// ==========================================
+// 3. SUCURSALES Y ALMACENES
+// ==========================================
+
+model Branch {
+  id           String    @id @default(uuid())
+  businessId   String
+  name         String
+  code         String
+  phone        String?
+  email        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  countryCode  String    @default("MX")
+  active       Boolean   @default(true)
+
+  // Personalización visual por sucursal
+  logoUrl        String?
+  primaryColor   String?   @default("#7c3aed")
+  secondaryColor String?   @default("#4f46e5")
+  buttonColor    String?   @default("#f59e0b")
+  bgColor        String?   @default("#020617")
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userBranches UserBranch[]
+  areas        Area[]
+  tables       Table[]
+  warehouses   Warehouse[]
+  cashRegisters CashRegister[]
+  orders       Order[]
+  purchases    Purchase[]
+  expenses     Expense[]
+
+  @@unique([businessId, code])
+  @@index([businessId, active])
+  @@map("branches")
+}
+
+// ==========================================
+// 4. USUARIOS Y ROLES DINÁMICOS
+// ==========================================
+
+model User {
+  id           String    @id @default(uuid())
+  businessId   String
+  name         String
+  email        String?
+  username     String?
+  passwordHash String
+  pinHash      String?
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  business     Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userBranches UserBranch[]
+  roles        UserRole[]
+  waiterOrders   Order[]       @relation("WaiterOrders")
+  assignedTables Table[]       @relation("TableAssignedWaiter")
+  currentTables  Table[]       @relation("TableCurrentWaiter")
+  cashSessions   CashSession[]
+  auditLogs      AuditLog[]
+
+  @@unique([businessId, email])
+  @@unique([businessId, username])
+  @@index([businessId, active])
+  @@map("users")
+}
+
+model UserBranch {
+  id        String   @id @default(uuid())
+  userId    String
+  branchId  String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+  @@map("user_branches")
+}
+
+// Roles Dinámicos con Flags de Permisos
+model Role {
+  id         String   @id @default(uuid())
+  businessId String?  // NULL = Rol del sistema / Plantilla global
+  name       String
+  code       String
+  isSystem   Boolean  @default(false)
+
+  // Flags dinámicos de permisos
+  canAccessPOS            Boolean @default(false)
+  canManageCatalog        Boolean @default(false)
+  canManageInventory      Boolean @default(false)
+  canManagePurchases      Boolean @default(false)
+  canManageExpenses       Boolean @default(false)
+  canManageCashRegisters  Boolean @default(false)
+  canViewReports          Boolean @default(false)
+  canManageUsers          Boolean @default(false)
+  canManageSettings       Boolean @default(false)
+  canAuthorizeDiscounts   Boolean @default(false)
+  canAuthorizeCourtesies  Boolean @default(false)
+  canAuthorizeCancellations Boolean @default(false)
+  canTransferTables       Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business?  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  users    UserRole[]
+
+  @@unique([businessId, code])
+  @@map("roles")
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// ==========================================
+// 5. INVENTARIO, PRESENTACIONES Y LEDGER
+// ==========================================
+
+enum InventoryUnit {
+  PIECE
+  CAN
+  BOTTLE
+  PACKAGE
+  BOX
+  ML
+  LITER
+  GRAM
+  KG
+  OZ
+  CUP
+  PORTION
+  POUND
+}
+
+model MeasurementUnit {
+  id         String    @id @default(uuid())
+  businessId String?
+  code       String
+  name       String
+  symbol     String
+  magnitude  String    @default("COUNT") // MASS, VOLUME, COUNT
+  isSystem   Boolean   @default(false)
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, code])
+  @@index([businessId, active])
+  @@map("measurement_units")
+}
+
+model InventoryItem {
+  id             String        @id @default(uuid())
+  businessId     String
+  sku            String?
+  name           String
+  baseUnit       InventoryUnit
+  costPerUnit    Decimal       @default(0) @db.Decimal(12, 4)
+  reorderPoint   Decimal?      @db.Decimal(18, 6)
+  optimalStock   Decimal?      @db.Decimal(18, 6)
+  yieldLossFactor Decimal      @default(0) @db.Decimal(8, 4)
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  business       Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  presentations  InventoryPresentation[]
+  warehouseStock WarehouseStock[]
+  movements      StockMovement[]
+  recipeItems    RecipeItem[]
+  purchaseItems  PurchaseItem[]
+
+  @@unique([businessId, sku])
+  @@index([businessId, active])
+  @@map("inventory_items")
+}
+
+model InventoryPresentation {
+  id              String   @id @default(uuid())
+  inventoryItemId String
+  name            String   // Ej: Caja x 12, Paquete 1kg
+  barcode         String?
+  factorToBase    Decimal  @db.Decimal(18, 6) // Ej: 12000 si baseUnit es ml
+  cost            Decimal? @db.Decimal(12, 4)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  purchaseItems PurchaseItem[]
+
+  @@map("inventory_presentations")
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  branchId  String
+  name      String
+  code      String
+  isDefault Boolean  @default(false)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch        Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  stocks        WarehouseStock[]
+  sourceMovements StockMovement[] @relation("SourceWarehouse")
+  targetMovements StockMovement[] @relation("TargetWarehouse")
+
+  @@unique([branchId, code])
+  @@map("warehouses")
+}
+
+model WarehouseStock {
+  id              String   @id @default(uuid())
+  warehouseId     String
+  inventoryItemId String
+  quantity        Decimal  @default(0) @db.Decimal(18, 6)
+  updatedAt       DateTime @updatedAt
+
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, inventoryItemId])
+  @@map("warehouse_stock")
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  SALE_CANCEL
+  RECIPE_CONSUME
+  RECIPE_REVERT
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUST_POSITIVE
+  ADJUST_NEGATIVE
+  SPOILAGE
+  INITIAL
+}
+
+model StockMovement {
+  id                String            @id @default(uuid())
+  inventoryItemId   String
+  sourceWarehouseId String?
+  targetWarehouseId String?
+  type              StockMovementType
+  quantityBase      Decimal           @db.Decimal(18, 6)
+  unitCost          Decimal           @default(0) @db.Decimal(12, 4)
+  totalCost         Decimal           @default(0) @db.Decimal(12, 2)
+  referenceType     String?           // ORDER, PURCHASE, TRANSFER, MANUAL
+  referenceId       String?
+  idempotencyKey    String?           @unique
+  notes             String?
+  createdBy         String?
+  createdAt         DateTime          @default(now())
+
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  sourceWarehouse Warehouse?    @relation("SourceWarehouse", fields: [sourceWarehouseId], references: [id])
+  targetWarehouse Warehouse?    @relation("TargetWarehouse", fields: [targetWarehouseId], references: [id])
+
+  @@index([inventoryItemId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+// ==========================================
+// 6. CATÁLOGO, PRODUCTOS Y RECETAS
+// ==========================================
+
+model Category {
+  id            String    @id @default(uuid())
+  businessId    String
+  parentId      String?
+  name          String
+  slug          String
+  imageUrl      String?
+  sortOrder     Int       @default(0)
+  visiblePOS    Boolean   @default(true)
+  visibleWeb    Boolean   @default(true)
+  visibleDisplay Boolean  @default(true)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  business Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@unique([businessId, slug])
+  @@index([businessId, active])
+  @@map("categories")
+}
+
+enum InventoryPolicy {
+  NONE
+  DIRECT
+  RECIPE
+}
+
+model Product {
+  id             String          @id @default(uuid())
+  businessId     String
+  categoryId     String
+  name           String
+  code           String?
+  description    String?
+  imageUrl       String?
+  hasVariants    Boolean         @default(false)
+  inventoryPolicy InventoryPolicy @default(NONE)
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+
+  business       Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category       Category               @relation(fields: [categoryId], references: [id])
+  variants       ProductVariant[]
+  modifierGroups ProductModifierGroup[]
+
+  @@unique([businessId, code])
+  @@index([businessId, active])
+  @@map("products")
+}
+
+model ProductVariant {
+  id              String          @id @default(uuid())
+  productId       String
+  name            String
+  sku             String?
+  barcode         String?
+  price           Decimal         @db.Decimal(12, 2)
+  cost            Decimal         @default(0) @db.Decimal(12, 2)
+  inventoryPolicy InventoryPolicy @default(NONE)
+  directItemId    String?
+  directQuantity  Decimal?        @db.Decimal(18, 6)
+  sortOrder       Int             @default(0)
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  recipe     Recipe?
+  orderItems OrderItem[]
+
+  @@map("product_variants")
+}
+
+model Recipe {
+  id               String   @id @default(uuid())
+  productVariantId String   @unique
+  yieldServings    Decimal  @default(1) @db.Decimal(10, 4)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  items          RecipeItem[]
+
+  @@map("recipes")
+}
+
+model RecipeItem {
+  id              String   @id @default(uuid())
+  recipeId        String
+  inventoryItemId String
+  quantityBase    Decimal  @db.Decimal(18, 6)
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  recipe        Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@map("recipe_items")
+}
+
+model ModifierGroup {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  minSelect   Int      @default(0)
+  maxSelect   Int      @default(1)
+  isRequired  Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business  Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  modifiers Modifier[]
+  products  ProductModifierGroup[]
+
+  @@map("modifier_groups")
+}
+
+model ProductModifierGroup {
+  productId       String
+  modifierGroupId String
+
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  modifierGroup ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+
+  @@id([productId, modifierGroupId])
+  @@map("product_modifier_groups")
+}
+
+model Modifier {
+  id              String   @id @default(uuid())
+  modifierGroupId String
+  name            String
+  extraPrice      Decimal  @default(0) @db.Decimal(12, 2)
+  inventoryItemId String?
+  quantityBase    Decimal? @db.Decimal(18, 6)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  modifierGroup ModifierGroup        @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  orderItems    OrderItemModifier[]
+
+  @@map("modifiers")
+}
+
+// ==========================================
+// 7. MESAS, ÁREAS Y COMANDAS
+// ==========================================
+
+model Area {
+  id        String   @id @default(uuid())
+  branchId  String
+  name      String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  tables Table[]
+
+  @@map("areas")
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  BILL_PRINTED
+  DIRTY
+  RESERVED
+}
+
+model Table {
+  id        String      @id @default(uuid())
+  branchId  String
+  areaId           String?
+  assignedWaiterId String?
+  currentWaiterId  String?
+  name             String
+  capacity         Int?
+  status           TableStatus @default(AVAILABLE)
+  xPosition        Decimal?    @db.Decimal(10, 2)
+  yPosition        Decimal?    @db.Decimal(10, 2)
+  active           Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  deletedAt        DateTime?
+
+  branch         Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  area           Area?   @relation(fields: [areaId], references: [id])
+  assignedWaiter User?   @relation("TableAssignedWaiter", fields: [assignedWaiterId], references: [id])
+  currentWaiter  User?   @relation("TableCurrentWaiter", fields: [currentWaiterId], references: [id])
+  orders         Order[]
+
+  @@unique([branchId, name])
+  @@map("tables")
+}
+
+// ==========================================
+// 8. ÓRDENES, VENTAS Y PAGOS
+// ==========================================
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+enum OrderStatus {
+  DRAFT
+  SENT
+  PREPARING
+  SERVED
+  PAID
+  CANCELLED
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  branchId       String
+  tableId        String?
+  waiterId       String?
+  cashSessionId  String?
+  orderNumber    String
+  customerName   String?
+  orderType      OrderType   @default(DINE_IN)
+  status         OrderStatus @default(DRAFT)
+  subtotal       Decimal     @default(0) @db.Decimal(12, 2)
+  discountTotal  Decimal     @default(0) @db.Decimal(12, 2)
+  courtesyTotal  Decimal     @default(0) @db.Decimal(12, 2)
+  taxTotal       Decimal     @default(0) @db.Decimal(12, 2)
+  total          Decimal     @default(0) @db.Decimal(12, 2)
+  paidTotal      Decimal     @default(0) @db.Decimal(12, 2)
+  notes          String?
+  openedAt       DateTime    @default(now())
+  closedAt       DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  table        Table?        @relation(fields: [tableId], references: [id])
+  waiter       User?         @relation("WaiterOrders", fields: [waiterId], references: [id])
+  cashSession  CashSession?  @relation(fields: [cashSessionId], references: [id])
+  items        OrderItem[]
+  payments     Payment[]
+  discounts    OrderDiscount[]
+  courtesies   OrderCourtesy[]
+  cancellation OrderCancellation?
+
+  @@index([branchId, status])
+  @@index([branchId, openedAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String   @id @default(uuid())
+  orderId          String
+  productVariantId String
+  quantity         Decimal  @db.Decimal(10, 3)
+  unitPrice        Decimal  @db.Decimal(12, 2)
+  modifiersPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  subtotal         Decimal  @db.Decimal(12, 2)
+  notes            String?
+  kitchenStatus    String?  @default("PENDING") // PENDING, COOKING, READY, SERVED
+  createdAt        DateTime @default(now())
+
+  order          Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant      @relation(fields: [productVariantId], references: [id])
+  modifiers      OrderItemModifier[]
+
+  @@map("order_items")
+}
+
+model OrderItemModifier {
+  id          String   @id @default(uuid())
+  orderItemId String
+  modifierId  String
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  modifier  Modifier  @relation(fields: [modifierId], references: [id])
+
+  @@map("order_item_modifiers")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_CREDIT
+  CARD_DEBIT
+  TRANSFER
+  QR
+  OTHER
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  orderId        String
+  cashSessionId  String?
+  method         PaymentMethod
+  amount         Decimal       @db.Decimal(12, 2)
+  reference      String?
+  idempotencyKey String?       @unique
+  createdAt      DateTime      @default(now())
+
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id])
+
+  @@map("payments")
+}
+
+model OrderDiscount {
+  id         String   @id @default(uuid())
+  orderId    String
+  amount     Decimal  @db.Decimal(12, 2)
+  reason     String
+  approvedBy String
+  createdAt  DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_discounts")
+}
+
+model OrderCourtesy {
+  id         String   @id @default(uuid())
+  orderId    String
+  amount     Decimal  @db.Decimal(12, 2)
+  reason     String
+  beneficiary String?
+  approvedBy String
+  createdAt  DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_courtesies")
+}
+
+model OrderCancellation {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  reason     String
+  approvedBy String
+  createdAt  DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_cancellations")
+}
+
+// ==========================================
+// 9. CAJAS, SESIONES Y MOVIMIENTOS
+// ==========================================
+
+model CashRegister {
+  id        String   @id @default(uuid())
+  branchId  String
+  name      String
+  code      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch   Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  sessions CashSession[]
+
+  @@unique([branchId, code])
+  @@map("cash_registers")
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+model CashSession {
+  id             String            @id @default(uuid())
+  cashRegisterId String
+  userId         String
+  openingBalance Decimal           @db.Decimal(12, 2)
+  closingBalance Decimal?          @db.Decimal(12, 2)
+  expectedBalance Decimal?         @db.Decimal(12, 2)
+  difference     Decimal?          @db.Decimal(12, 2)
+  status         CashSessionStatus @default(OPEN)
+  openedAt       DateTime          @default(now())
+  closedAt       DateTime?
+  notes          String?
+
+  cashRegister CashRegister   @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id])
+  movements    CashMovement[]
+  payments     Payment[]
+  orders       Order[]
+
+  @@map("cash_sessions")
+}
+
+enum CashMovementType {
+  CASH_IN
+  CASH_OUT
+}
+
+model CashMovement {
+  id            String           @id @default(uuid())
+  cashSessionId String
+  type          CashMovementType
+  amount        Decimal          @db.Decimal(12, 2)
+  reason        String
+  authorizedBy  String?
+  createdAt     DateTime         @default(now())
+
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+
+  @@map("cash_movements")
+}
+
+// ==========================================
+// 10. COMPRAS, GASTOS Y PROVEEDORES
+// ==========================================
+
+model Supplier {
+  id         String    @id @default(uuid())
+  businessId String
+  name       String
+  contact    String?
+  phone      String?
+  email      String?
+  taxId      String?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@map("suppliers")
+}
+
+model Purchase {
+  id             String         @id @default(uuid())
+  branchId       String
+  supplierId     String?
+  invoiceNumber  String?
+  total          Decimal        @db.Decimal(12, 2)
+  notes          String?
+  status         String         @default("COMPLETED") // DRAFT, COMPLETED, CANCELLED
+  entryType      String         @default("SUPPLIER")  // SUPPLIER, EMERGENCY_STORE, INITIAL_STOCK
+  idempotencyKey String?        @unique
+  purchasedAt    DateTime       @default(now())
+  createdAt      DateTime       @default(now())
+
+  branch   Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  supplier Supplier?      @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id                      String   @id @default(uuid())
+  purchaseId              String
+  inventoryItemId         String
+  inventoryPresentationId String?
+  quantityBought          Decimal  @db.Decimal(18, 6)
+  unitCost                Decimal  @db.Decimal(12, 4)
+  subtotal                Decimal  @db.Decimal(12, 2)
+  quantityBaseCalculated  Decimal  @db.Decimal(18, 6)
+
+  purchase      Purchase               @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem          @relation(fields: [inventoryItemId], references: [id])
+  presentation  InventoryPresentation? @relation(fields: [inventoryPresentationId], references: [id])
+
+  @@map("purchase_items")
+}
+
+model ExpenseCategory {
+  id         String   @id @default(uuid())
+  businessId String
+  name       String
+  createdAt  DateTime @default(now())
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id         String   @id @default(uuid())
+  branchId   String
+  categoryId String
+  amount     Decimal  @db.Decimal(12, 2)
+  notes      String?
+  receiptUrl String?
+  expensedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  branch   Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category ExpenseCategory @relation(fields: [categoryId], references: [id])
+
+  @@map("expenses")
+}
+
+// ==========================================
+// 11. APIS EXTERNAS, WEBHOOKS Y AUDITORÍA
+// ==========================================
+
+model TenantApiKey {
+  id         String    @id @default(uuid())
+  businessId String
+  name       String
+  keyPrefix  String    // Primeros 8 caracteres para identificación rápida
+  keyHash    String    // Hash SHA256 de la API Key real
+  scopes     String[]  // Array de permisos: ["orders:read", "inventory:write"]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, active])
+  @@map("tenant_api_keys")
+}
+
+model WebhookSubscription {
+  id         String   @id @default(uuid())
+  businessId String
+  url        String
+  secret     String
+  events     String[] // ["order.created", "order.paid", "stock.low"]
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_subscriptions")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  businessId String
+  userId     String?
+  action     String   // Ej: ORDER_CANCEL, DISCOUNT_APPLY, STOCK_ADJUST
+  entityType String   // Order, InventoryItem, Table
+  entityId   String
+  payload    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@index([businessId, action])
+  @@index([businessId, entityType, entityId])
+  @@map("audit_logs")
+}

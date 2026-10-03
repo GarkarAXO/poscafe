@@ -24,3 +24,183 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ==========================================================================
+   SILEO TOAST NOTIFICATIONS CUSTOMIZATION
+   - Siempre centradas en la parte superior (top-center)
+   - En modo claro: Fondo blanco limpio con LETRAS NEGRAS profundas (#0f172a)
+   - En modo oscuro: Fondo pizarra oscuro (#0f172a) con letras blancas nítidas (#f1f5f9)
+   ========================================================================== */
+
+/* Posicionamiento y centrado absoluto superior */
+[data-sileo-viewport] {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) !important;
+  align-items: center !important;
+  z-index: 99999 !important;
+}
+
+[data-sileo-viewport][data-position^="top"] {
+  top: 1rem !important;
+}
+
+/* Elevación y sombra elegante */
+[data-sileo-toast] {
+  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.16)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.08));
+}
+
+/* --------------------------------------------------------------------------
+   MODO CLARO (LIGHT MODE): Fondo blanco con LETRAS NEGRAS
+   -------------------------------------------------------------------------- */
+[data-color-mode="light"] [data-sileo-canvas] rect,
+[data-sileo-viewport][data-theme="light"] [data-sileo-canvas] rect,
+html.light [data-sileo-canvas] rect {
+  fill: #ffffff !important;
+  stroke: #e2e8f0 !important;
+  stroke-width: 1px !important;
+}
+
+[data-color-mode="light"] [data-sileo-description],
+[data-sileo-viewport][data-theme="light"] [data-sileo-description],
+html.light [data-sileo-description] {
+  color: #0f172a !important; /* LETRAS NEGRAS */
+  font-weight: 500 !important;
+}
+
+[data-color-mode="light"] [data-sileo-title],
+[data-sileo-viewport][data-theme="light"] [data-sileo-title],
+html.light [data-sileo-title] {
+  color: #0f172a !important; /* TÍTULO NEGRO */
+  font-weight: 600 !important;
+}
+
+[data-color-mode="light"] [data-sileo-button],
+[data-sileo-viewport][data-theme="light"] [data-sileo-button],
+html.light [data-sileo-button] {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+  background-color: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+[data-color-mode="light"] [data-sileo-button]:hover,
+[data-sileo-viewport][data-theme="light"] [data-sileo-button]:hover,
+html.light [data-sileo-button]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   MODO OSCURO (DARK MODE): Fondo pizarra con LETRAS BLANCAS
+   -------------------------------------------------------------------------- */
+[data-color-mode="dark"] [data-sileo-canvas] rect,
+[data-sileo-viewport][data-theme="dark"] [data-sileo-canvas] rect,
+html.dark [data-sileo-canvas] rect {
+  fill: #0f172a !important;
+  stroke: #334155 !important;
+  stroke-width: 1px !important;
+}
+
+[data-color-mode="dark"] [data-sileo-description],
+[data-sileo-viewport][data-theme="dark"] [data-sileo-description],
+html.dark [data-sileo-description] {
+  color: #f1f5f9 !important;
+  font-weight: 500 !important;
+}
+
+[data-color-mode="dark"] [data-sileo-title],
+[data-sileo-viewport][data-theme="dark"] [data-sileo-title],
+html.dark [data-sileo-title] {
+  color: #f8fafc !important;
+  font-weight: 600 !important;
+}
+
+[data-color-mode="dark"] [data-sileo-button],
+[data-sileo-viewport][data-theme="dark"] [data-sileo-button],
+html.dark [data-sileo-button] {
+  color: #f8fafc !important;
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+  font-weight: 600 !important;
+}
+
+[data-color-mode="dark"] [data-sileo-button]:hover,
+[data-sileo-viewport][data-theme="dark"] [data-sileo-button]:hover,
+html.dark [data-sileo-button]:hover {
+  background-color: #334155 !important;
+}
+
+/* --------------------------------------------------------------------------
+   MEDIA QUERIES DE RESPALDO (Pre-hidratación SSR)
+   -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: light) {
+  html:not([data-color-mode="dark"]):not(.dark) [data-sileo-canvas] rect {
+    fill: #ffffff !important;
+    stroke: #e2e8f0 !important;
+    stroke-width: 1px !important;
+  }
+
+  html:not([data-color-mode="dark"]):not(.dark) [data-sileo-description] {
+    color: #0f172a !important;
+    font-weight: 500 !important;
+  }
+
+  html:not([data-color-mode="dark"]):not(.dark) [data-sileo-title] {
+    color: #0f172a !important;
+    font-weight: 600 !important;
+  }
+
+  html:not([data-color-mode="dark"]):not(.dark) [data-sileo-button] {
+    color: #0f172a !important;
+    font-weight: 600 !important;
+    background-color: #f1f5f9 !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-color-mode="light"]):not(.light) [data-sileo-canvas] rect {
+    fill: #0f172a !important;
+    stroke: #334155 !important;
+    stroke-width: 1px !important;
+  }
+
+  html:not([data-color-mode="light"]):not(.light) [data-sileo-description] {
+    color: #f1f5f9 !important;
+    font-weight: 500 !important;
+  }
+
+  html:not([data-color-mode="light"]):not(.light) [data-sileo-title] {
+    color: #f8fafc !important;
+    font-weight: 600 !important;
+  }
+
+  html:not([data-color-mode="light"]):not(.light) [data-sileo-button] {
+    color: #f8fafc !important;
+    background-color: #1e293b !important;
+    border: 1px solid #334155 !important;
+    font-weight: 600 !important;
+  }
+}
+
+/* ==========================================================================
+   MODERN MINIMAL DARK SCROLLBAR
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
