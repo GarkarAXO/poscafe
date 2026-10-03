@@ -21,6 +21,7 @@ import {
   Users,
   Truck,
   Boxes,
+  LayoutGrid,
 } from 'lucide-react'
 
 interface DashboardSidebarProps {
@@ -205,6 +206,15 @@ export default function DashboardSidebar({
       icon: Package,
       active: pathname.startsWith('/dashboard/catalog'),
       enabled: isOwnerOrAdmin || perms.canManageCatalog,
+    },
+    {
+      name: 'Control de Mesas',
+      href: '/dashboard/tables',
+      icon: LayoutGrid,
+      active: pathname.startsWith('/dashboard/tables'),
+      enabled:
+        (isOwnerOrAdmin || perms.canManageSettings || perms.canTransferTables || perms.canAccessPOS) &&
+        (settings.tablesEnabled ?? true),
     },
     {
       name: 'Personal y Roles',

@@ -177,6 +177,9 @@ model Branch {
   countryCode  String    @default("MX")
   active       Boolean   @default(true)
 
+  // Modo de servicio en mesas: 'FREE' (Libre: cualquier mesero atiende) | 'ASSIGNED' (Mesero asignado por mesa)
+  tableServiceMode String?   @default("FREE")
+
   // Personalización visual por sucursal
   logoUrl        String?
   primaryColor   String?   @default("#7c3aed")

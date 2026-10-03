@@ -148,15 +148,37 @@ export default function LoginForm() {
       }
 
       // Redirección según rol y permisos
+      const userRoles = result.data?.user?.roleCodes || []
+      const perms = result.data?.user?.permissions || {}
+      const isOwnerOrAdmin =
+        userRoles.includes('ADMIN') ||
+        userRoles.includes('BRANCH_MANAGER') ||
+        userRoles.includes('SUPERADMIN')
+      const hasManagementPermission =
+        perms.canManageSettings ||
+        perms.canManageUsers ||
+        perms.canManageCatalog ||
+        perms.canViewReports ||
+        perms.canManageInventory
+
       if (mode === 'pin') {
-        const userRoles = result.data?.user?.roleCodes || []
         if (userRoles.includes('WAITER')) {
           router.push('/comandera')
         } else {
           router.push('/pos')
         }
       } else {
-        router.push('/dashboard')
+        if (!isOwnerOrAdmin && !hasManagementPermission) {
+          if (userRoles.includes('WAITER')) {
+            router.push('/comandera')
+          } else if (perms.canAccessPOS || userRoles.includes('CASHIER')) {
+            router.push('/pos')
+          } else {
+            router.push('/dashboard')
+          }
+        } else {
+          router.push('/dashboard')
+        }
       }
       router.refresh()
     } catch {

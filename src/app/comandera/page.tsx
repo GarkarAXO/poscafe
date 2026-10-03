@@ -31,6 +31,7 @@ import {
   ShieldCheck,
   LogOut,
   Laptop,
+  Columns,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
@@ -125,6 +126,7 @@ export default function ComanderaPage() {
   // Meseros de la sucursal y filtros
   const [waiters, setWaiters] = useState<WaiterOption[]>([])
   const [filterOnlyMyTables, setFilterOnlyMyTables] = useState<boolean>(false)
+  const [tableServiceMode, setTableServiceMode] = useState<'FREE' | 'ASSIGNED'>('FREE')
 
   // Catálogo para toma de comanda
   const [products, setProducts] = useState<Product[]>([])
@@ -135,6 +137,8 @@ export default function ComanderaPage() {
   // Estado de mesa y comanda seleccionada
   const [activeTable, setActiveTable] = useState<TableItem | null>(null)
   const [showOrderModal, setShowOrderModal] = useState(false)
+  const [orderViewTab, setOrderViewTab] = useState<'catalog' | 'order' | 'split'>('catalog')
+  const [refreshing, setRefreshing] = useState(false)
   const [stagedItems, setStagedItems] = useState<StagedItem[]>([])
   const [customerName, setCustomerName] = useState('')
   const [orderNotes, setOrderNotes] = useState('')
@@ -154,6 +158,9 @@ export default function ComanderaPage() {
   const [showAssignWaiterModal, setShowAssignWaiterModal] = useState(false)
   const [targetAssignWaiterId, setTargetAssignWaiterId] = useState('')
   const [assigningWaiter, setAssigningWaiter] = useState(false)
+
+  // Advertencia al abrir mesa asignada a otro compañero en modo ASSIGNED
+  const [takeoverWarningTable, setTakeoverWarningTable] = useState<TableItem | null>(null)
 
   // Modal para imprimir ticket de cobro (pre-cuenta)
   const [showBillReceiptModal, setShowBillReceiptModal] = useState(false)
@@ -285,9 +292,20 @@ export default function ComanderaPage() {
       }
 
       if (resTables.success) {
-        setAreas(resTables.data.areas)
+        const loadedAreas: Area[] = [...(resTables.data.areas || [])]
+        if (resTables.data.unassignedTables && resTables.data.unassignedTables.length > 0) {
+          loadedAreas.push({
+            id: 'UNASSIGNED',
+            name: 'General',
+            tables: resTables.data.unassignedTables,
+          })
+        }
+        setAreas(loadedAreas)
         if (resTables.data.waiters) {
           setWaiters(resTables.data.waiters)
+        }
+        if (resTables.data.tableServiceMode) {
+          setTableServiceMode(resTables.data.tableServiceMode)
         }
       }
       if (resCats.success) setCategories(resCats.data)
@@ -304,13 +322,24 @@ export default function ComanderaPage() {
     try {
       const res = await fetch('/api/comandas/tables').then((r) => r.json())
       if (res.success) {
-        setAreas(res.data.areas)
+        const loadedAreas: Area[] = [...(res.data.areas || [])]
+        if (res.data.unassignedTables && res.data.unassignedTables.length > 0) {
+          loadedAreas.push({
+            id: 'UNASSIGNED',
+            name: 'General',
+            tables: res.data.unassignedTables,
+          })
+        }
+        setAreas(loadedAreas)
         if (res.data.waiters) {
           setWaiters(res.data.waiters)
         }
+        if (res.data.tableServiceMode) {
+          setTableServiceMode(res.data.tableServiceMode)
+        }
         // Si hay una mesa activa abierta, actualizar sus datos
         if (activeTable) {
-          const allTables = res.data.areas.flatMap((a: Area) => a.tables)
+          const allTables = loadedAreas.flatMap((a: Area) => a.tables)
           const updated = allTables.find((t: TableItem) => t.id === activeTable.id)
           if (updated) setActiveTable(updated)
         }
@@ -326,13 +355,40 @@ export default function ComanderaPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Seleccionar mesa para ver / abrir comanda
-  const handleSelectTable = (table: TableItem) => {
+  const openTableOrder = (table: TableItem) => {
     setActiveTable(table)
     setStagedItems([])
     setCustomerName(table.activeOrder?.customerName || '')
     setOrderNotes('')
+    // En móvil/tablet/pc: si está disponible, abrir catálogo para registrar artículos rápido; si está ocupada, ver resumen
+    setOrderViewTab(table.status === 'AVAILABLE' ? 'catalog' : 'order')
     setShowOrderModal(true)
+    setTakeoverWarningTable(null)
+  }
+
+  // Seleccionar mesa para ver / abrir comanda
+  const handleSelectTable = (table: TableItem) => {
+    // En Modo ASIGNADO: si la mesa está libre pero tiene titular diferente al usuario logueado
+    if (
+      tableServiceMode === 'ASSIGNED' &&
+      table.status === 'AVAILABLE' &&
+      table.assignedWaiter &&
+      table.assignedWaiter.id !== currentUser?.id &&
+      !isOwnerOrAdmin
+    ) {
+      setTakeoverWarningTable(table)
+      return
+    }
+
+    openTableOrder(table)
+  }
+
+  // Refresco manual táctil
+  const handleManualRefresh = async () => {
+    setRefreshing(true)
+    await refreshTables()
+    setTimeout(() => setRefreshing(false), 500)
+    notify.success('Mesas actualizadas', 'Sincronizado con cocina y caja')
   }
 
   // Agregar platillo al pedido nuevo
@@ -376,12 +432,24 @@ export default function ComanderaPage() {
     )
   }
 
+  // Eliminar un platillo de la ronda
+  const removeItemFromStaged = (variantId: string) => {
+    setStagedItems((prev) => prev.filter((it) => it.variantId !== variantId))
+  }
+
+  // Actualizar nota completa
+  const updateItemNote = (variantId: string, noteText: string) => {
+    setStagedItems((prev) =>
+      prev.map((it) => (it.variantId === variantId ? { ...it, notes: noteText } : it))
+    )
+  }
+
   // Agregar nota rápida al ítem
   const appendNoteToItem = (variantId: string, note: string) => {
     setStagedItems((prev) =>
       prev.map((it) => {
         if (it.variantId === variantId) {
-          const current = it.notes ? it.notes.split(', ') : []
+          const current = it.notes ? it.notes.split(', ').filter(Boolean) : []
           if (!current.includes(note)) {
             current.push(note)
           }
@@ -433,6 +501,7 @@ export default function ComanderaPage() {
         notify.success('Comanda marchada', `Enviada a preparación en cocina para la mesa ${tableName}`)
         setTimeout(() => setSuccessMsg(null), 3500)
         setStagedItems([])
+        setOrderViewTab('order')
         await refreshTables()
       } else {
         const errMsg = json.error?.message || 'Error al enviar la comanda'
@@ -615,11 +684,32 @@ export default function ComanderaPage() {
     return matchesCat && matchesSearch
   })
 
-  // Todas las mesas en lista plana para traspasos
+  // Todas las mesas en lista plana para traspasos y conteos rápidos
   const allTablesList = areas.flatMap((a) => a.tables)
   const availableTargetTables = allTablesList.filter(
     (t) => t.status === 'AVAILABLE' && t.id !== activeTable?.id
   )
+  const totalAvailable = allTablesList.filter((t) => t.status === 'AVAILABLE').length
+  const totalOccupied = allTablesList.filter((t) => t.status === 'OCCUPIED').length
+  const totalBillPrinted = allTablesList.filter((t) => t.status === 'BILL_PRINTED').length
+  const myTablesCount = allTablesList.filter(
+    (t) =>
+      t.assignedWaiter?.id === currentUser?.id ||
+      t.currentWaiter?.id === currentUser?.id ||
+      t.activeOrder?.waiter?.id === currentUser?.id
+  ).length
+
+  // Cantidad total de artículos en la comanda (ronda por marchar + marchados en cocina)
+  const totalOrderCount =
+    stagedItems.reduce((acc, it) => acc + it.quantity, 0) +
+    (activeTable?.activeOrder?.items.length || 0)
+
+  const isOwnerOrAdmin =
+    currentUser?.roleCodes?.includes('ADMIN') ||
+    currentUser?.roleCodes?.includes('SUPERADMIN') ||
+    currentUser?.roleCodes?.includes('BRANCH_MANAGER') ||
+    currentUser?.permissions?.canManageSettings ||
+    currentUser?.permissions?.canManageUsers
 
   // Mesas filtradas por área seleccionada
   const displayedAreas =
@@ -639,62 +729,68 @@ export default function ComanderaPage() {
       className="h-screen text-slate-100 flex flex-col overflow-hidden selection:bg-amber-500 selection:text-black"
       style={{ backgroundColor: activeBranch?.bgColor || '#020617' }}
     >
-      {/* Top Navbar */}
-      <header className="border-b border-slate-800 bg-slate-900/90 px-4 py-2.5 flex items-center justify-between shrink-0 z-20">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-xs flex items-center gap-1"
-            title="Volver al Dashboard"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
+      {/* Top Navbar estilo Android App Bar */}
+      <header className="border-b border-[#382b25] bg-[#1a1412]/95 backdrop-blur-md px-3 sm:px-4 py-2 flex items-center justify-between shrink-0 z-20 shadow-md">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {isOwnerOrAdmin && (
+            <Link
+              href="/dashboard"
+              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-all text-xs flex items-center gap-1 cursor-pointer"
+              title="Volver al Panel Administrativo"
+            >
+              <ArrowLeft className="w-4 h-4 text-[#C08552]" />
+            </Link>
+          )}
 
           {activeBranch?.logoUrl ? (
             <img
               src={activeBranch.logoUrl}
               alt="Logo Sucursal"
-              className="w-8 h-8 rounded-lg object-contain bg-white/10 p-0.5 border border-white/20"
+              className="w-8 h-8 rounded-xl object-contain bg-white/10 p-0.5 border border-[#382b25]"
               onError={(e) => {
                 ;(e.target as any).style.display = 'none'
               }}
             />
           ) : (
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
-              style={{
-                backgroundColor: `${activeBranch?.primaryColor || '#7c3aed'}25`,
-                color: activeBranch?.primaryColor || '#7c3aed',
-              }}
-            >
-              <UtensilsCrossed className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center font-bold bg-[#C08552]/20 text-[#C08552] border border-[#C08552]/30">
+              <Coffee className="w-4 h-4" />
             </div>
           )}
 
           <div>
-            <h1 className="text-sm font-bold text-white flex items-center gap-2">
-              Comandera de Piso
+            <h1 className="text-sm font-black text-white flex items-center gap-1.5 sm:gap-2 leading-tight">
+              <span className="truncate">Comandera</span>
               {activeBranch && (
-                <span
-                  className="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                  style={{
-                    backgroundColor: `${activeBranch.primaryColor || '#7c3aed'}25`,
-                    color: activeBranch.primaryColor || '#a78bfa',
-                  }}
-                >
+                <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#C08552]/20 text-[#C08552] border border-[#C08552]/30 truncate max-w-[130px] sm:max-w-none">
                   {activeBranch.name}
                 </span>
               )}
             </h1>
+            <div className="flex items-center gap-1 text-[11px] text-slate-400 sm:hidden">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span className="truncate max-w-[120px]">{currentUser?.name}</span>
+            </div>
           </div>
         </div>
 
         {/* User Info & Quick Links */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
           <div className="text-right hidden sm:block">
-            <span className="text-xs font-semibold text-slate-200 block">{currentUser?.name}</span>
-            <span className="text-[10px] text-amber-400 font-medium">Mesero / Turno activo</span>
+            <span className="text-xs font-bold text-slate-200 block">{currentUser?.name}</span>
+            <span className="text-[10px] text-[#C08552] font-semibold">Mesero / Turno activo</span>
           </div>
+
+          {/* Botón Refrescar táctil */}
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1"
+            title="Sincronizar mesas y pedidos"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 text-[#C08552] ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden md:inline text-[11px]">Sincronizar</span>
+          </button>
 
           {/* Enlace a KDS Cocina (Oculto para mesero estricto) */}
           {(currentUser?.permissions?.canManageInventory ||
@@ -703,11 +799,11 @@ export default function ComanderaPage() {
             currentUser?.roleCodes?.includes('KITCHEN')) && (
             <Link
               href="/kds"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-xs text-cyan-300 font-medium transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-xs text-cyan-300 font-medium transition-all"
               title="Abrir pantalla KDS de Cocina"
             >
               <MonitorPlay className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Ver KDS Cocina</span>
+              <span className="hidden md:inline">KDS</span>
             </Link>
           )}
 
@@ -717,11 +813,11 @@ export default function ComanderaPage() {
             currentUser?.roleCodes?.includes('CASHIER')) && (
             <Link
               href="/pos"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs text-amber-300 font-medium transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs text-amber-300 font-medium transition-all"
               title="Abrir Terminal de Cobro"
             >
               <Coffee className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Caja POS</span>
+              <span className="hidden md:inline">Caja</span>
             </Link>
           )}
 
@@ -733,11 +829,11 @@ export default function ComanderaPage() {
               setUnlockError(null)
               setIsTerminalLocked(true)
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/30 text-xs text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
-            title="Bloquear pantalla o relevar mesero"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#C08552]/20 border border-[#382b25] hover:border-[#C08552]/40 text-xs text-slate-300 hover:text-[#C08552] transition-all cursor-pointer"
+            title="Bloquear pantalla o relevar mesero con PIN"
           >
             <Lock className="w-3.5 h-3.5" />
-            <span>Bloquear / Relevo</span>
+            <span className="hidden sm:inline">Relevo</span>
           </button>
         </div>
       </header>
@@ -761,41 +857,31 @@ export default function ComanderaPage() {
       )}
 
       {/* Main Floor / Tables Area */}
-      <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-y-auto space-y-6">
+      <div className="flex-1 flex flex-col p-3 sm:p-5 overflow-y-auto space-y-4 sm:space-y-6">
         {/* Header con Filtros de Áreas, Filtro Mis Mesas y Leyenda de Estados */}
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/60 p-4 rounded-3xl border border-slate-800">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#1a1412] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#382b25] shadow-lg">
           {/* Selector de Áreas y Filtro Mis Mesas */}
-          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1 sm:pb-0">
+          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1 md:pb-0">
             <button
               type="button"
               onClick={() => setSelectedAreaId('ALL')}
-              style={
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                 selectedAreaId === 'ALL'
-                  ? { backgroundColor: activeBranch?.primaryColor || '#7c3aed', color: '#ffffff' }
-                  : undefined
-              }
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer ${
-                selectedAreaId === 'ALL'
-                  ? 'shadow-md font-bold'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/30'
+                  : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
               }`}
             >
-              Todas las Áreas
+              Todas ({allTablesList.length})
             </button>
             {areas.map((a) => (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => setSelectedAreaId(a.id)}
-                style={
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                   selectedAreaId === a.id
-                    ? { backgroundColor: activeBranch?.primaryColor || '#7c3aed', color: '#ffffff' }
-                    : undefined
-                }
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer ${
-                  selectedAreaId === a.id
-                    ? 'shadow-md font-bold'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/30'
+                    : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
                 }`}
               >
                 {a.name} ({a.tables.length})
@@ -803,37 +889,65 @@ export default function ComanderaPage() {
             ))}
 
             {/* Separador vertical */}
-            <div className="h-6 w-px bg-slate-800 mx-1 shrink-0" />
+            <div className="h-6 w-px bg-[#382b25] mx-1 shrink-0" />
 
-            {/* Filtro Mis Mesas Asignadas */}
+            {/* Filtro Mis Mesas / Mis Comandas según Modo */}
             <button
               type="button"
               onClick={() => setFilterOnlyMyTables(!filterOnlyMyTables)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
                 filterOnlyMyTables
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 ring-2 ring-amber-400/50'
+                  : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
               }`}
-              title="Filtrar solo mesas asignadas o bajo mi atención"
+              title={
+                tableServiceMode === 'FREE'
+                  ? 'Filtrar comandas donde estoy atendiendo'
+                  : 'Filtrar mis mesas asignadas a cargo'
+              }
             >
               <UserCheck className="w-3.5 h-3.5" />
-              <span>Mis Mesas Asignadas</span>
+              <span>{tableServiceMode === 'FREE' ? 'Mis Comandas' : 'Mis Mesas'}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  filterOnlyMyTables ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+                }`}
+              >
+                {myTablesCount}
+              </span>
             </button>
           </div>
 
-          {/* Leyenda de Colores */}
-          <div className="flex items-center gap-3 text-[11px] text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              Disponible
+          {/* Estadísticas de Estado / Leyenda de Colores */}
+          <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-slate-300 overflow-x-auto pb-0.5">
+            {tableServiceMode === 'FREE' ? (
+              <span
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold shrink-0 shadow-sm"
+                title="Servicio Libre: Cualquier mesero puede abrir y tomar cualquier mesa"
+              >
+                <Sparkles className="w-3 h-3 text-emerald-400" />
+                Modo Libre
+              </span>
+            ) : (
+              <span
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold shrink-0 shadow-sm"
+                title="Servicio Asignado: Mesas asignadas a meseros titulares"
+              >
+                <UserCheck className="w-3 h-3 text-amber-400" />
+                Modo Asignado
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-semibold shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              {totalAvailable} Libres
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              Ocupada
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 font-semibold shrink-0">
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+              {totalOccupied} Ocupadas
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-violet-400 animate-pulse"></span>
-              Pre-cuenta emitida
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-semibold shrink-0">
+              <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse"></span>
+              {totalBillPrinted} Pre-cuenta
             </span>
           </div>
         </div>
@@ -855,48 +969,64 @@ export default function ComanderaPage() {
             return (
               <div key={area.id} className="space-y-3">
                 <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                  <Store className="w-4 h-4 text-violet-400" />
+                  <Store className="w-4 h-4 text-[#C08552]" />
                   {area.name}
                   {filterOnlyMyTables && (
-                    <span className="text-[10px] text-amber-400 normal-case bg-amber-500/10 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] text-amber-400 normal-case bg-amber-500/10 px-2 py-0.5 rounded-full font-bold">
                       ({tablesToRender.length} asignadas)
                     </span>
                   )}
                 </h2>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
                   {tablesToRender.map((table) => {
                     const isOccupied = table.status === 'OCCUPIED'
                     const isBillPrinted = table.status === 'BILL_PRINTED'
                     const isAvailable = table.status === 'AVAILABLE'
                     const isTransferred = !!table.currentWaiter && table.currentWaiter.id !== table.assignedWaiter?.id
+                    const isMyAssignedTable = tableServiceMode === 'ASSIGNED' && table.assignedWaiter?.id === currentUser?.id
 
                     return (
                       <button
                         key={table.id}
                         type="button"
                         onClick={() => handleSelectTable(table)}
-                        className={`p-3.5 rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[155px] cursor-pointer hover:scale-[1.02] active:scale-95 ${
-                          isAvailable
-                            ? 'bg-slate-900/50 border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-500/5'
+                        className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[145px] sm:min-h-[160px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none ${
+                          isMyAssignedTable
+                            ? isAvailable
+                              ? 'bg-amber-950/20 border-amber-500/70 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/40'
+                              : isBillPrinted
+                              ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-2 ring-amber-500/60'
+                              : 'bg-amber-950/30 border-amber-500/70 shadow-md shadow-amber-500/15 ring-2 ring-amber-500/50'
+                            : isAvailable
+                            ? 'bg-[#1c1715]/75 border-[#382b25] hover:border-emerald-500/50 hover:bg-emerald-500/5'
                             : isBillPrinted
                             ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/30'
-                            : 'bg-amber-950/20 border-amber-500/50 shadow-md shadow-amber-500/10'
+                            : 'bg-amber-950/25 border-amber-500/50 shadow-md shadow-amber-500/10'
                         }`}
                       >
                         {/* Cabecera de la Mesa */}
                         <div className="flex items-start justify-between">
                           <div>
-                            <span className="text-base font-bold text-white block">{table.name}</span>
-                            <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                              <Users className="w-3 h-3" /> Cap: {table.capacity || 4}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-base sm:text-lg font-black text-white block leading-tight">
+                                {table.name}
+                              </span>
+                              {isMyAssignedTable && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  ⭐ Mi Mesa
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Users className="w-3 h-3 text-slate-500" /> Cap: {table.capacity || 4}
                             </span>
                           </div>
 
                           {/* Status Badge */}
                           <div className="flex items-center gap-1">
                             {isBillPrinted && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500 text-white flex items-center gap-0.5">
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500 text-white flex items-center gap-0.5">
                                 <Receipt className="w-2.5 h-2.5" /> Cobro
                               </span>
                             )}
@@ -906,48 +1036,78 @@ export default function ComanderaPage() {
                                   ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
                                   : isBillPrinted
                                   ? 'bg-violet-400 animate-pulse'
-                                  : 'bg-amber-500'
+                                  : 'bg-amber-500 shadow-sm shadow-amber-500/50'
                               }`}
                             />
                           </div>
                         </div>
 
-                        {/* Mesero Titular y Mesero Traspasado */}
-                        <div className="text-[10px] space-y-0.5 my-1 bg-slate-950/40 p-1.5 rounded-xl border border-slate-800/60">
-                          <span className="text-slate-400 flex items-center gap-1 truncate">
-                            <Users className="w-2.5 h-2.5 text-slate-500 shrink-0" />
-                            Titular: <strong className="text-slate-300">{table.assignedWaiter?.name || 'Libre'}</strong>
-                          </span>
-
-                          {isTransferred && (
-                            <span className="text-cyan-300 flex items-center gap-1 truncate font-semibold">
-                              <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
-                              Traspaso: {table.currentWaiter?.name}
+                        {/* Indicador de Atención según Modo */}
+                        {tableServiceMode === 'FREE' ? (
+                          <div className="text-[10px] space-y-0.5 my-1.5 bg-[#14100e]/80 p-2 rounded-xl border border-[#382b25]">
+                            {table.activeOrder ? (
+                              <span className="text-slate-300 flex items-center gap-1 truncate font-medium">
+                                <Users className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                Atiende: <strong className="text-white">{table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}</strong>
+                              </span>
+                            ) : (
+                              <span className="text-emerald-400/90 flex items-center gap-1 truncate font-medium">
+                                <Sparkles className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                Servicio Libre (Cualquiera)
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div
+                            className={`text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border ${
+                              isMyAssignedTable
+                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-200'
+                                : 'bg-[#14100e]/80 border-[#382b25] text-slate-400'
+                            }`}
+                          >
+                            <span className="flex items-center gap-1 truncate">
+                              <Users className="w-2.5 h-2.5 text-[#C08552] shrink-0" />
+                              {isMyAssignedTable ? (
+                                <strong className="text-amber-300">⭐ Tu Mesa Asignada</strong>
+                              ) : table.assignedWaiter ? (
+                                <span>
+                                  Titular: <strong className="text-slate-200">{table.assignedWaiter.name}</strong>
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 italic">⚡ Sin mesero titular</span>
+                              )}
                             </span>
-                          )}
-                        </div>
+
+                            {isTransferred && (
+                              <span className="text-cyan-300 flex items-center gap-1 truncate font-semibold">
+                                <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                                Relevo: {table.currentWaiter?.name}
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         {/* Info de Comanda si está ocupada */}
                         {table.activeOrder ? (
                           <div className="space-y-1">
-                            <div className="flex justify-between items-center text-[11px]">
-                              <span className="text-slate-400 font-mono">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-slate-400 font-mono text-[11px]">
                                 {table.activeOrder.itemsCount} platillos
                               </span>
-                              <strong className="text-amber-400 font-bold">
+                              <strong className="text-[#C08552] font-black text-sm">
                                 ${table.activeOrder.total.toFixed(2)}
                               </strong>
                             </div>
 
                             {table.activeOrder.customerName && (
-                              <span className="text-[10px] text-slate-400 block truncate italic">
-                                {table.activeOrder.customerName}
+                              <span className="text-[10px] text-slate-400 block truncate italic font-medium">
+                                👤 {table.activeOrder.customerName}
                               </span>
                             )}
                           </div>
                         ) : (
                           <div className="text-center py-1">
-                            <span className="text-[11px] font-semibold text-emerald-400/90 block">
+                            <span className="text-xs font-bold text-emerald-400 block">
                               Libre
                             </span>
                             <span className="text-[10px] text-slate-500">Toca para abrir</span>
@@ -963,68 +1123,91 @@ export default function ComanderaPage() {
         </div>
       </div>
 
-      {/* DRAWER / MODAL TÁCTIL DE COMANDA */}
+      {/* DRAWER / MODAL TÁCTIL DE COMANDA - FULLSCREEN EN MÓVIL Y TABLET */}
       {showOrderModal && activeTable && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-          <div className="w-full max-w-4xl h-[92vh] rounded-3xl bg-slate-900 border border-slate-800 flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
-            {/* Header del Modal */}
-            <div className="p-4 sm:px-6 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+        <div className="fixed inset-0 z-50 bg-black/90 md:bg-black/85 md:backdrop-blur-sm flex items-center justify-center p-0 md:p-3 lg:p-5">
+          <div className="w-full h-full md:h-[94vh] md:max-w-6xl xl:max-w-7xl md:rounded-3xl bg-[#14100e] border-0 md:border md:border-[#382b25] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
+            {/* Header del Modal con estilo App Nativa */}
+            <div className="p-3 sm:px-5 border-b border-[#382b25] flex items-center justify-between bg-[#1c1715] shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setShowOrderModal(false)}
+                  className="p-2 -ml-1 rounded-xl bg-[#251e1b] hover:bg-[#332924] text-slate-300 md:hidden cursor-pointer"
+                  title="Volver al plano de mesas"
+                >
+                  <ArrowLeft className="w-5 h-5 text-[#C08552]" />
+                </button>
+
+                <div className="w-10 h-10 rounded-2xl bg-[#C08552]/20 border border-[#C08552]/30 text-[#C08552] flex items-center justify-center font-bold shrink-0">
                   <UtensilsCrossed className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    {activeTable.name}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-black text-white truncate">
+                      {activeTable.name}
+                    </h3>
                     <span
-                      className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                      className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
                         activeTable.status === 'AVAILABLE'
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : 'bg-amber-500/20 text-amber-300'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : activeTable.status === 'BILL_PRINTED'
+                          ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                       }`}
                     >
                       {activeTable.status === 'AVAILABLE'
-                        ? 'Nueva Comanda'
-                        : `Comanda ${activeTable.activeOrder?.orderNumber || 'Abierta'}`}
+                        ? 'Libre'
+                        : activeTable.status === 'BILL_PRINTED'
+                        ? 'Pre-cuenta'
+                        : `Ocupada (#${activeTable.activeOrder?.orderNumber || ''})`}
                     </span>
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-0.5">
-                    <span>
-                      Titular: <strong className="text-slate-200">{activeTable.assignedWaiter?.name || 'Sin asignar'}</strong>
-                    </span>
-                    {activeTable.currentWaiter && activeTable.currentWaiter.id !== activeTable.assignedWaiter?.id && (
-                      <span className="text-cyan-300 font-medium bg-cyan-950/40 px-2 py-0.5 rounded-full border border-cyan-500/30">
-                        🔄 Atendida por: {activeTable.currentWaiter.name}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400 truncate">
+                    {tableServiceMode === 'FREE' ? (
+                      <span className="text-emerald-400 font-medium flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-emerald-400" />
+                        Servicio Libre
+                        {activeTable.activeOrder?.waiter && (
+                          <span className="text-slate-300 ml-1">
+                            • Abierta por: <strong className="text-white">{activeTable.activeOrder.waiter.name}</strong>
+                          </span>
+                        )}
                       </span>
-                    )}
-                    {activeTable.activeOrder && (
-                      <span className="text-amber-400/90 font-mono">
-                        • {activeTable.activeOrder.itemsCount} platillos (${activeTable.activeOrder.total.toFixed(2)})
-                      </span>
+                    ) : (
+                      <>
+                        <span>
+                          Titular: <strong className="text-slate-200">{activeTable.assignedWaiter?.name || 'Sin asignar'}</strong>
+                        </span>
+                        {activeTable.currentWaiter && activeTable.currentWaiter.id !== activeTable.assignedWaiter?.id && (
+                          <span className="text-cyan-300 font-medium">
+                            • Relevo: {activeTable.currentWaiter.name}
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Botones de acción rápida en cabecera */}
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                {/* Asignar mesero titular a la mesa */}
+              {/* Acciones de Cabecera */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Asignar titular */}
                 <button
                   type="button"
                   onClick={() => {
                     setTargetAssignWaiterId(activeTable.assignedWaiter?.id || '')
                     setShowAssignWaiterModal(true)
                   }}
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
                   title="Asignar mesero titular a la mesa"
                 >
-                  <UserPlus className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Titular</span>
+                  <UserPlus className="w-3.5 h-3.5 text-[#C08552]" />
+                  <span className="hidden lg:inline">Titular</span>
                 </button>
 
                 {activeTable.activeOrder && (
                   <>
-                    {/* Traspasar atención a otro mesero y mover comanda (requiere canTransferTables) */}
                     {(currentUser?.permissions?.canTransferTables ||
                       currentUser?.roleCodes?.includes('ADMIN') ||
                       currentUser?.roleCodes?.includes('SUPERADMIN') ||
@@ -1037,25 +1220,25 @@ export default function ComanderaPage() {
                             setShowTransferWaiterModal(true)
                           }}
                           className="px-2.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-xs text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
-                          title="Ceder mesa a otro compañero mesero (regresará al titular al cobrarse)"
+                          title="Ceder mesa temporalmente a otro mesero"
                         >
                           <UserCheck className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Ceder a Mesero</span>
+                          <span className="hidden lg:inline">Ceder</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setShowTransferModal(true)}
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
                           title="Mover comanda a otra mesa física"
                         >
                           <ArrowRightLeft className="w-3.5 h-3.5 text-cyan-400" />
-                          <span className="hidden sm:inline">Mover Mesa</span>
+                          <span className="hidden lg:inline">Mover</span>
                         </button>
                       </>
                     )}
 
-                    {/* Imprimir Pre-cuenta / Ticket de Cobro */}
+                    {/* Imprimir Pre-cuenta / Ticket */}
                     <button
                       type="button"
                       onClick={handleOpenPrintBill}
@@ -1063,7 +1246,7 @@ export default function ComanderaPage() {
                       title="Imprimir ticket de cobro / pre-cuenta"
                     >
                       <Printer className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Ticket Cobro</span>
+                      <span className="hidden sm:inline">Ticket</span>
                     </button>
 
                     {/* Liberar mesa */}
@@ -1081,278 +1264,555 @@ export default function ComanderaPage() {
                 <button
                   type="button"
                   onClick={() => setShowOrderModal(false)}
-                  className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+                  className="hidden md:flex w-8 h-8 rounded-xl bg-[#251e1b] hover:bg-[#332924] text-slate-400 hover:text-white items-center justify-center font-bold cursor-pointer transition-colors"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            {/* Split View: Catálogo Táctil vs Resumen de Comanda */}
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-              {/* IZQUIERDA: Catálogo de Platillos y Bebidas */}
-              <div className="flex-1 flex flex-col border-r border-slate-800 p-4 space-y-3 overflow-y-auto">
-                {/* Search & Categories Bar */}
-                <div className="space-y-2 shrink-0">
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="Buscar platillo o bebida..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    />
-                  </div>
+            {/* Pestañas de Navegación del Modal (Móvil, Tablet y Escritorio) */}
+            <div className="flex border-b border-[#382b25] bg-[#1a1412] p-1.5 sm:p-2 gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setOrderViewTab('catalog')}
+                className={`flex-1 basis-0 min-w-0 h-11 sm:h-12 px-2 sm:px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-colors cursor-pointer select-none active:scale-[0.99] ${
+                  orderViewTab === 'catalog'
+                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                    : 'bg-[#14100e] text-slate-400 hover:text-slate-200 hover:bg-[#201815]'
+                }`}
+              >
+                <UtensilsCrossed className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  <span className="sm:hidden">Menú</span>
+                  <span className="hidden sm:inline">Menú / Catálogo</span>
+                </span>
+              </button>
 
-                  {/* Categories Pills */}
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCatId('ALL')}
-                      style={
-                        selectedCatId === 'ALL'
-                          ? { backgroundColor: activeBranch?.primaryColor || '#f59e0b', color: '#ffffff' }
-                          : undefined
-                      }
-                      className={`px-3 py-1.5 rounded-xl font-medium shrink-0 cursor-pointer transition-all ${
-                        selectedCatId === 'ALL'
-                          ? 'font-bold shadow-md'
-                          : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Todos
-                    </button>
-                    {categories.map((c) => (
+              <button
+                type="button"
+                onClick={() => setOrderViewTab('order')}
+                className={`flex-1 basis-0 min-w-0 h-11 sm:h-12 px-2 sm:px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-colors relative cursor-pointer select-none active:scale-[0.99] ${
+                  orderViewTab === 'order'
+                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                    : 'bg-[#14100e] text-slate-400 hover:text-slate-200 hover:bg-[#201815]'
+                }`}
+              >
+                <ShoppingBag className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  <span className="sm:hidden">Comanda</span>
+                  <span className="hidden sm:inline">Artículos Registrados</span>
+                </span>
+                {totalOrderCount > 0 && (
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black leading-none shrink-0 tabular-nums ${
+                      orderViewTab === 'order'
+                        ? 'bg-slate-950 text-[#F3E9DC]'
+                        : 'bg-[#C08552] text-white shadow-sm'
+                    }`}
+                  >
+                    {totalOrderCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Opción Pantalla Dividida en pantallas grandes */}
+              <button
+                type="button"
+                onClick={() => setOrderViewTab('split')}
+                className={`hidden lg:flex flex-1 basis-0 min-w-0 h-11 sm:h-12 items-center justify-center gap-2 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors cursor-pointer select-none active:scale-[0.99] ${
+                  orderViewTab === 'split'
+                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                    : 'bg-[#14100e] text-slate-400 hover:text-slate-200 hover:bg-[#201815]'
+                }`}
+                title="Ver Catálogo y Artículos simultáneamente"
+              >
+                <Columns className="w-4 h-4 shrink-0" />
+                <span className="truncate">Vista Dividida</span>
+              </button>
+            </div>
+
+            {/* Contenido Dinámico: Catálogo Táctil vs Tarjetas de Comanda */}
+            <div className="flex-1 flex overflow-hidden relative">
+              {/* VISTA CATÁLOGO (visible si orderViewTab === 'catalog' o 'split') */}
+              {(orderViewTab === 'catalog' || orderViewTab === 'split') && (
+                <div
+                  className={`flex flex-col p-3 sm:p-4 space-y-3 overflow-y-auto flex-1 ${
+                    orderViewTab === 'split' ? 'border-r border-[#382b25]' : ''
+                  }`}
+                >
+                  {/* Search & Categories Bar */}
+                  <div className="space-y-2 shrink-0">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        placeholder="Buscar platillo, postre o bebida..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2.5 rounded-2xl bg-[#14100e] border border-[#382b25] text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-2.5 top-2.5 text-xs text-slate-400 hover:text-white cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Categories Pills */}
+                    <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
                       <button
-                        key={c.id}
                         type="button"
-                        onClick={() => setSelectedCatId(c.id)}
-                        style={
-                          selectedCatId === c.id
-                            ? { backgroundColor: activeBranch?.primaryColor || '#f59e0b', color: '#ffffff' }
-                            : undefined
-                        }
-                        className={`px-3 py-1.5 rounded-xl font-medium shrink-0 cursor-pointer transition-all ${
-                          selectedCatId === c.id
-                            ? 'font-bold shadow-md'
-                            : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-white'
+                        onClick={() => setSelectedCatId('ALL')}
+                        className={`px-3.5 py-2 rounded-xl font-bold shrink-0 cursor-pointer transition-all ${
+                          selectedCatId === 'ALL'
+                            ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                            : 'bg-[#14100e] border border-[#382b25] text-slate-400 hover:text-white'
                         }`}
                       >
-                        {c.name}
+                        Todos
                       </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Grid de Productos */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto flex-1">
-                  {filteredProducts.map((p) => {
-                    const price = p.variants[0]?.price || 0
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleAddProduct(p)}
-                        className="p-3 rounded-2xl bg-slate-950 border border-slate-800/80 hover:border-amber-500/50 hover:bg-amber-500/5 flex flex-col justify-between text-left transition-all cursor-pointer active:scale-95 group"
-                      >
-                        <div className="space-y-1">
-                          <span className="text-xs font-semibold text-white group-hover:text-amber-400 block line-clamp-2">
-                            {p.name}
-                          </span>
-                          <span className="text-[10px] text-slate-500">{p.category?.name}</span>
-                        </div>
-                        <div className="flex items-center justify-between pt-2">
-                          <strong className="text-xs text-amber-400 font-bold">
-                            ${Number(price).toFixed(2)}
-                          </strong>
-                          <span className="w-5 h-5 rounded-lg bg-slate-800 group-hover:bg-amber-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center font-bold text-xs">
-                            +
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* DERECHA: Resumen de Comanda (Platillos Marchados + Nuevos a Marchar) */}
-              <div className="w-full md:w-96 flex flex-col bg-slate-950/40 p-4 space-y-4 overflow-y-auto">
-                {/* Nombre de comensal opcional */}
-                <div className="shrink-0 space-y-1">
-                  <label className="text-[11px] text-slate-400 font-medium">Nombre de Comensal / Referencia:</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. Familia López / Juan"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
-                </div>
-
-                {/* Lista 1: Platillos ya en Cocina / KDS */}
-                {activeTable.activeOrder && activeTable.activeOrder.items.length > 0 && (
-                  <div className="space-y-2 shrink-0">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                      Marchado en Cocina ({activeTable.activeOrder.items.length})
-                    </span>
-
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                      {activeTable.activeOrder.items.map((it) => (
-                        <div
-                          key={it.id}
-                          className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between text-xs"
+                      {categories.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSelectedCatId(c.id)}
+                          className={`px-3.5 py-2 rounded-xl font-bold shrink-0 cursor-pointer transition-all ${
+                            selectedCatId === c.id
+                              ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                              : 'bg-[#14100e] border border-[#382b25] text-slate-400 hover:text-white'
+                          }`}
                         >
-                          <div>
-                            <span className="font-semibold text-white">
-                              {it.quantity}x {it.productName}
-                            </span>
-                            {it.notes && (
-                              <span className="text-[10px] text-amber-300/80 block italic">
-                                Nota: {it.notes}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="text-right">
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                it.kitchenStatus === 'READY'
-                                  ? 'bg-emerald-500/20 text-emerald-300'
-                                  : it.kitchenStatus === 'COOKING'
-                                  ? 'bg-amber-500/20 text-amber-300'
-                                  : 'bg-slate-800 text-slate-400'
-                              }`}
-                            >
-                              {it.kitchenStatus === 'READY'
-                                ? '✓ Listo'
-                                : it.kitchenStatus === 'COOKING'
-                                ? '🍳 Preparando'
-                                : '⏳ En espera'}
-                            </span>
-                            <span className="text-[11px] text-slate-400 block mt-0.5">
-                              ${it.subtotal.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
+                          {c.name}
+                        </button>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {/* Lista 2: Nuevos Platillos a Marchar */}
-                <div className="flex-1 flex flex-col space-y-2 overflow-y-auto">
-                  <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Nueva Ronda por Marchar ({stagedItems.length})
-                  </span>
+                  {/* Grid de Tarjetas de Productos Táctil con Steppers Directos (+ y -) */}
+                  <div
+                    className={`overflow-y-auto flex-1 pb-16 md:pb-0 gap-3 auto-rows-max ${
+                      orderViewTab === 'split'
+                        ? 'grid grid-cols-2 sm:grid-cols-3'
+                        : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+                    }`}
+                  >
+                    {filteredProducts.map((p) => {
+                      const price = Number(p.variants[0]?.price || 0)
+                      const variant = p.variants[0]
+                      const stagedItem = variant
+                        ? stagedItems.find((it) => it.variantId === variant.id)
+                        : null
+                      const stagedCount = stagedItem?.quantity || 0
 
-                  {stagedItems.length === 0 ? (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl p-4 text-center">
-                      <ShoppingBag className="w-6 h-6 mb-2 opacity-50" />
-                      <span>Selecciona platillos del catálogo a la izquierda</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-                      {stagedItems.map((item) => (
+                      return (
                         <div
-                          key={item.variantId}
-                          className="p-2.5 rounded-2xl bg-slate-900 border border-amber-500/30 space-y-2 text-xs"
+                          key={p.id}
+                          className={`p-3 sm:p-3.5 rounded-2xl border transition-colors flex flex-col justify-between relative select-none ${
+                            stagedCount > 0
+                              ? 'bg-[#251b15] border-[#C08552] shadow-md shadow-[#C08552]/15'
+                              : 'bg-[#1c1715] border-[#382b25] hover:border-[#C08552]/50 hover:bg-[#221c19]'
+                          }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <strong className="text-white block">{item.productName}</strong>
-                              <span className="text-slate-400 text-[11px]">
-                                ${item.unitPrice.toFixed(2)} c/u
-                              </span>
-                            </div>
+                          {/* Badge de cantidad */}
+                          {stagedCount > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 px-2 py-0.5 rounded-full bg-[#C08552] text-white font-black text-xs shadow-md">
+                              {stagedCount}
+                            </span>
+                          )}
 
-                            {/* Controles de Cantidad */}
-                            <div className="flex items-center gap-2 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800">
-                              <button
-                                type="button"
-                                onClick={() => updateStagedQty(item.variantId, -1)}
-                                className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <span className="font-bold text-white text-xs px-1">
-                                {item.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => updateStagedQty(item.variantId, 1)}
-                                className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </button>
+                          {/* Info del platillo */}
+                          <div
+                            className="space-y-1 cursor-pointer flex-1"
+                            onClick={() => handleAddProduct(p)}
+                          >
+                            <span className="text-xs sm:text-sm font-bold text-white block line-clamp-2 leading-snug">
+                              {p.name}
+                            </span>
+                            <span className="text-[10px] sm:text-[11px] text-slate-400 block truncate">
+                              {p.category?.name || 'General'}
+                            </span>
+                            <div className="pt-1">
+                              <strong className="text-xs sm:text-sm text-[#C08552] font-black">
+                                ${price.toFixed(2)}
+                              </strong>
                             </div>
                           </div>
 
-                          {/* Notas Rápidas */}
-                          <div className="space-y-1">
-                            {item.notes && (
-                              <p className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md italic">
-                                Nota: {item.notes}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap gap-1">
-                              {PRESET_NOTES.slice(0, 4).map((note) => (
+                          {/* Stepper Directo en la Tarjeta: Aumentar / Disminuir (h-10 fija para evitar saltos) */}
+                          <div className="pt-2 mt-2 border-t border-[#382b25]/60 h-10 flex items-center">
+                            {stagedCount === 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => handleAddProduct(p)}
+                                className="w-full h-8 rounded-xl bg-[#2a211d] hover:bg-[#C08552] text-slate-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-[#C08552]" />
+                                <span>Agregar</span>
+                              </button>
+                            ) : (
+                              <div className="w-full h-8 flex items-center justify-between bg-[#14100e] px-1 rounded-xl border border-[#382b25]">
                                 <button
-                                  key={note}
                                   type="button"
-                                  onClick={() => appendNoteToItem(item.variantId, note)}
-                                  className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (variant) updateStagedQty(variant.id, -1)
+                                  }}
+                                  className="w-7 h-6 flex items-center justify-center rounded-lg bg-[#251e1b] hover:bg-[#332924] active:scale-90 text-slate-200 hover:text-white font-black cursor-pointer transition-colors"
+                                  title="Disminuir"
                                 >
-                                  +{note}
+                                  <Minus className="w-3.5 h-3.5" />
                                 </button>
-                              ))}
-                            </div>
+
+                                <div className="flex flex-col items-center leading-none px-1">
+                                  <span className="font-black text-white text-xs sm:text-sm font-mono">
+                                    {stagedCount}
+                                  </span>
+                                  <span className="text-[9px] text-[#C08552] font-mono">
+                                    ${(price * stagedCount).toFixed(2)}
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (variant) updateStagedQty(variant.id, 1)
+                                  }}
+                                  className="w-7 h-6 flex items-center justify-center rounded-lg bg-[#C08552] hover:bg-[#a87445] active:scale-90 text-white font-black cursor-pointer transition-colors shadow-sm"
+                                  title="Aumentar"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      ))}
+                      )
+                    })}
+                  </div>
+
+                  {/* Barra Flotante Inferior de Resumen cuando hay artículos registrados */}
+                  {stagedItems.length > 0 && orderViewTab === 'catalog' && (
+                    <div className="sticky bottom-0 left-0 right-0 p-3 bg-[#1c1715]/95 border-t border-[#382b25] backdrop-blur-md flex items-center justify-between shadow-2xl z-30 rounded-2xl">
+                      <div>
+                        <span className="text-xs text-slate-300 block font-medium">
+                          {stagedItems.reduce((acc, it) => acc + it.quantity, 0)}{' '}
+                          {stagedItems.reduce((acc, it) => acc + it.quantity, 0) === 1
+                            ? 'artículo registrado'
+                            : 'artículos registrados'}
+                        </span>
+                        <strong className="text-sm sm:text-base font-black text-[#C08552] font-mono">
+                          $
+                          {stagedItems
+                            .reduce((acc, it) => acc + it.unitPrice * it.quantity, 0)
+                            .toFixed(2)}{' '}
+                          MXN
+                        </strong>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setOrderViewTab('order')}
+                        className="px-4 py-2.5 rounded-xl bg-[#C08552] hover:bg-[#a87445] text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-[#C08552]/30 active:scale-95 cursor-pointer transition-all"
+                      >
+                        <ShoppingBag className="w-4 h-4" />
+                        <span>Ver Comanda ({stagedItems.reduce((acc, it) => acc + it.quantity, 0)}) →</span>
+                      </button>
                     </div>
                   )}
                 </div>
+              )}
 
-                {/* Subtotal de la nueva ronda y Botón Marchar */}
-                <div className="pt-2 border-t border-slate-800 space-y-2 shrink-0">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Total ronda a marchar:</span>
-                    <strong className="text-amber-400 text-base">
-                      $
-                      {stagedItems
-                        .reduce((acc, curr) => acc + curr.unitPrice * curr.quantity, 0)
-                        .toFixed(2)}{' '}
-                      MXN
-                    </strong>
+              {/* VISTA ARTÍCULOS REGISTRADOS / COMANDA (visible si orderViewTab === 'order' o 'split') */}
+              {(orderViewTab === 'order' || orderViewTab === 'split') && (
+                <div
+                  className={`flex flex-col bg-[#14100e] p-3 sm:p-4 space-y-4 overflow-y-auto ${
+                    orderViewTab === 'split'
+                      ? 'w-full lg:w-[480px] xl:w-[560px] 2xl:w-[620px] shrink-0'
+                      : 'flex-1'
+                  }`}
+                >
+                  {/* Nombre de comensal opcional */}
+                  <div className="shrink-0 space-y-1">
+                    <label className="text-[11px] text-slate-400 font-medium">
+                      Nombre de Comensal / Referencia:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej. Familia López / Mesa 4"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                    />
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleSendToKitchen}
-                    disabled={submittingOrder || stagedItems.length === 0}
-                    style={{
-                      backgroundColor:
-                        stagedItems.length > 0
-                          ? activeBranch?.buttonColor || activeBranch?.primaryColor || '#f59e0b'
-                          : undefined,
-                      color: '#ffffff',
-                    }}
-                    className="w-full py-3 rounded-2xl bg-amber-500 hover:opacity-90 font-bold text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
-                  >
-                    {submittingOrder ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                  {/* Lista 1: Platillos ya en Cocina / KDS */}
+                  {activeTable.activeOrder && activeTable.activeOrder.items.length > 0 && (
+                    <div className="space-y-2 shrink-0 bg-[#191412] p-3 rounded-2xl border border-[#382b25]">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                        Marchado en Cocina ({activeTable.activeOrder.items.length})
+                      </span>
+
+                      <div
+                        className={`overflow-y-auto pr-1 gap-2 ${
+                          orderViewTab === 'split'
+                            ? 'space-y-2 max-h-40'
+                            : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-h-48'
+                        }`}
+                      >
+                        {activeTable.activeOrder.items.map((it) => (
+                          <div
+                            key={it.id}
+                            className="p-2.5 rounded-xl bg-[#1c1715] border border-[#382b25] flex items-center justify-between text-xs"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <span className="font-bold text-white block truncate">
+                                {it.quantity}x {it.productName}
+                              </span>
+                              {it.notes && (
+                                <span className="text-[10px] text-amber-300/90 block italic truncate mt-0.5">
+                                  Nota: {it.notes}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  it.kitchenStatus === 'READY'
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    : it.kitchenStatus === 'COOKING'
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    : 'bg-slate-800 text-slate-400'
+                                }`}
+                              >
+                                {it.kitchenStatus === 'READY'
+                                  ? '✓ Listo'
+                                  : it.kitchenStatus === 'COOKING'
+                                  ? '🍳 Preparando'
+                                  : '⏳ En espera'}
+                              </span>
+                              <span className="text-[11px] text-slate-400 block mt-0.5 font-mono">
+                                ${it.subtotal.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista 2: TARJETAS de Nuevos Platillos a Marchar */}
+                  <div className="flex-1 flex flex-col space-y-3 overflow-y-auto">
+                    <div className="flex items-center justify-between shrink-0">
+                      <span className="text-xs font-bold text-[#C08552] uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Nuevos Artículos por Marchar ({stagedItems.length})
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {orderViewTab === 'order' && (
+                          <button
+                            type="button"
+                            onClick={() => setOrderViewTab('catalog')}
+                            className="text-xs font-bold text-slate-300 hover:text-white bg-[#251e1b] hover:bg-[#332924] px-2.5 py-1 rounded-lg border border-[#382b25] transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-[#C08552]" />
+                            <span>Agregar Más</span>
+                          </button>
+                        )}
+
+                        {stagedItems.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setStagedItems([])}
+                            className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 cursor-pointer"
+                          >
+                            Vaciar ronda
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {stagedItems.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-[#382b25] rounded-3xl p-8 text-center space-y-3">
+                        <ShoppingBag className="w-12 h-12 opacity-30 text-[#C08552]" />
+                        <div>
+                          <p className="font-bold text-slate-300 text-sm">
+                            Sin artículos registrados aún
+                          </p>
+                          <p className="text-slate-500 text-xs mt-1">
+                            Selecciona platillos o bebidas del menú para agregarlos a esta ronda.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOrderViewTab('catalog')}
+                          className="px-4 py-2.5 rounded-xl bg-[#C08552] text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-[#C08552]/20 cursor-pointer active:scale-95"
+                        >
+                          <UtensilsCrossed className="w-4 h-4" />
+                          <span>Abrir Catálogo / Menú</span>
+                        </button>
+                      </div>
                     ) : (
-                      <>
-                        <Send className="w-4 h-4" />
-                        <span>Marchar a Cocina / KDS</span>
-                      </>
+                      <div
+                        className={`overflow-y-auto flex-1 pr-1 gap-3.5 auto-rows-max ${
+                          orderViewTab === 'split'
+                            ? 'grid grid-cols-1 xl:grid-cols-2'
+                            : 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+                        }`}
+                      >
+                        {stagedItems.map((item) => (
+                          <div
+                            key={item.variantId}
+                            className="p-3.5 rounded-2xl bg-[#1c1715] border border-[#382b25] hover:border-[#C08552]/40 flex flex-col justify-between space-y-3 text-xs shadow-md transition-colors"
+                          >
+                            {/* Cabecera de la Tarjeta: Nombre y Subtotal */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <strong className="text-white block text-sm font-bold truncate">
+                                  {item.productName}
+                                </strong>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-slate-400 text-xs font-mono">
+                                    ${item.unitPrice.toFixed(2)} c/u
+                                  </span>
+                                  <span className="text-[#C08552] font-black text-xs font-mono">
+                                    • ${(item.unitPrice * item.quantity).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => removeItemFromStaged(item.variantId)}
+                                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 active:scale-90 transition-colors cursor-pointer shrink-0"
+                                title="Quitar platillo"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Stepper Táctil: Disminuir [-] y Aumentar [+] */}
+                            <div className="flex items-center justify-between bg-[#14100e] p-1.5 rounded-xl border border-[#382b25]">
+                              <span className="text-[11px] text-slate-400 font-medium px-2">
+                                Cantidad:
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateStagedQty(item.variantId, -1)}
+                                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-[#251e1b] hover:bg-[#332924] text-slate-200 hover:text-white active:scale-90 transition-colors cursor-pointer font-black text-sm"
+                                  title="Disminuir"
+                                >
+                                  <Minus className="w-4 h-4" />
+                                </button>
+
+                                <span className="font-black text-white text-sm sm:text-base px-2 min-w-[28px] text-center font-mono">
+                                  {item.quantity}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() => updateStagedQty(item.variantId, 1)}
+                                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-[#C08552] hover:bg-[#a87445] text-white active:scale-90 transition-colors cursor-pointer font-black text-sm shadow-md shadow-[#C08552]/20"
+                                  title="Aumentar"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Notas Rápidas y Chips para Cocina */}
+                            <div className="space-y-1.5 pt-2 border-t border-[#251e1b]">
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  placeholder="Nota especial (ej. sin azúcar, para llevar)..."
+                                  value={item.notes}
+                                  onChange={(e) => updateItemNote(item.variantId, e.target.value)}
+                                  className="flex-1 px-2.5 py-1.5 rounded-xl bg-[#14100e] border border-[#382b25] text-xs text-amber-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                                />
+                                {item.notes && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateItemNote(item.variantId, '')}
+                                    className="text-xs text-slate-400 hover:text-white px-1.5 py-1 cursor-pointer"
+                                    title="Borrar nota"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap gap-1">
+                                {PRESET_NOTES.slice(0, 5).map((note) => (
+                                  <button
+                                    key={note}
+                                    type="button"
+                                    onClick={() => appendNoteToItem(item.variantId, note)}
+                                    className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-lg bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-300 active:scale-95 transition-all cursor-pointer"
+                                  >
+                                    +{note}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </button>
+                  </div>
+
+                  {/* Subtotal de la nueva ronda y Botón Marchar */}
+                  <div className="pt-3 border-t border-[#382b25] space-y-2.5 shrink-0 bg-[#14100e]">
+                    <div className="flex justify-between items-center text-xs sm:text-sm">
+                      <span className="text-slate-400">Total ronda a marchar:</span>
+                      <strong className="text-[#C08552] text-base sm:text-lg font-black font-mono">
+                        $
+                        {stagedItems
+                          .reduce((acc, curr) => acc + curr.unitPrice * curr.quantity, 0)
+                          .toFixed(2)}{' '}
+                        MXN
+                      </strong>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {orderViewTab === 'order' && (
+                        <button
+                          type="button"
+                          onClick={() => setOrderViewTab('catalog')}
+                          className="flex-1 py-3 rounded-2xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-300 hover:text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer transition-all"
+                        >
+                          <UtensilsCrossed className="w-4 h-4 text-[#C08552]" />
+                          <span>+ Agregar Más</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleSendToKitchen}
+                        disabled={submittingOrder || stagedItems.length === 0}
+                        className="flex-1 py-3.5 rounded-2xl bg-[#C08552] hover:bg-[#a87445] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#C08552]/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95 select-none"
+                      >
+                        {submittingOrder ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4" />
+                            <span>Enviar a Cocina</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1705,24 +2165,24 @@ export default function ComanderaPage() {
 
       {/* MODAL FULLSCREEN DE BLOQUEO DE TERMINAL Y RELEVO RÁPIDO */}
       {isTerminalLocked && (
-        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-5 shadow-2xl text-center animate-in zoom-in-95">
-            <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/30 text-violet-400 flex items-center justify-center mx-auto shadow-lg shadow-violet-500/10">
+        <div className="fixed inset-0 z-50 bg-[#0e0c0b]/95 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-[#14100e] border border-[#382b25] p-6 space-y-5 shadow-2xl text-center animate-in zoom-in-95">
+            <div className="w-14 h-14 rounded-2xl bg-[#C08552]/10 border border-[#C08552]/30 text-[#C08552] flex items-center justify-center mx-auto shadow-lg shadow-[#C08552]/10">
               <Lock className="w-7 h-7" />
             </div>
 
             <div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] text-violet-300 mb-2 font-medium">
+              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#1c1715] border border-[#382b25] text-[11px] text-[#C08552] mb-2 font-bold">
                 <Store className="w-3 h-3" />
                 <span>{activeBranch?.name || 'Comandera'}</span>
               </div>
-              <h2 className="text-xl font-bold text-white tracking-tight">Comandera Bloqueada</h2>
+              <h2 className="text-xl font-black text-white tracking-tight">Comandera Bloqueada</h2>
               <p className="text-xs text-slate-400 mt-1">
                 Ingresa tu PIN de 4 dígitos para relevar o continuar turno
               </p>
               {currentUser && (
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Último mesero: <span className="text-slate-300 font-medium">{currentUser.name}</span>
+                  Último mesero: <span className="text-slate-300 font-semibold">{currentUser.name}</span>
                 </p>
               )}
             </div>
@@ -1741,8 +2201,8 @@ export default function ComanderaPage() {
                   key={idx}
                   className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all ${
                     unlockPin.length > idx
-                      ? 'border-violet-500 bg-violet-500/10 text-violet-400 shadow-md shadow-violet-500/20'
-                      : 'border-slate-800 bg-slate-950/60 text-slate-600'
+                      ? 'border-[#C08552] bg-[#C08552]/15 text-[#C08552] shadow-md shadow-[#C08552]/20'
+                      : 'border-[#382b25] bg-[#1c1715] text-slate-600'
                   }`}
                 >
                   {unlockPin.length > idx ? '•' : ''}
@@ -1758,7 +2218,7 @@ export default function ComanderaPage() {
                   type="button"
                   onClick={() => handleKeypadPressUnlock(val)}
                   disabled={unlocking}
-                  className="h-14 rounded-2xl bg-slate-950/90 hover:bg-slate-800 border border-slate-800/80 text-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none"
+                  className="h-14 rounded-2xl bg-[#1c1715] hover:bg-[#251e1b] border border-[#382b25] text-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none"
                 >
                   {val === 'DEL' ? '⌫' : val}
                 </button>
@@ -1769,7 +2229,7 @@ export default function ComanderaPage() {
               type="button"
               onClick={() => handleUnlockTerminal()}
               disabled={unlocking || unlockPin.length < 4}
-              className="w-full py-3.5 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-violet-600/20 transition-all disabled:opacity-40 cursor-pointer"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#C08552] hover:bg-[#a87445] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-[#C08552]/20 transition-all disabled:opacity-40 cursor-pointer active:scale-95"
             >
               {unlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               <span>Desbloquear Comandera</span>
@@ -1786,6 +2246,46 @@ export default function ComanderaPage() {
                   <span>Salir al Login Principal (Cerrar Sesión)</span>
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ADVERTENCIA AL TOMAR MESA ASIGNADA A OTRO MESERO */}
+      {takeoverWarningTable && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-[#14100e] border border-[#382b25] p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto">
+              <UserCheck className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-white">Mesa con mesero titular</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                La <strong className="text-white">{takeoverWarningTable.name}</strong> está asignada
+                a <strong className="text-amber-300">{takeoverWarningTable.assignedWaiter?.name}</strong>.
+              </p>
+              <p className="text-[11px] text-slate-400">
+                ¿Deseas abrir la comanda para atenderla como apoyo o relevo?
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setTakeoverWarningTable(null)}
+                className="flex-1 py-2.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-300 text-xs font-bold cursor-pointer transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => openTableOrder(takeoverWarningTable)}
+                style={{ backgroundColor: activeBranch?.primaryColor || '#C08552' }}
+                className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-95 cursor-pointer transition-all flex items-center justify-center gap-1"
+              >
+                <span>Atender como Apoyo</span>
+              </button>
             </div>
           </div>
         </div>

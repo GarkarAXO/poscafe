@@ -11,6 +11,7 @@ import {
   BarChart3,
   UtensilsCrossed,
   CreditCard,
+  LayoutGrid,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -31,6 +32,12 @@ export default async function DashboardPage() {
 
   const activeBranch =
     business.branches.find((b: any) => b.id === session.activeBranchId) || business.branches[0]
+
+  const tableCount = activeBranch
+    ? await prisma.table.count({
+        where: { branchId: activeBranch.id, active: true },
+      })
+    : 0
 
   const settings = business.settings
   const isMultiBranch = settings?.multiBranchEnabled !== false
@@ -150,6 +157,42 @@ export default async function DashboardPage() {
           </p>
           <p className="text-xs text-slate-500 mt-1">Control de mesas y consumo</p>
         </div>
+      </div>
+
+      {/* Tarjeta de acceso rápido a Control de Mesas */}
+      <div className="p-6 sm:p-7 rounded-3xl bg-slate-900/50 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="flex items-start sm:items-center gap-4">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border"
+            style={{
+              backgroundColor: `${primaryColor}15`,
+              borderColor: `${primaryColor}30`,
+              color: primaryColor,
+            }}
+          >
+            <LayoutGrid className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-white">Control de Mesas y Meseros</h2>
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                {tableCount} {tableCount === 1 ? 'mesa activa' : 'mesas activas'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+              Gestiona el número de mesas de <strong className="text-slate-200">{activeBranch.name}</strong>, asigna meseros titulares por mesa o habilita el servicio libre donde cualquier colaborador puede tomar comandas.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/dashboard/tables"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white shadow-lg transition-all hover:opacity-95 shrink-0"
+          style={{ backgroundColor: buttonColor }}
+        >
+          Gestionar Mesas
+          <ArrowRight className="w-4 h-4" />
+        </Link>
       </div>
 
       {/* Multi-Branch Cards - Solo visible si tiene permiso de multisucursal */}

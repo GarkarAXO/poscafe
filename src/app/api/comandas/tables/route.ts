@@ -14,6 +14,25 @@ export async function GET(request: Request) {
 
     const branchId = session.activeBranchId
 
+    // 0. Sucursal y su modo de servicio
+    const branch = await prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { id: true, name: true },
+    })
+
+    let tableServiceMode = 'FREE'
+    try {
+      const modeRows = await prisma.$queryRawUnsafe<Array<{ tableServiceMode: string }>>(
+        `SELECT "tableServiceMode" FROM "branches" WHERE id = $1 LIMIT 1`,
+        branchId
+      )
+      if (modeRows && modeRows[0]?.tableServiceMode) {
+        tableServiceMode = modeRows[0].tableServiceMode
+      }
+    } catch (e) {
+      console.warn('Advertencia al consultar tableServiceMode en comandas:', e)
+    }
+
     // 1. Obtener áreas con sus mesas (incluyendo mesero titular y temporal)
     const areas = await prisma.area.findMany({
       where: { branchId, active: true },
@@ -148,6 +167,7 @@ export async function GET(request: Request) {
       data: {
         areas: areasWithTables,
         unassignedTables: unassignedWithOrders,
+        tableServiceMode,
         waiters: waiters.map(w => ({
           id: w.id,
           name: w.name,
