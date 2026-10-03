@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import AdminPanelClient, {
@@ -10,6 +10,12 @@ export default async function AdminPlatformPage() {
   const session = await getSession()
 
   if (!session || !session.isPlatformAdmin) {
+    const isEnabled =
+      process.env.ENABLE_PLATFORM_ADMIN_LOGIN === 'true' ||
+      process.env.ENABLE_ADMIN_LOGIN === 'true'
+    if (!isEnabled) {
+      notFound()
+    }
     redirect('/admin/login')
   }
 

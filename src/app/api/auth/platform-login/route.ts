@@ -5,6 +5,17 @@ import { signToken, setAuthCookie, AuthSession } from '@/lib/auth'
 
 export async function POST(request: Request) {
   try {
+    const isEnabled =
+      process.env.ENABLE_PLATFORM_ADMIN_LOGIN === 'true' ||
+      process.env.ENABLE_ADMIN_LOGIN === 'true'
+
+    if (!isEnabled) {
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Ruta no disponible' } },
+        { status: 404 }
+      )
+    }
+
     const body = await request.json()
     const { email, password } = body
 

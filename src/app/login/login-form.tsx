@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Coffee, ShieldCheck, KeyRound, Store, ArrowRight, Loader2, Sparkles } from 'lucide-react'
+import { Coffee, KeyRound, Store, ArrowRight, Loader2, Sparkles, User, Lock } from 'lucide-react'
 
 type LoginMode = 'tenant' | 'pin'
 
@@ -58,12 +57,12 @@ export default function LoginForm() {
       const result = await res.json()
 
       if (!result.success) {
-        setError(result.error?.message || 'Error de autenticación')
+        setError(result.error?.message || 'Credenciales no válidas')
         setLoading(false)
         return
       }
 
-      // Redirección inteligente según el rol y permisos
+      // Redirección según rol y permisos
       if (mode === 'pin') {
         const userRoles = result.data?.user?.roleCodes || []
         if (userRoles.includes('WAITER')) {
@@ -98,41 +97,46 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 selection:bg-violet-500 selection:text-white">
-      {/* Background Glow */}
+    <div className="min-h-screen bg-[#F3E9DC] text-[#5E3023] flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-[#C08552] selection:text-white">
+      {/* Warm Ambient Coffee Glows */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-violet-600/20 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-[#C08552]/15 rounded-full blur-[130px]"></div>
+        <div className="absolute bottom-10 right-1/4 w-[400px] h-[400px] bg-[#5E3023]/10 rounded-full blur-[110px]"></div>
       </div>
 
-      <div className="relative w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl">
+      <div className="relative w-full max-w-md bg-white/95 border border-[#E6D5C3] rounded-3xl p-7 sm:p-9 backdrop-blur-xl shadow-2xl shadow-[#5E3023]/15">
         {/* Brand Header */}
-        <div className="flex flex-col items-center text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-violet-600 to-amber-500 flex items-center justify-center shadow-lg shadow-violet-500/20 mb-3">
-            <Coffee className="w-7 h-7 text-white" />
+        <div className="flex flex-col items-center text-center mb-7">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#7A3E2D] flex items-center justify-center shadow-lg shadow-[#5E3023]/25 mb-3.5 transform hover:scale-105 transition-transform duration-300">
+            <Coffee className="w-8 h-8 text-[#F3E9DC]" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            PosCafé <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 font-medium">SaaS Multi-tenant</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#C08552]/15 border border-[#C08552]/30 text-xs font-semibold text-[#C08552] mb-1.5">
+            <span>Cafetería & Punto de Venta</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#5E3023]">
+            PosCafé
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Plataforma POS e inventarios multisucursal</p>
+          <p className="text-xs text-[#895737] mt-1 font-medium">
+            Sistema artesanal de comandas, cobro e inventario
+          </p>
         </div>
 
-        {/* Mode Selector Tabs (2 tabs: Negocio vs Terminal PIN) */}
-        <div className="grid grid-cols-2 gap-1 bg-slate-950/60 p-1 rounded-xl mb-6 border border-slate-800/80 text-xs font-medium">
+        {/* Mode Selector Tabs (Crema, Caramelo, Espresso) */}
+        <div className="grid grid-cols-2 gap-1.5 bg-[#F3E9DC]/70 p-1.5 rounded-2xl mb-6 border border-[#E6D5C3] text-xs font-semibold">
           <button
             type="button"
             onClick={() => {
               setMode('tenant')
               setError(null)
             }}
-            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all cursor-pointer ${
               mode === 'tenant'
-                ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#5E3023] text-[#F3E9DC] shadow-md shadow-[#5E3023]/25 font-bold'
+                : 'text-[#895737] hover:text-[#5E3023] hover:bg-white/60'
             }`}
           >
-            <Store className="w-3.5 h-3.5" />
-            <span>Negocio / Admin</span>
+            <Store className="w-4 h-4" />
+            <span>Administración</span>
           </button>
 
           <button
@@ -141,75 +145,87 @@ export default function LoginForm() {
               setMode('pin')
               setError(null)
             }}
-            className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl transition-all cursor-pointer ${
               mode === 'pin'
-                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/30 font-bold'
+                : 'text-[#895737] hover:text-[#5E3023] hover:bg-white/60'
             }`}
           >
-            <KeyRound className="w-3.5 h-3.5" />
+            <KeyRound className="w-4 h-4" />
             <span>Terminal PIN</span>
           </button>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs text-center font-medium animate-in fade-in">
+          <div className="mb-5 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs text-center font-medium animate-in fade-in">
             {error}
           </div>
         )}
 
-        {/* Form: Negocio (Dueño / Gerente / Empleado con contraseña) */}
+        {/* Form: Modo Administración (Dueño / Gerente / Empleado con contraseña) */}
         {mode === 'tenant' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Correo o Usuario</label>
-              <input
-                type="text"
-                value={login}
-                onChange={(e) => setLogin(e.target.value)}
-                placeholder="propietario@cafearoma.demo"
-                required
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
-              />
+              <label className="block text-xs font-bold text-[#5E3023] mb-1.5">
+                Correo o Usuario
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                  placeholder="propietario@cafearoma.demo"
+                  required
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
+                />
+                <User className="w-4 h-4 text-[#A88C7D] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Contraseña</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all"
-              />
+              <label className="block text-xs font-bold text-[#5E3023] mb-1.5">
+                Contraseña
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
+                />
+                <Lock className="w-4 h-4 text-[#A88C7D] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-violet-600/30 transition-all disabled:opacity-50 cursor-pointer"
+              className="w-full py-3 px-4 rounded-xl bg-[#5E3023] hover:bg-[#472218] text-[#F3E9DC] font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#5E3023]/25 transition-all disabled:opacity-50 cursor-pointer mt-2"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ingresar al Dashboard'}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin text-[#F3E9DC]" /> : 'Ingresar a Cafetería'}
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
         )}
 
-        {/* Form: Terminal PIN */}
+        {/* Form: Terminal PIN (Cajeros y Meseros) */}
         {mode === 'pin' && (
           <div className="space-y-4">
             <div className="text-center">
-              <label className="block text-xs font-medium text-slate-300 mb-2">Ingresa tu PIN de 4 dígitos</label>
+              <label className="block text-xs font-bold text-[#5E3023] mb-2">
+                Ingresa tu PIN de 4 dígitos
+              </label>
               <div className="flex justify-center gap-3 my-2">
                 {[0, 1, 2, 3].map((idx) => (
                   <div
                     key={idx}
-                    className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg font-bold transition-all ${
+                    className={`w-11 h-11 rounded-2xl border flex items-center justify-center text-lg font-bold transition-all ${
                       pin.length > idx
-                        ? 'border-amber-500 bg-amber-500/10 text-amber-400'
-                        : 'border-slate-800 bg-slate-950/60 text-slate-600'
+                        ? 'border-[#C08552] bg-[#C08552]/15 text-[#5E3023] shadow-md shadow-[#C08552]/20'
+                        : 'border-[#DECEBD] bg-[#FDFBF9] text-[#A88C7D]'
                     }`}
                   >
                     {pin.length > idx ? '•' : ''}
@@ -218,14 +234,14 @@ export default function LoginForm() {
               </div>
             </div>
 
-            {/* Keypad */}
+            {/* Keypad táctil cálido */}
             <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
                 <button
                   key={val}
                   type="button"
                   onClick={() => handleKeypadPress(val)}
-                  className="py-3 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-800/80 text-sm font-semibold text-white transition-all active:scale-95 cursor-pointer"
+                  className="py-3 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border border-[#DECEBD] text-sm font-bold text-[#5E3023] transition-all shadow-sm active:scale-95 cursor-pointer"
                 >
                   {val === 'DEL' ? '⌫' : val}
                 </button>
@@ -236,7 +252,7 @@ export default function LoginForm() {
               type="button"
               onClick={() => handleSubmit()}
               disabled={loading || pin.length < 4}
-              className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-600/30 transition-all disabled:opacity-50 cursor-pointer"
+              className="w-full py-3 px-4 rounded-xl bg-[#C08552] hover:bg-[#A96F3F] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#C08552]/30 transition-all disabled:opacity-50 cursor-pointer mt-2"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Entrar a Terminal'}
               <ArrowRight className="w-4 h-4" />
@@ -245,49 +261,38 @@ export default function LoginForm() {
         )}
 
         {/* Demo Fast Access Buttons */}
-        <div className="mt-8 pt-5 border-t border-slate-800/80">
-          <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5 mb-2.5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            Accesos de prueba de la cafetería:
+        <div className="mt-8 pt-5 border-t border-[#E6D5C3]/80">
+          <p className="text-[11px] font-bold text-[#895737] flex items-center gap-1.5 mb-2.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#C08552]" />
+            Accesos rápidos de demostración:
           </p>
 
           <div className="grid grid-cols-3 gap-2 text-[11px]">
             <button
               type="button"
               onClick={() => fillDemo('owner')}
-              className="px-2 py-1.5 rounded-lg bg-slate-950/60 hover:bg-violet-950/40 border border-slate-800 hover:border-violet-500/50 text-slate-300 text-left transition-all cursor-pointer"
+              className="px-2.5 py-2 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] hover:border-[#C08552] text-[#5E3023] text-left transition-all shadow-xs cursor-pointer"
             >
-              👑 <strong className="text-violet-400">Dueño</strong>
-              <span className="block text-[10px] text-slate-500">Rodrigo</span>
+              👑 <strong className="text-[#5E3023]">Dueño</strong>
+              <span className="block text-[10px] text-[#895737]">Rodrigo</span>
             </button>
             <button
               type="button"
               onClick={() => fillDemo('cashier')}
-              className="px-2 py-1.5 rounded-lg bg-slate-950/60 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 text-slate-300 text-left transition-all cursor-pointer"
+              className="px-2.5 py-2 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] hover:border-[#C08552] text-[#5E3023] text-left transition-all shadow-xs cursor-pointer"
             >
-              💳 <strong className="text-amber-400">Cajero</strong>
-              <span className="block text-[10px] text-slate-500">PIN 1234</span>
+              💳 <strong className="text-[#C08552]">Cajero</strong>
+              <span className="block text-[10px] text-[#895737]">PIN 1234</span>
             </button>
             <button
               type="button"
               onClick={() => fillDemo('waiter')}
-              className="px-2 py-1.5 rounded-lg bg-slate-950/60 hover:bg-amber-950/40 border border-slate-800 hover:border-amber-500/50 text-slate-300 text-left transition-all cursor-pointer"
+              className="px-2.5 py-2 rounded-xl bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] hover:border-[#C08552] text-[#5E3023] text-left transition-all shadow-xs cursor-pointer"
             >
-              🍽️ <strong className="text-amber-400">Mesero</strong>
-              <span className="block text-[10px] text-slate-500">PIN 4321</span>
+              🍽️ <strong className="text-[#C08552]">Mesero</strong>
+              <span className="block text-[10px] text-[#895737]">PIN 4321</span>
             </button>
           </div>
-        </div>
-
-        {/* Discreet link to Platform Master Console */}
-        <div className="mt-5 pt-3 border-t border-slate-800/50 text-center">
-          <Link
-            href="/admin/login"
-            className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-            <span>¿Administrador SaaS? Ingresar al Master Console</span>
-          </Link>
         </div>
       </div>
     </div>
