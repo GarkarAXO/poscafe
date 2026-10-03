@@ -133,8 +133,30 @@ export async function POST(
       })
     }
 
-    // Asignación de mesero titular a la mesa
+    // Asignación de mesero titular a la mesa (RESTRINGIDO a administradores y encargados)
     if (action === 'ASSIGN_WAITER') {
+      const userRoles = session.roleCodes || []
+      const isOwnerOrAdmin =
+        session.isPlatformAdmin ||
+        userRoles.includes('ADMIN') ||
+        userRoles.includes('SUPERADMIN') ||
+        userRoles.includes('BRANCH_MANAGER') ||
+        session.permissions?.canManageSettings ||
+        session.permissions?.canManageUsers
+
+      if (!isOwnerOrAdmin) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Solo administradores o gerentes pueden modificar el mesero titular de la mesa',
+            },
+          },
+          { status: 403 }
+        )
+      }
+
       const newWaiterId = waiterId || null
       let waiterName = 'Ninguno'
 
@@ -162,7 +184,61 @@ export async function POST(
       return NextResponse.json({
         success: true,
         data: updated,
-        message: newWaiterId ? `Mesa asignada a ${waiterName}` : 'Mesa desasignada',
+        message: newWaiterId ? `Mesa asignada a titular ${waiterName}` : 'Mesa desasignada',
+      })
+    }
+
+    // Regresar mesa encargada/temporal a su titular (ej. cuando regresa del baño o el compañero la devuelve)
+    if (action === 'RETURN_TO_TITULAR') {
+      if (!table.assignedWaiterId) {
+        return NextResponse.json(
+          { success: false, error: { code: 'NO_TITULAR', message: 'La mesa no cuenta con un mesero titular configurado' } },
+          { status: 400 }
+        )
+      }
+
+      await prisma.$transaction(
+        async (tx) => {
+          // Limpiar mesero temporal
+          await tx.table.update({
+            where: { id: tableId },
+            data: { currentWaiterId: null },
+          })
+
+          // Si hay orden activa, devolver la orden al mesero titular
+          await tx.order.updateMany({
+            where: {
+              tableId,
+              branchId,
+              status: { in: [OrderStatus.DRAFT, OrderStatus.SENT, OrderStatus.PREPARING, OrderStatus.SERVED] },
+            },
+            data: { waiterId: table.assignedWaiterId! },
+          })
+
+          // Auditoría
+          await tx.auditLog.create({
+            data: {
+              businessId: session.businessId!,
+              userId: session.userId,
+              action: 'TABLE_RETURNED_TO_TITULAR',
+              entityType: 'Table',
+              entityId: tableId,
+              payload: {
+                tableName: table.name,
+                titularId: table.assignedWaiterId,
+                titularName: table.assignedWaiter?.name,
+                previousTemporaryWaiterId: table.currentWaiterId,
+                previousTemporaryWaiterName: table.currentWaiter?.name,
+              },
+            },
+          })
+        },
+        { maxWait: 15000, timeout: 30000 }
+      )
+
+      return NextResponse.json({
+        success: true,
+        message: `Mesa ${table.name} devuelta a su titular (${table.assignedWaiter?.name})`,
       })
     }
 

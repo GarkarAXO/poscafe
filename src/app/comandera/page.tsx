@@ -603,7 +603,7 @@ export default function ComanderaPage() {
     }
   }
 
-  // Traspasar mesa a otro compañero mesero
+  // Traspasar / Encargar mesa a otro compañero mesero
   const handleConfirmTransferWaiter = async () => {
     if (!activeTable || !targetTransferWaiterId) return
     setTransferringWaiter(true)
@@ -619,16 +619,59 @@ export default function ComanderaPage() {
       const json = await res.json()
       if (json.success) {
         setShowTransferWaiterModal(false)
-        notify.success('Mesa traspasada a mesero', json.message)
+        notify.success('Mesa encargada con éxito', json.message)
         await refreshTables()
+        const targetWaiterObj = waiters.find((w) => w.id === targetTransferWaiterId)
+        setActiveTable((prev) =>
+          prev
+            ? {
+                ...prev,
+                currentWaiter: targetWaiterObj
+                  ? { id: targetWaiterObj.id, name: targetWaiterObj.name }
+                  : null,
+              }
+            : null
+        )
       } else {
-        const errMsg = json.error?.message || 'No se pudo traspasar al mesero'
-        notify.error('Error al traspasar', errMsg)
+        const errMsg = json.error?.message || 'No se pudo encargar la mesa'
+        notify.error('Error al encargar', errMsg)
       }
     } catch {
       notify.error('Error de conexión', 'No fue posible comunicar con el servidor')
     } finally {
       setTransferringWaiter(false)
+    }
+  }
+
+  // Regresar mesa encargada/temporal a su titular (ej. al regresar del baño o terminar el apoyo)
+  const handleReturnTableToTitular = async (tableToReturn?: TableItem) => {
+    const table = tableToReturn || activeTable
+    if (!table) return
+
+    try {
+      const res = await fetch(`/api/comandas/tables/${table.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RETURN_TO_TITULAR' }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        notify.success('Mesa devuelta', json.message)
+        await refreshTables()
+        if (
+          tableServiceMode === 'ASSIGNED' &&
+          !isOwnerOrAdmin &&
+          table.assignedWaiter?.id !== currentUser?.id
+        ) {
+          setShowOrderModal(false)
+        } else {
+          setActiveTable((prev) => (prev ? { ...prev, currentWaiter: null } : null))
+        }
+      } else {
+        notify.error('Error al devolver', json.error?.message || 'No se pudo devolver la mesa')
+      }
+    } catch {
+      notify.error('Error de conexión', 'No fue posible comunicar con el servidor')
     }
   }
 
@@ -684,14 +727,35 @@ export default function ComanderaPage() {
     return matchesCat && matchesSearch
   })
 
+  const isOwnerOrAdmin =
+    currentUser?.roleCodes?.includes('ADMIN') ||
+    currentUser?.roleCodes?.includes('SUPERADMIN') ||
+    currentUser?.roleCodes?.includes('BRANCH_MANAGER') ||
+    currentUser?.permissions?.canManageSettings ||
+    currentUser?.permissions?.canManageUsers
+
   // Todas las mesas en lista plana para traspasos y conteos rápidos
   const allTablesList = areas.flatMap((a) => a.tables)
   const availableTargetTables = allTablesList.filter(
     (t) => t.status === 'AVAILABLE' && t.id !== activeTable?.id
   )
-  const totalAvailable = allTablesList.filter((t) => t.status === 'AVAILABLE').length
-  const totalOccupied = allTablesList.filter((t) => t.status === 'OCCUPIED').length
-  const totalBillPrinted = allTablesList.filter((t) => t.status === 'BILL_PRINTED').length
+
+  // Mesas visibles según el modo de servicio y rol:
+  // En Modo ASIGNADO: un mesero estándar solo ve sus mesas asignadas o las que le hayan encargado/transferido
+  const visibleTablesList = allTablesList.filter((table) => {
+    if (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin) {
+      return (
+        table.assignedWaiter?.id === currentUser?.id ||
+        table.currentWaiter?.id === currentUser?.id ||
+        table.activeOrder?.waiter?.id === currentUser?.id
+      )
+    }
+    return true
+  })
+
+  const totalAvailable = visibleTablesList.filter((t) => t.status === 'AVAILABLE').length
+  const totalOccupied = visibleTablesList.filter((t) => t.status === 'OCCUPIED').length
+  const totalBillPrinted = visibleTablesList.filter((t) => t.status === 'BILL_PRINTED').length
   const myTablesCount = allTablesList.filter(
     (t) =>
       t.assignedWaiter?.id === currentUser?.id ||
@@ -703,13 +767,6 @@ export default function ComanderaPage() {
   const totalOrderCount =
     stagedItems.reduce((acc, it) => acc + it.quantity, 0) +
     (activeTable?.activeOrder?.items.length || 0)
-
-  const isOwnerOrAdmin =
-    currentUser?.roleCodes?.includes('ADMIN') ||
-    currentUser?.roleCodes?.includes('SUPERADMIN') ||
-    currentUser?.roleCodes?.includes('BRANCH_MANAGER') ||
-    currentUser?.permissions?.canManageSettings ||
-    currentUser?.permissions?.canManageUsers
 
   // Mesas filtradas por área seleccionada
   const displayedAreas =
@@ -871,51 +928,88 @@ export default function ComanderaPage() {
                   : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
               }`}
             >
-              Todas ({allTablesList.length})
+              Todas ({visibleTablesList.length})
             </button>
-            {areas.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => setSelectedAreaId(a.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
-                  selectedAreaId === a.id
-                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/30'
-                    : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
-                }`}
-              >
-                {a.name} ({a.tables.length})
-              </button>
-            ))}
+            {areas.map((a) => {
+              const countInArea = a.tables.filter((t) => {
+                if (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin) {
+                  return (
+                    t.assignedWaiter?.id === currentUser?.id ||
+                    t.currentWaiter?.id === currentUser?.id ||
+                    t.activeOrder?.waiter?.id === currentUser?.id
+                  )
+                }
+                if (filterOnlyMyTables) {
+                  return (
+                    t.assignedWaiter?.id === currentUser?.id ||
+                    t.currentWaiter?.id === currentUser?.id ||
+                    t.activeOrder?.waiter?.id === currentUser?.id
+                  )
+                }
+                return true
+              }).length
+
+              if (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin && countInArea === 0) {
+                return null
+              }
+
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setSelectedAreaId(a.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                    selectedAreaId === a.id
+                      ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/30'
+                      : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
+                  }`}
+                >
+                  {a.name} ({countInArea})
+                </button>
+              )
+            })}
 
             {/* Separador vertical */}
             <div className="h-6 w-px bg-[#382b25] mx-1 shrink-0" />
 
             {/* Filtro Mis Mesas / Mis Comandas según Modo */}
-            <button
-              type="button"
-              onClick={() => setFilterOnlyMyTables(!filterOnlyMyTables)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
-                filterOnlyMyTables
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 ring-2 ring-amber-400/50'
-                  : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
-              }`}
-              title={
-                tableServiceMode === 'FREE'
-                  ? 'Filtrar comandas donde estoy atendiendo'
-                  : 'Filtrar mis mesas asignadas a cargo'
-              }
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>{tableServiceMode === 'FREE' ? 'Mis Comandas' : 'Mis Mesas'}</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  filterOnlyMyTables ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
-                }`}
+            {tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin ? (
+              <div
+                className="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-300"
+                title="En Modo Asignado solo verás tus mesas asignadas o las que te hayan encargado"
               >
-                {myTablesCount}
-              </span>
-            </button>
+                <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+                <span>Mis Mesas</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-slate-950 text-amber-400">
+                  {myTablesCount}
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setFilterOnlyMyTables(!filterOnlyMyTables)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
+                  filterOnlyMyTables
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 ring-2 ring-amber-400/50'
+                    : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
+                }`}
+                title={
+                  tableServiceMode === 'FREE'
+                    ? 'Filtrar comandas donde estoy atendiendo'
+                    : 'Filtrar mis mesas asignadas a cargo'
+                }
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>{tableServiceMode === 'FREE' ? 'Mis Comandas' : 'Mis Mesas'}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    filterOnlyMyTables ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  {myTablesCount}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Estadísticas de Estado / Leyenda de Colores */}
@@ -954,172 +1048,250 @@ export default function ComanderaPage() {
 
         {/* Plano de Mesas por Área */}
         <div className="space-y-6">
-          {displayedAreas.map((area) => {
-            const tablesToRender = area.tables.filter((table) => {
-              if (!filterOnlyMyTables) return true
+          {visibleTablesList.length === 0 ? (
+            <div className="p-8 sm:p-12 rounded-3xl bg-[#1a1412] border border-[#382b25] text-center space-y-3 max-w-md mx-auto my-12">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <UserCheck className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-white">No tienes mesas asignadas</h3>
+              <p className="text-xs text-slate-400">
+                El modo de servicio de esta sucursal está configurado como <strong className="text-amber-300">Mesero Asignado</strong>.
+                Solicita a un administrador o encargado que te asigne mesas, o que un compañero te encargue una temporalmente.
+              </p>
+            </div>
+          ) : (
+            displayedAreas.map((area) => {
+              const tablesToRender = area.tables.filter((table) => {
+                if (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin) {
+                  return (
+                    table.assignedWaiter?.id === currentUser?.id ||
+                    table.currentWaiter?.id === currentUser?.id ||
+                    table.activeOrder?.waiter?.id === currentUser?.id
+                  )
+                }
+                if (!filterOnlyMyTables) return true
+                return (
+                  table.assignedWaiter?.id === currentUser?.id ||
+                  table.currentWaiter?.id === currentUser?.id ||
+                  table.activeOrder?.waiter?.id === currentUser?.id
+                )
+              })
+
+              if (tablesToRender.length === 0) return null
+
               return (
-                table.assignedWaiter?.id === currentUser?.id ||
-                table.currentWaiter?.id === currentUser?.id ||
-                table.activeOrder?.waiter?.id === currentUser?.id
-              )
-            })
+                <div key={area.id} className="space-y-3">
+                  <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <Store className="w-4 h-4 text-[#C08552]" />
+                    {area.name}
+                    {(filterOnlyMyTables || (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin)) && (
+                      <span className="text-[10px] text-amber-400 normal-case bg-amber-500/10 px-2 py-0.5 rounded-full font-bold">
+                        ({tablesToRender.length} asignadas)
+                      </span>
+                    )}
+                  </h2>
 
-            if (filterOnlyMyTables && tablesToRender.length === 0) return null
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
+                    {tablesToRender.map((table) => {
+                      const isOccupied = table.status === 'OCCUPIED'
+                      const isBillPrinted = table.status === 'BILL_PRINTED'
+                      const isAvailable = table.status === 'AVAILABLE'
+                      const isTransferred = !!table.currentWaiter && table.currentWaiter.id !== table.assignedWaiter?.id
+                      const isMyAssignedTable = tableServiceMode === 'ASSIGNED' && table.assignedWaiter?.id === currentUser?.id
+                      const isTransferredToMe =
+                        tableServiceMode === 'ASSIGNED' &&
+                        table.currentWaiter?.id === currentUser?.id &&
+                        table.assignedWaiter?.id !== currentUser?.id
+                      const isTransferredAway =
+                        isMyAssignedTable &&
+                        !!table.currentWaiter &&
+                        table.currentWaiter.id !== currentUser?.id
 
-            return (
-              <div key={area.id} className="space-y-3">
-                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                  <Store className="w-4 h-4 text-[#C08552]" />
-                  {area.name}
-                  {filterOnlyMyTables && (
-                    <span className="text-[10px] text-amber-400 normal-case bg-amber-500/10 px-2 py-0.5 rounded-full font-bold">
-                      ({tablesToRender.length} asignadas)
-                    </span>
-                  )}
-                </h2>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
-                  {tablesToRender.map((table) => {
-                    const isOccupied = table.status === 'OCCUPIED'
-                    const isBillPrinted = table.status === 'BILL_PRINTED'
-                    const isAvailable = table.status === 'AVAILABLE'
-                    const isTransferred = !!table.currentWaiter && table.currentWaiter.id !== table.assignedWaiter?.id
-                    const isMyAssignedTable = tableServiceMode === 'ASSIGNED' && table.assignedWaiter?.id === currentUser?.id
-
-                    return (
-                      <button
-                        key={table.id}
-                        type="button"
-                        onClick={() => handleSelectTable(table)}
-                        className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[145px] sm:min-h-[160px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none ${
-                          isMyAssignedTable
-                            ? isAvailable
-                              ? 'bg-amber-950/20 border-amber-500/70 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/40'
+                      return (
+                        <button
+                          key={table.id}
+                          type="button"
+                          onClick={() => handleSelectTable(table)}
+                          className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[145px] sm:min-h-[160px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none ${
+                            isTransferredToMe
+                              ? 'bg-cyan-950/25 border-cyan-500/70 shadow-lg shadow-cyan-500/15 ring-2 ring-cyan-500/40'
+                              : isMyAssignedTable
+                              ? isAvailable
+                                ? 'bg-amber-950/20 border-amber-500/70 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/40'
+                                : isBillPrinted
+                                ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-2 ring-amber-500/60'
+                                : 'bg-amber-950/30 border-amber-500/70 shadow-md shadow-amber-500/15 ring-2 ring-amber-500/50'
+                              : isAvailable
+                              ? 'bg-[#1c1715]/75 border-[#382b25] hover:border-emerald-500/50 hover:bg-emerald-500/5'
                               : isBillPrinted
-                              ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-2 ring-amber-500/60'
-                              : 'bg-amber-950/30 border-amber-500/70 shadow-md shadow-amber-500/15 ring-2 ring-amber-500/50'
-                            : isAvailable
-                            ? 'bg-[#1c1715]/75 border-[#382b25] hover:border-emerald-500/50 hover:bg-emerald-500/5'
-                            : isBillPrinted
-                            ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/30'
-                            : 'bg-amber-950/25 border-amber-500/50 shadow-md shadow-amber-500/10'
-                        }`}
-                      >
-                        {/* Cabecera de la Mesa */}
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-base sm:text-lg font-black text-white block leading-tight">
-                                {table.name}
+                              ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/30'
+                              : 'bg-amber-950/25 border-amber-500/50 shadow-md shadow-amber-500/10'
+                          }`}
+                        >
+                          {/* Cabecera de la Mesa */}
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-base sm:text-lg font-black text-white block leading-tight">
+                                  {table.name}
+                                </span>
+                                {isTransferredToMe && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                    🔄 Encargada
+                                  </span>
+                                )}
+                                {isTransferredAway && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    ⭐ En apoyo
+                                  </span>
+                                )}
+                                {!isTransferredAway && isMyAssignedTable && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    ⭐ Mi Mesa
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                <Users className="w-3 h-3 text-slate-500" /> Cap: {table.capacity || 4}
                               </span>
-                              {isMyAssignedTable && (
-                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                  ⭐ Mi Mesa
+                            </div>
+
+                            {/* Status Badge */}
+                            <div className="flex items-center gap-1">
+                              {isBillPrinted && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500 text-white flex items-center gap-0.5">
+                                  <Receipt className="w-2.5 h-2.5" /> Cobro
                                 </span>
                               )}
+                              <span
+                                className={`w-3 h-3 rounded-full ${
+                                  isAvailable
+                                    ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                                    : isBillPrinted
+                                    ? 'bg-violet-400 animate-pulse'
+                                    : 'bg-amber-500 shadow-sm shadow-amber-500/50'
+                                }`}
+                              />
                             </div>
-                            <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                              <Users className="w-3 h-3 text-slate-500" /> Cap: {table.capacity || 4}
-                            </span>
                           </div>
 
-                          {/* Status Badge */}
-                          <div className="flex items-center gap-1">
-                            {isBillPrinted && (
-                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500 text-white flex items-center gap-0.5">
-                                <Receipt className="w-2.5 h-2.5" /> Cobro
-                              </span>
-                            )}
-                            <span
-                              className={`w-3 h-3 rounded-full ${
-                                isAvailable
-                                  ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
-                                  : isBillPrinted
-                                  ? 'bg-violet-400 animate-pulse'
-                                  : 'bg-amber-500 shadow-sm shadow-amber-500/50'
-                              }`}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Indicador de Atención según Modo */}
-                        {tableServiceMode === 'FREE' ? (
-                          <div className="text-[10px] space-y-0.5 my-1.5 bg-[#14100e]/80 p-2 rounded-xl border border-[#382b25]">
-                            {table.activeOrder ? (
-                              <span className="text-slate-300 flex items-center gap-1 truncate font-medium">
-                                <Users className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                                Atiende: <strong className="text-white">{table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}</strong>
-                              </span>
-                            ) : (
-                              <span className="text-emerald-400/90 flex items-center gap-1 truncate font-medium">
-                                <Sparkles className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                                Servicio Libre (Cualquiera)
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div
-                            className={`text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border ${
-                              isMyAssignedTable
-                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-200'
-                                : 'bg-[#14100e]/80 border-[#382b25] text-slate-400'
-                            }`}
-                          >
-                            <span className="flex items-center gap-1 truncate">
-                              <Users className="w-2.5 h-2.5 text-[#C08552] shrink-0" />
-                              {isMyAssignedTable ? (
-                                <strong className="text-amber-300">⭐ Tu Mesa Asignada</strong>
-                              ) : table.assignedWaiter ? (
-                                <span>
-                                  Titular: <strong className="text-slate-200">{table.assignedWaiter.name}</strong>
+                          {/* Indicador de Atención según Modo */}
+                          {tableServiceMode === 'FREE' ? (
+                            <div className="text-[10px] space-y-0.5 my-1.5 bg-[#14100e]/80 p-2 rounded-xl border border-[#382b25]">
+                              {table.activeOrder ? (
+                                <span className="text-slate-300 flex items-center gap-1 truncate font-medium">
+                                  <Users className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                  Atiende: <strong className="text-white">{table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}</strong>
                                 </span>
                               ) : (
-                                <span className="text-slate-500 italic">⚡ Sin mesero titular</span>
+                                <span className="text-emerald-400/90 flex items-center gap-1 truncate font-medium">
+                                  <Sparkles className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                  Servicio Libre (Cualquiera)
+                                </span>
                               )}
-                            </span>
-
-                            {isTransferred && (
-                              <span className="text-cyan-300 flex items-center gap-1 truncate font-semibold">
-                                <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
-                                Relevo: {table.currentWaiter?.name}
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Info de Comanda si está ocupada */}
-                        {table.activeOrder ? (
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-slate-400 font-mono text-[11px]">
-                                {table.activeOrder.itemsCount} platillos
-                              </span>
-                              <strong className="text-[#C08552] font-black text-sm">
-                                ${table.activeOrder.total.toFixed(2)}
-                              </strong>
                             </div>
-
-                            {table.activeOrder.customerName && (
-                              <span className="text-[10px] text-slate-400 block truncate italic font-medium">
-                                👤 {table.activeOrder.customerName}
+                          ) : isTransferredToMe ? (
+                            <div className="text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border bg-cyan-950/40 border-cyan-500/30 text-cyan-200">
+                              <span className="flex items-center gap-1 truncate font-semibold">
+                                <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                                Encargada por: <strong className="text-white">{table.assignedWaiter?.name || 'Compañero'}</strong>
                               </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-center py-1">
-                            <span className="text-xs font-bold text-emerald-400 block">
-                              Libre
-                            </span>
-                            <span className="text-[10px] text-slate-500">Toca para abrir</span>
-                          </div>
-                        )}
-                      </button>
-                    )
-                  })}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleReturnTableToTitular(table)
+                                }}
+                                className="w-full py-1 px-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-[10px] font-bold text-cyan-300 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                                title={`Devolver mesa a ${table.assignedWaiter?.name || 'Titular'}`}
+                              >
+                                <RotateCcw className="w-2.5 h-2.5" />
+                                <span>Devolver a {table.assignedWaiter?.name?.split(' ')[0] || 'Titular'}</span>
+                              </button>
+                            </div>
+                          ) : isTransferredAway ? (
+                            <div className="text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border bg-amber-950/40 border-amber-500/30 text-amber-200">
+                              <span className="flex items-center gap-1 truncate font-semibold">
+                                <UserCheck className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                                En apoyo: <strong className="text-white">{table.currentWaiter?.name}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleReturnTableToTitular(table)
+                                }}
+                                className="w-full py-1 px-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[10px] font-bold text-amber-300 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                                title="Retomar atención directa de mi mesa"
+                              >
+                                <RotateCcw className="w-2.5 h-2.5" />
+                                <span>Retomar atención</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              className={`text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border ${
+                                isMyAssignedTable
+                                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-200'
+                                  : 'bg-[#14100e]/80 border-[#382b25] text-slate-400'
+                              }`}
+                            >
+                              <span className="flex items-center gap-1 truncate">
+                                <Users className="w-2.5 h-2.5 text-[#C08552] shrink-0" />
+                                {isMyAssignedTable ? (
+                                  <strong className="text-amber-300">⭐ Tu Mesa Asignada</strong>
+                                ) : table.assignedWaiter ? (
+                                  <span>
+                                    Titular: <strong className="text-slate-200">{table.assignedWaiter.name}</strong>
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 italic">⚡ Sin mesero titular</span>
+                                )}
+                              </span>
+
+                              {isTransferred && (
+                                <span className="text-cyan-300 flex items-center gap-1 truncate font-semibold">
+                                  <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                                  Relevo: {table.currentWaiter?.name}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Info de Comanda si está ocupada */}
+                          {table.activeOrder ? (
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-400 font-mono text-[11px]">
+                                  {table.activeOrder.itemsCount} platillos
+                                </span>
+                                <strong className="text-[#C08552] font-black text-sm">
+                                  ${table.activeOrder.total.toFixed(2)}
+                                </strong>
+                              </div>
+
+                              {table.activeOrder.customerName && (
+                                <span className="text-[10px] text-slate-400 block truncate italic font-medium">
+                                  👤 {table.activeOrder.customerName}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-center py-1">
+                              <span className="text-xs font-bold text-emerald-400 block">
+                                Libre
+                              </span>
+                              <span className="text-[10px] text-slate-500">Toca para abrir</span>
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
       </div>
 
@@ -1192,50 +1364,81 @@ export default function ComanderaPage() {
 
               {/* Acciones de Cabecera */}
               <div className="flex items-center gap-1.5 sm:gap-2">
-                {/* Asignar titular */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTargetAssignWaiterId(activeTable.assignedWaiter?.id || '')
-                    setShowAssignWaiterModal(true)
-                  }}
-                  className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
-                  title="Asignar mesero titular a la mesa"
-                >
-                  <UserPlus className="w-3.5 h-3.5 text-[#C08552]" />
-                  <span className="hidden lg:inline">Titular</span>
-                </button>
+                {/* Asignar titular permanente (SOLO ADMINISTRADOR / GERENTE) */}
+                {isOwnerOrAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetAssignWaiterId(activeTable.assignedWaiter?.id || '')
+                      setShowAssignWaiterModal(true)
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Asignar mesero titular permanente a la mesa"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-[#C08552]" />
+                    <span className="hidden lg:inline">Titular</span>
+                  </button>
+                )}
+
+                {/* Si la mesa está encargada (currentWaiter seteado), botón de Retomar o Devolver */}
+                {activeTable.currentWaiter && (
+                  <button
+                    type="button"
+                    onClick={() => handleReturnTableToTitular(activeTable)}
+                    className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-xs text-amber-300 border border-amber-500/40 flex items-center gap-1.5 transition-all cursor-pointer font-bold"
+                    title={
+                      activeTable.assignedWaiter?.id === currentUser?.id
+                        ? 'Retomar la atención de tu mesa'
+                        : `Devolver mesa a su titular (${activeTable.assignedWaiter?.name || 'Titular'})`
+                    }
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">
+                      {activeTable.assignedWaiter?.id === currentUser?.id
+                        ? 'Retomar Mesa'
+                        : 'Devolver al Titular'}
+                    </span>
+                    <span className="sm:hidden">
+                      {activeTable.assignedWaiter?.id === currentUser?.id ? 'Retomar' : 'Devolver'}
+                    </span>
+                  </button>
+                )}
+
+                {/* Encargar mesa a compañero (disponible para el mesero que atiende o admin) */}
+                {(!activeTable.currentWaiter ||
+                  activeTable.currentWaiter.id === currentUser?.id ||
+                  isOwnerOrAdmin) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetTransferWaiterId('')
+                      setShowTransferWaiterModal(true)
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-xs text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 transition-all cursor-pointer font-bold"
+                    title="Encargar mesa temporalmente a otro compañero mesero"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Encargar</span>
+                  </button>
+                )}
 
                 {activeTable.activeOrder && (
                   <>
                     {(currentUser?.permissions?.canTransferTables ||
                       currentUser?.roleCodes?.includes('ADMIN') ||
                       currentUser?.roleCodes?.includes('SUPERADMIN') ||
-                      currentUser?.roleCodes?.includes('BRANCH_MANAGER')) && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTargetTransferWaiterId('')
-                            setShowTransferWaiterModal(true)
-                          }}
-                          className="px-2.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-xs text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
-                          title="Ceder mesa temporalmente a otro mesero"
-                        >
-                          <UserCheck className="w-3.5 h-3.5" />
-                          <span className="hidden lg:inline">Ceder</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setShowTransferModal(true)}
-                          className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
-                          title="Mover comanda a otra mesa física"
-                        >
-                          <ArrowRightLeft className="w-3.5 h-3.5 text-cyan-400" />
-                          <span className="hidden lg:inline">Mover</span>
-                        </button>
-                      </>
+                      currentUser?.roleCodes?.includes('BRANCH_MANAGER') ||
+                      activeTable.assignedWaiter?.id === currentUser?.id ||
+                      activeTable.currentWaiter?.id === currentUser?.id) && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTransferModal(true)}
+                        className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                        title="Mover comanda a otra mesa física"
+                      >
+                        <ArrowRightLeft className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="hidden lg:inline">Mover</span>
+                      </button>
                     )}
 
                     {/* Imprimir Pre-cuenta / Ticket */}
@@ -1270,6 +1473,48 @@ export default function ComanderaPage() {
                 </button>
               </div>
             </div>
+
+            {/* Banner informativo de Relevo / Encargo si aplica */}
+            {activeTable.currentWaiter?.id === currentUser?.id &&
+              activeTable.assignedWaiter?.id !== currentUser?.id && (
+                <div className="px-4 py-2 bg-cyan-950/80 border-b border-cyan-500/30 flex items-center justify-between text-xs text-cyan-200">
+                  <div className="flex items-center gap-2">
+                    <ArrowRightLeft className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>
+                      Mesa encargada temporalmente por{' '}
+                      <strong>{activeTable.assignedWaiter?.name || 'tu compañero'}</strong>.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleReturnTableToTitular(activeTable)}
+                    className="px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition-colors shrink-0 cursor-pointer text-xs"
+                  >
+                    Devolver a Titular
+                  </button>
+                </div>
+              )}
+
+            {activeTable.assignedWaiter?.id === currentUser?.id &&
+              activeTable.currentWaiter &&
+              activeTable.currentWaiter.id !== currentUser?.id && (
+                <div className="px-4 py-2 bg-amber-950/80 border-b border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>
+                      Esta mesa la está apoyando temporalmente{' '}
+                      <strong>{activeTable.currentWaiter.name}</strong>.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleReturnTableToTitular(activeTable)}
+                    className="px-3 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition-colors shrink-0 cursor-pointer text-xs"
+                  >
+                    Retomar Atención
+                  </button>
+                </div>
+              )}
 
             {/* Pestañas de Navegación del Modal (Móvil, Tablet y Escritorio) */}
             <div className="flex border-b border-[#382b25] bg-[#1a1412] p-1.5 sm:p-2 gap-1.5 shrink-0">
@@ -1880,7 +2125,7 @@ export default function ComanderaPage() {
         </div>
       )}
 
-      {/* MODAL PARA TRASPASAR ATENCIÓN DE MESA A OTRO COMPAÑERO MESERO */}
+      {/* MODAL PARA ENCARGAR ATENCIÓN DE MESA TEMPORALMENTE A OTRO COMPAÑERO MESERO */}
       {showTransferWaiterModal && activeTable && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-cyan-500/40 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
@@ -1889,47 +2134,49 @@ export default function ComanderaPage() {
                 <UserCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Ceder Mesa a Mesero</h3>
-                <p className="text-xs text-slate-400">Traspasar atención temporal de {activeTable.name}</p>
+                <h3 className="text-base font-bold text-white">Encargar Mesa a Compañero</h3>
+                <p className="text-xs text-slate-400">Relevo temporal de atención en {activeTable.name}</p>
               </div>
             </div>
 
             <div className="p-3 rounded-2xl bg-cyan-950/30 border border-cyan-500/30 text-[11px] text-cyan-300 space-y-1">
-              <p className="font-semibold">ℹ️ Relevo temporal de servicio:</p>
+              <p className="font-semibold">ℹ️ Encargo temporal de mesa:</p>
               <p className="text-cyan-200/80">
-                La mesa y su comanda activa pasarán a ser atendidas por el compañero seleccionado.
-                <strong> Una vez cobrada la cuenta en caja, la mesa regresará automáticamente al mesero titular.</strong>
+                La mesa pasará a la lista de tu compañero para que pueda atender a los clientes (ej. si vas al sanitario).
+                <strong> El titular seguirá siendo el mismo y podrán devolver o retomar la mesa en cualquier momento con un solo toque.</strong>
               </p>
             </div>
 
             <div className="space-y-2 text-xs">
               <label className="block text-slate-300 font-medium">Selecciona el compañero mesero:</label>
-              {waiters.length === 0 ? (
+              {waiters.filter((w) => w.id !== currentUser?.id).length === 0 ? (
                 <p className="p-3 rounded-xl bg-red-500/10 text-red-400 text-center">
-                  No hay otros colaboradores disponibles en esta sucursal.
+                  No hay otros compañeros disponibles en esta sucursal.
                 </p>
               ) : (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  {waiters.map((w) => (
-                    <button
-                      key={w.id}
-                      type="button"
-                      onClick={() => setTargetTransferWaiterId(w.id)}
-                      className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
-                        targetTransferWaiterId === w.id
-                          ? 'bg-cyan-500 text-slate-950 font-bold border-cyan-400 shadow-md'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Users className="w-3.5 h-3.5 opacity-70" />
-                        <span>{w.name}</span>
-                      </div>
-                      <span className="text-[10px] opacity-75">
-                        {w.roles.join(', ') || 'Colaborador'}
-                      </span>
-                    </button>
-                  ))}
+                  {waiters
+                    .filter((w) => w.id !== currentUser?.id)
+                    .map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => setTargetTransferWaiterId(w.id)}
+                        className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                          targetTransferWaiterId === w.id
+                            ? 'bg-cyan-500 text-slate-950 font-bold border-cyan-400 shadow-md'
+                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Users className="w-3.5 h-3.5 opacity-70" />
+                          <span>{w.name}</span>
+                        </div>
+                        <span className="text-[10px] opacity-75">
+                          {w.roles.join(', ') || 'Colaborador'}
+                        </span>
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
@@ -1949,15 +2196,15 @@ export default function ComanderaPage() {
                 className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-md shadow-cyan-500/20 disabled:opacity-50 cursor-pointer"
               >
                 {transferringWaiter ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                <span>Confirmar Traspaso</span>
+                <span>Confirmar y Encargar</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL PARA ASIGNAR MESERO TITULAR PERMANENTE A LA MESA */}
-      {showAssignWaiterModal && activeTable && (
+      {/* MODAL PARA ASIGNAR MESERO TITULAR PERMANENTE A LA MESA (SOLO ADMIN / GERENTE) */}
+      {showAssignWaiterModal && activeTable && isOwnerOrAdmin && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center gap-3">
