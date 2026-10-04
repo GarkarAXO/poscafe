@@ -30,6 +30,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
+import { useDashboardTheme } from '@/context/dashboard-theme-context'
 
 interface RolePermissions {
   canAccessPOS: boolean
@@ -99,6 +100,7 @@ interface BranchOption {
 }
 
 export default function UsersAndRolesPage() {
+  const { isLight, buttonColor, primaryColor, contrastTextButton, classes } = useDashboardTheme()
   const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users')
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserItem[]>([])
@@ -505,51 +507,50 @@ export default function UsersAndRolesPage() {
   })
 
   return (
-    <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
+    <div className={`flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full ${classes.textMain}`}>
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+              className={`p-2 rounded-xl border transition-colors cursor-pointer ${classes.buttonGhost}`}
               title="Volver al panel principal"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
-            <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
-              <Users className="w-6 h-6 text-violet-400" />
+            <h1 className={`text-xl sm:text-2xl font-bold flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Users className="w-6 h-6" style={{ color: buttonColor }} />
               Personal y Roles
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-400">
+          <p className={`text-xs sm:text-sm ${classes.textMuted}`}>
             Administra empleados, credenciales, códigos PIN de acceso rápido y permisos de autorización.
           </p>
         </div>
 
         {/* Indicador de límite de plan */}
         {planLimits && (
-          <div className="flex items-center gap-3 bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-2xl">
+          <div className={`flex items-center gap-3 border px-4 py-2.5 rounded-2xl ${classes.card}`}>
             <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <div className={`flex items-center gap-1.5 text-xs ${classes.textMuted}`}>
                 <span>Límite de Personal:</span>
-                <span className="font-semibold text-white">
+                <span className={`font-semibold ${classes.textMain}`}>
                   {planLimits.activeUsers} / {planLimits.maxUsers}
                 </span>
               </div>
-              <div className="w-32 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div className={`w-32 h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-[#DECEBD]' : 'bg-slate-800'}`}>
                 <div
-                  className={`h-full rounded-full transition-all ${
-                    planLimits.activeUsers >= planLimits.maxUsers ? 'bg-amber-400' : 'bg-violet-500'
-                  }`}
+                  className="h-full rounded-full transition-all"
                   style={{
+                    backgroundColor: planLimits.activeUsers >= planLimits.maxUsers ? '#F59E0B' : buttonColor,
                     width: `${Math.min(100, (planLimits.activeUsers / planLimits.maxUsers) * 100)}%`,
                   }}
                 />
               </div>
             </div>
 
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20">
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${classes.badge}`}>
               {planLimits.planName}
             </span>
           </div>
@@ -557,14 +558,15 @@ export default function UsersAndRolesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+      <div className={`flex items-center gap-2 border-b pb-3 ${classes.divider}`}>
         <button
           type="button"
           onClick={() => setActiveTab('users')}
+          style={activeTab === 'users' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs sm:text-sm transition-all cursor-pointer ${
             activeTab === 'users'
-              ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              ? 'shadow-lg font-bold'
+              : `${classes.buttonGhost} ${classes.textMuted}`
           }`}
         >
           <Users className="w-4 h-4" />
@@ -574,10 +576,11 @@ export default function UsersAndRolesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('roles')}
+          style={activeTab === 'roles' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs sm:text-sm transition-all cursor-pointer ${
             activeTab === 'roles'
-              ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              ? 'shadow-lg font-bold'
+              : `${classes.buttonGhost} ${classes.textMuted}`
           }`}
         >
           <Shield className="w-4 h-4" />
@@ -592,13 +595,13 @@ export default function UsersAndRolesPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex flex-1 items-center gap-3">
               <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${classes.textSub}`} />
                 <input
                   type="text"
                   placeholder="Buscar colaborador por nombre, usuario o rol..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900/80 border border-slate-800 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                  className={`w-full pl-9 pr-4 py-2 rounded-xl border text-xs sm:text-sm focus:outline-none ${classes.input}`}
                 />
               </div>
 
@@ -606,7 +609,7 @@ export default function UsersAndRolesPage() {
                 <select
                   value={branchFilter}
                   onChange={(e) => setBranchFilter(e.target.value)}
-                  className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800 text-xs sm:text-sm text-slate-300 focus:outline-none focus:border-violet-500"
+                  className={`px-3 py-2 rounded-xl border text-xs sm:text-sm focus:outline-none ${classes.input}`}
                 >
                   <option value="ALL">Todas las sucursales</option>
                   {branches.map((b) => (
@@ -621,7 +624,8 @@ export default function UsersAndRolesPage() {
             <button
               type="button"
               onClick={() => openUserModal()}
-              className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20 transition-all cursor-pointer"
+              style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+              className="px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo Colaborador</span>
@@ -630,15 +634,15 @@ export default function UsersAndRolesPage() {
 
           {/* Grid / Lista de Usuarios */}
           {loading ? (
-            <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+            <div className={`p-12 text-center flex flex-col items-center gap-3 ${classes.textMuted}`}>
+              <Loader2 className="w-8 h-8 animate-spin" style={{ color: buttonColor }} />
               <p className="text-xs">Cargando personal...</p>
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="p-12 rounded-3xl bg-slate-900/40 border border-slate-800 text-center space-y-3">
-              <Users className="w-10 h-10 text-slate-600 mx-auto" />
-              <p className="text-sm font-semibold text-white">No se encontraron colaboradores</p>
-              <p className="text-xs text-slate-400">
+            <div className={`p-12 rounded-3xl border text-center space-y-3 ${classes.card}`}>
+              <Users className={`w-10 h-10 mx-auto ${classes.textSub}`} />
+              <p className={`text-sm font-semibold ${classes.textMain}`}>No se encontraron colaboradores</p>
+              <p className={`text-xs ${classes.textMuted}`}>
                 {searchQuery
                   ? 'Intenta con otro término de búsqueda.'
                   : 'Comienza registrando a tu personal de cajas, comandas o administración.'}
@@ -651,48 +655,46 @@ export default function UsersAndRolesPage() {
                 return (
                   <div
                     key={user.id}
-                    className={`p-5 rounded-3xl border transition-all ${
-                      user.active
-                        ? 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
-                        : 'bg-slate-950/40 border-slate-900 opacity-60'
+                    className={`p-5 rounded-3xl border transition-all ${classes.card} ${
+                      !user.active ? 'opacity-60' : ''
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-white">{user.name}</h3>
+                          <h3 className={`text-sm font-bold ${classes.textMain}`}>{user.name}</h3>
                           {!user.active && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                               Inactivo
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <div className={`flex items-center gap-2 text-xs ${classes.textMuted}`}>
                           {user.username && (
-                            <span className="font-mono text-slate-300">@{user.username}</span>
+                            <span className={`font-mono ${classes.textSub}`}>@{user.username}</span>
                           )}
                           {user.email && <span>• {user.email}</span>}
                         </div>
                       </div>
 
                       {/* Badge de Rol */}
-                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 whitespace-nowrap">
+                      <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${classes.badge}`}>
                         {primaryRole?.name || 'Sin Rol'}
                       </span>
                     </div>
 
                     {/* PIN y Autorizaciones Rápidas */}
-                    <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2">
+                    <div className={`mt-4 pt-3 border-t space-y-2 ${classes.divider}`}>
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400">Código de Acceso (PIN):</span>
+                        <span className={classes.textMuted}>Código de Acceso (PIN):</span>
                         {user.hasPin ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+                          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
                             <CheckCircle className="w-3.5 h-3.5" />
                             PIN Configurado
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-slate-500">
+                          <span className={`inline-flex items-center gap-1 ${classes.textSub}`}>
                             <XCircle className="w-3.5 h-3.5" />
                             Sin PIN
                           </span>
@@ -702,19 +704,19 @@ export default function UsersAndRolesPage() {
                       {/* Permisos Críticos Destacados */}
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {primaryRole?.canAuthorizeDiscounts && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 flex items-center gap-1">
                             <BadgePercent className="w-3 h-3" />
                             Descuentos
                           </span>
                         )}
                         {primaryRole?.canAuthorizeCourtesies && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
                             <Gift className="w-3 h-3" />
                             Cortesías ($0)
                           </span>
                         )}
                         {primaryRole?.canAuthorizeCancellations && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 flex items-center gap-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20 flex items-center gap-1">
                             <X className="w-3 h-3" />
                             Cancelaciones
                           </span>
@@ -722,21 +724,21 @@ export default function UsersAndRolesPage() {
                       </div>
 
                       {/* Sucursales Asignadas */}
-                      <div className="text-xs text-slate-400 pt-1">
-                        <span className="text-slate-500">Sucursales: </span>
+                      <div className={`text-xs pt-1 ${classes.textMuted}`}>
+                        <span className={classes.textSub}>Sucursales: </span>
                         {user.branches.map((b) => b.name).join(', ') || 'Sin sucursal'}
                       </div>
                     </div>
 
                     {/* Acciones */}
-                    <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                    <div className={`mt-4 pt-3 border-t flex items-center justify-between gap-2 ${classes.divider}`}>
                       <button
                         type="button"
                         onClick={() => openPinModal(user)}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                        className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
                         title="Asignar o cambiar PIN de 4 dígitos"
                       >
-                        <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                        <KeyRound className="w-3.5 h-3.5 text-amber-500" />
                         <span>PIN</span>
                       </button>
 
@@ -744,7 +746,7 @@ export default function UsersAndRolesPage() {
                         <button
                           type="button"
                           onClick={() => openUserModal(user)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${classes.buttonGhost}`}
                           title="Editar colaborador"
                         >
                           <Pencil className="w-4 h-4" />
@@ -752,10 +754,10 @@ export default function UsersAndRolesPage() {
                         <button
                           type="button"
                           onClick={() => toggleUserStatus(user)}
-                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${classes.buttonGhost} ${
                             user.active
-                              ? 'text-slate-400 hover:text-rose-400 hover:bg-rose-500/10'
-                              : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                              ? 'text-rose-500'
+                              : 'text-emerald-500'
                           }`}
                           title={user.active ? 'Desactivar colaborador' : 'Activar colaborador'}
                         >
@@ -775,14 +777,15 @@ export default function UsersAndRolesPage() {
       {activeTab === 'roles' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-xs sm:text-sm text-slate-400">
+            <p className={`text-xs sm:text-sm ${classes.textMuted}`}>
               Configura los permisos de cada puesto. Puedes usar los roles estándar o crear roles a la medida de tu cafetería.
             </p>
 
             <button
               type="button"
               onClick={() => openRoleModal()}
-              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-violet-600/20 transition-all cursor-pointer whitespace-nowrap"
+              style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+              className="px-4 py-2 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-lg transition-all cursor-pointer whitespace-nowrap hover:opacity-95"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo Rol</span>
@@ -793,30 +796,30 @@ export default function UsersAndRolesPage() {
             {roles.map((role) => (
               <div
                 key={role.id}
-                className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800 space-y-4"
+                className={`p-5 rounded-3xl border space-y-4 ${classes.card}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-white">{role.name}</h3>
+                      <h3 className={`text-base font-bold ${classes.textMain}`}>{role.name}</h3>
                       {role.isSystem ? (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded border flex items-center gap-1 ${classes.badge}`}>
                           <Lock className="w-3 h-3" />
                           Plantilla Base
                         </span>
                       ) : role.isCustomizedSystemRole ? (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 flex items-center gap-1">
                           <Sliders className="w-3 h-3" />
                           Personalizado
                         </span>
                       ) : (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20">
                           Rol Creado
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Código: <span className="font-mono text-slate-300">{role.code}</span> •{' '}
+                    <p className={`text-xs mt-0.5 ${classes.textMuted}`}>
+                      Código: <span className={`font-mono ${classes.textSub}`}>{role.code}</span> •{' '}
                       {role.userCount} colaborador(es) asignado(s)
                     </p>
                   </div>
@@ -825,7 +828,7 @@ export default function UsersAndRolesPage() {
                     <button
                       type="button"
                       onClick={() => openRoleModal(role)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${classes.buttonGhost}`}
                       title={role.isSystem ? 'Personalizar permisos de este puesto' : 'Editar permisos del rol'}
                     >
                       <Pencil className="w-4 h-4" />
@@ -834,7 +837,7 @@ export default function UsersAndRolesPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteRole(role)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 transition-colors cursor-pointer"
                         title={role.isCustomizedSystemRole ? 'Restablecer a permisos estándar de fábrica' : 'Eliminar rol'}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -844,113 +847,113 @@ export default function UsersAndRolesPage() {
                 </div>
 
                 {/* Desglose de Permisos */}
-                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-800">
+                <div className={`grid grid-cols-2 gap-2 text-xs pt-2 border-t ${classes.divider}`}>
                   <div className="flex items-center gap-2">
                     {role.permissions.canAccessPOS ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canAccessPOS ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canAccessPOS ? classes.textMain : classes.textSub}>
                       Terminal POS (Cobro)
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canAuthorizeDiscounts ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canAuthorizeDiscounts ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canAuthorizeDiscounts ? classes.textMain : classes.textSub}>
                       Autorizar Descuentos
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canAuthorizeCourtesies ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canAuthorizeCourtesies ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canAuthorizeCourtesies ? classes.textMain : classes.textSub}>
                       Cuentas sin Cobro ($0)
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canAuthorizeCancellations ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canAuthorizeCancellations ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canAuthorizeCancellations ? classes.textMain : classes.textSub}>
                       Cancelaciones
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canManageCashRegisters ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canManageCashRegisters ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canManageCashRegisters ? classes.textMain : classes.textSub}>
                       Cajas y Arqueos
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canTransferTables ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canTransferTables ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canTransferTables ? classes.textMain : classes.textSub}>
                       Traspaso de Mesas
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canManageCatalog ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canManageCatalog ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canManageCatalog ? classes.textMain : classes.textSub}>
                       Catálogo y Recetas
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canManageInventory ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canManageInventory ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canManageInventory ? classes.textMain : classes.textSub}>
                       Inventario y Stock
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canViewReports ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canViewReports ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canViewReports ? classes.textMain : classes.textSub}>
                       Reportes de Venta
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {role.permissions.canManageUsers ? (
-                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-slate-600 shrink-0" />
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
                     )}
-                    <span className={role.permissions.canManageUsers ? 'text-slate-200' : 'text-slate-500'}>
+                    <span className={role.permissions.canManageUsers ? classes.textMain : classes.textSub}>
                       Administrar Personal
                     </span>
                   </div>
@@ -964,16 +967,16 @@ export default function UsersAndRolesPage() {
       {/* MODAL: REGISTRAR / EDITAR COLABORADOR */}
       {userModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-violet-400" />
+          <div className={`border rounded-3xl w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+              <h2 className={`text-lg font-bold flex items-center gap-2 ${classes.textMain}`}>
+                <Users className="w-5 h-5" style={{ color: buttonColor }} />
                 {editingUser ? 'Editar Colaborador' : 'Nuevo Colaborador'}
               </h2>
               <button
                 type="button"
                 onClick={() => setUserModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className={`p-1 cursor-pointer hover:opacity-75 ${classes.textSub}`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -981,7 +984,7 @@ export default function UsersAndRolesPage() {
 
             <form onSubmit={handleSaveUser} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                   Nombre Completo *
                 </label>
                 <input
@@ -990,13 +993,13 @@ export default function UsersAndRolesPage() {
                   placeholder="Ej: Ana Lucía Martínez"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-violet-500"
+                  className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none ${classes.input}`}
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                     Usuario (Login Rápido)
                   </label>
                   <input
@@ -1004,12 +1007,12 @@ export default function UsersAndRolesPage() {
                     placeholder="Ej: ana, mesero1"
                     value={userUsername}
                     onChange={(e) => setUserUsername(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                     Correo Electrónico
                   </label>
                   <input
@@ -1017,14 +1020,14 @@ export default function UsersAndRolesPage() {
                     placeholder="ana@cafeteria.com"
                     value={userEmail}
                     onChange={(e) => setUserEmail(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                     {editingUser ? 'Nueva Contraseña (opcional)' : 'Contraseña de Acceso *'}
                   </label>
                   <input
@@ -1032,12 +1035,12 @@ export default function UsersAndRolesPage() {
                     placeholder={editingUser ? 'Dejar en blanco para conservar' : 'Mínimo 6 caracteres'}
                     value={userPassword}
                     onChange={(e) => setUserPassword(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                     Código PIN (4 dígitos)
                   </label>
                   <input
@@ -1046,20 +1049,20 @@ export default function UsersAndRolesPage() {
                     placeholder="Ej: 1234"
                     value={userPin}
                     onChange={(e) => setUserPin(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white font-mono focus:outline-none focus:border-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border text-sm font-mono focus:outline-none ${classes.input}`}
                   />
-                  <p className="text-[10px] text-slate-500 mt-0.5">Para cambio rápido en POS</p>
+                  <p className={`text-[10px] mt-0.5 ${classes.textSub}`}>Para cambio rápido en POS</p>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                   Rol Asignado *
                 </label>
                 <select
                   value={userRoleId}
                   onChange={(e) => setUserRoleId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-violet-500"
+                  className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none ${classes.input}`}
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -1071,16 +1074,16 @@ export default function UsersAndRolesPage() {
 
               {/* Sucursales */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">
+                <label className={`block text-xs font-semibold mb-2 ${classes.textMuted}`}>
                   Sucursales Autorizadas *
                 </label>
-                <div className="space-y-2 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                <div className={`space-y-2 p-3 rounded-2xl border ${classes.subCard}`}>
                   {branches.map((b) => {
                     const isChecked = userBranchIds.includes(b.id)
                     return (
                       <label
                         key={b.id}
-                        className="flex items-center justify-between text-xs text-slate-300 cursor-pointer p-1.5 rounded-lg hover:bg-slate-900"
+                        className={`flex items-center justify-between text-xs cursor-pointer p-1.5 rounded-lg transition-colors ${classes.textMain} hover:bg-black/5 dark:hover:bg-white/5`}
                       >
                         <div className="flex items-center gap-2">
                           <input
@@ -1096,7 +1099,7 @@ export default function UsersAndRolesPage() {
                             className="w-4 h-4 rounded text-violet-600 focus:ring-0"
                           />
                           <span>{b.name}</span>
-                          <span className="font-mono text-[10px] text-slate-500">({b.code})</span>
+                          <span className={`font-mono text-[10px] ${classes.textSub}`}>({b.code})</span>
                         </div>
 
                         {isChecked && (
@@ -1106,10 +1109,11 @@ export default function UsersAndRolesPage() {
                               ev.preventDefault()
                               setUserDefaultBranchId(b.id)
                             }}
+                            style={userDefaultBranchId === b.id ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
                             className={`text-[10px] px-2 py-0.5 rounded transition-all cursor-pointer ${
                               userDefaultBranchId === b.id
-                                ? 'bg-violet-600 text-white font-semibold'
-                                : 'bg-slate-800 text-slate-400 hover:text-white'
+                                ? 'font-bold'
+                                : `${classes.buttonGhost} ${classes.textSub}`
                             }`}
                           >
                             {userDefaultBranchId === b.id ? 'Por defecto' : 'Hacer principal'}
@@ -1121,18 +1125,19 @@ export default function UsersAndRolesPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className={`flex items-center justify-end gap-3 pt-3 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setUserModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold"
+                  className={`px-4 py-2 rounded-xl border text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingUser}
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-violet-600/20"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
                 >
                   {savingUser && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingUser ? 'Actualizar' : 'Registrar Colaborador'}</span>
@@ -1146,16 +1151,16 @@ export default function UsersAndRolesPage() {
       {/* MODAL: ASIGNAR / CAMBIAR PIN RÁPIDO */}
       {pinModalOpen && pinTargetUser && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-amber-400" />
+          <div className={`border rounded-3xl w-full max-w-sm p-6 space-y-5 shadow-2xl ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+              <h2 className={`text-base font-bold flex items-center gap-2 ${classes.textMain}`}>
+                <KeyRound className="w-5 h-5 text-amber-500" />
                 Código PIN de Acceso
               </h2>
               <button
                 type="button"
                 onClick={() => setPinModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className={`p-1 cursor-pointer hover:opacity-75 ${classes.textSub}`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1163,9 +1168,9 @@ export default function UsersAndRolesPage() {
 
             <form onSubmit={handleSavePin} className="space-y-4">
               <div className="text-center space-y-1">
-                <p className="text-xs text-slate-400">Colaborador:</p>
-                <p className="text-sm font-bold text-white">{pinTargetUser.name}</p>
-                <p className="text-xs text-slate-500">
+                <p className={`text-xs ${classes.textSub}`}>Colaborador:</p>
+                <p className={`text-sm font-bold ${classes.textMain}`}>{pinTargetUser.name}</p>
+                <p className={`text-xs ${classes.textMuted}`}>
                   Introduce 4 dígitos numéricos para login y autorizaciones rápidas en caja.
                 </p>
               </div>
@@ -1179,11 +1184,11 @@ export default function UsersAndRolesPage() {
                   placeholder="••••"
                   value={quickPin}
                   onChange={(e) => setQuickPin(e.target.value.replace(/\D/g, ''))}
-                  className="w-full text-center text-2xl tracking-[0.5em] font-mono py-3 rounded-2xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-400"
+                  className={`w-full text-center text-2xl tracking-[0.5em] font-mono py-3 rounded-2xl border focus:outline-none ${classes.input}`}
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-3 pt-2">
+              <div className={`flex items-center justify-between gap-3 pt-2 border-t ${classes.divider}`}>
                 {pinTargetUser.hasPin && (
                   <button
                     type="button"
@@ -1191,7 +1196,7 @@ export default function UsersAndRolesPage() {
                       setQuickPin('')
                       handleSavePin({ preventDefault: () => {} } as React.FormEvent)
                     }}
-                    className="text-rose-400 hover:text-rose-300 text-xs font-semibold"
+                    className="text-rose-500 hover:text-rose-600 text-xs font-semibold cursor-pointer"
                   >
                     Remover PIN
                   </button>
@@ -1201,14 +1206,15 @@ export default function UsersAndRolesPage() {
                   <button
                     type="button"
                     onClick={() => setPinModalOpen(false)}
-                    className="px-3 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold"
+                    className={`px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={savingPin}
-                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
+                    style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                    className="px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-lg transition-all cursor-pointer hover:opacity-95"
                   >
                     {savingPin && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     <span>Guardar PIN</span>
@@ -1223,10 +1229,10 @@ export default function UsersAndRolesPage() {
       {/* MODAL: CREAR / EDITAR ROL PERSONALIZADO */}
       {roleModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl p-6 space-y-5 my-8 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Shield className="w-5 h-5 text-violet-400" />
+          <div className={`border rounded-3xl w-full max-w-xl p-6 space-y-5 my-8 shadow-2xl ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+              <h2 className={`text-lg font-bold flex items-center gap-2 ${classes.textMain}`}>
+                <Shield className="w-5 h-5" style={{ color: buttonColor }} />
                 {editingRole
                   ? editingRole.isSystem
                     ? `Personalizar Permisos: ${editingRole.name}`
@@ -1236,7 +1242,7 @@ export default function UsersAndRolesPage() {
               <button
                 type="button"
                 onClick={() => setRoleModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className={`p-1 cursor-pointer hover:opacity-75 ${classes.textSub}`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1244,8 +1250,8 @@ export default function UsersAndRolesPage() {
 
             <form onSubmit={handleSaveRole} className="space-y-5">
               {editingRole?.isSystem && (
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 shrink-0 text-amber-400" />
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 shrink-0 text-amber-500" />
                   <span>
                     Estás personalizando una plantilla base del sistema. Se creará una versión exclusiva con estos permisos para los colaboradores de tu negocio.
                   </span>
@@ -1253,7 +1259,7 @@ export default function UsersAndRolesPage() {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                     Nombre del Puesto *
                   </label>
                   <input
@@ -1262,12 +1268,12 @@ export default function UsersAndRolesPage() {
                     placeholder="Ej: Supervisor de Turno"
                     value={roleName}
                     onChange={(e) => setRoleName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className={`block text-xs font-semibold mb-1 ${classes.textMuted}`}>
                     Código Identificador
                   </label>
                   <input
@@ -1276,18 +1282,18 @@ export default function UsersAndRolesPage() {
                     value={roleCode}
                     disabled={Boolean(editingRole)}
                     onChange={(e) => setRoleCode(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white font-mono focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                    className={`w-full px-3 py-2 rounded-xl border text-sm font-mono focus:outline-none disabled:opacity-50 ${classes.input}`}
                   />
                 </div>
               </div>
 
               {/* SECCIÓN 1: AUTORIZACIONES CRÍTICAS DE CAJA */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                <h4 className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
                   Autorizaciones Críticas de Caja y Cobro
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800">
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-2xl border ${classes.subCard}`}>
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canAuthorizeDiscounts}
@@ -1302,7 +1308,7 @@ export default function UsersAndRolesPage() {
                     <span>Autorizar Descuentos (% o $)</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canAuthorizeCourtesies}
@@ -1317,7 +1323,7 @@ export default function UsersAndRolesPage() {
                     <span>Autorizar Cortesías / Sin Cobro ($0)</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canAuthorizeCancellations}
@@ -1332,7 +1338,7 @@ export default function UsersAndRolesPage() {
                     <span>Autorizar Cancelaciones</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canTransferTables}
@@ -1351,23 +1357,24 @@ export default function UsersAndRolesPage() {
 
               {/* SECCIÓN 2: OPERACIONES DIARIAS */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-violet-400 uppercase tracking-wider">
+                <h4 className="text-xs font-bold uppercase tracking-wider" style={{ color: buttonColor }}>
                   Operaciones Diarias
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800">
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-2xl border ${classes.subCard}`}>
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canAccessPOS}
                       onChange={(e) =>
                         setRolePermissions({ ...rolePermissions, canAccessPOS: e.target.checked })
                       }
-                      className="w-4 h-4 rounded text-violet-600 focus:ring-0"
+                      className="w-4 h-4 rounded focus:ring-0"
+                      style={{ accentColor: buttonColor }}
                     />
                     <span>Acceso al Terminal POS</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canManageCashRegisters}
@@ -1377,7 +1384,8 @@ export default function UsersAndRolesPage() {
                           canManageCashRegisters: e.target.checked,
                         })
                       }
-                      className="w-4 h-4 rounded text-violet-600 focus:ring-0"
+                      className="w-4 h-4 rounded focus:ring-0"
+                      style={{ accentColor: buttonColor }}
                     />
                     <span>Cajas, Arqueos y Retiros</span>
                   </label>
@@ -1386,11 +1394,11 @@ export default function UsersAndRolesPage() {
 
               {/* SECCIÓN 3: ADMINISTRACIÓN Y CATÁLOGO */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${classes.textSub}`}>
                   Catálogo, Inventarios y Reportes
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950 p-3 rounded-2xl border border-slate-800">
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-2xl border ${classes.subCard}`}>
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canManageCatalog}
@@ -1400,12 +1408,13 @@ export default function UsersAndRolesPage() {
                           canManageCatalog: e.target.checked,
                         })
                       }
-                      className="w-4 h-4 rounded text-violet-600 focus:ring-0"
+                      className="w-4 h-4 rounded focus:ring-0"
+                      style={{ accentColor: buttonColor }}
                     />
                     <span>Productos y Recetario</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canManageInventory}
@@ -1415,12 +1424,13 @@ export default function UsersAndRolesPage() {
                           canManageInventory: e.target.checked,
                         })
                       }
-                      className="w-4 h-4 rounded text-violet-600 focus:ring-0"
+                      className="w-4 h-4 rounded focus:ring-0"
+                      style={{ accentColor: buttonColor }}
                     />
                     <span>Almacenes e Inventarios</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canViewReports}
@@ -1430,12 +1440,13 @@ export default function UsersAndRolesPage() {
                           canViewReports: e.target.checked,
                         })
                       }
-                      className="w-4 h-4 rounded text-violet-600 focus:ring-0"
+                      className="w-4 h-4 rounded focus:ring-0"
+                      style={{ accentColor: buttonColor }}
                     />
                     <span>Reportes de Ventas</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer p-1">
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
                     <input
                       type="checkbox"
                       checked={rolePermissions.canManageUsers}
@@ -1445,25 +1456,27 @@ export default function UsersAndRolesPage() {
                           canManageUsers: e.target.checked,
                         })
                       }
-                      className="w-4 h-4 rounded text-violet-600 focus:ring-0"
+                      className="w-4 h-4 rounded focus:ring-0"
+                      style={{ accentColor: buttonColor }}
                     />
                     <span>Administrar Personal</span>
                   </label>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className={`flex items-center justify-end gap-3 pt-3 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setRoleModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold"
+                  className={`px-4 py-2 rounded-xl border text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingRole}
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-violet-600/20"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
                 >
                   {savingRole && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingRole ? 'Guardar Cambios' : 'Crear Rol'}</span>

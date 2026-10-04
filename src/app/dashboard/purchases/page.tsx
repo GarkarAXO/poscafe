@@ -36,6 +36,7 @@ import {
 import { notify } from '@/lib/notify'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
 import { generateSkuFromName } from '@/lib/sku'
+import { useDashboardTheme } from '@/context/dashboard-theme-context'
 
 interface Supplier {
   id: string
@@ -102,6 +103,16 @@ interface PurchaseFormItem {
 }
 
 export default function PurchasesPage() {
+  const {
+    isLight,
+    buttonColor,
+    primaryColor,
+    secondaryColor,
+    contrastTextButton,
+    contrastTextPrimary,
+    classes,
+  } = useDashboardTheme()
+
   const [activeTab, setActiveTab] = useState<'purchases' | 'suppliers'>('purchases')
   const [loading, setLoading] = useState(true)
   const [purchases, setPurchases] = useState<Purchase[]>([])
@@ -604,23 +615,23 @@ export default function PurchasesPage() {
 
   if (loading) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[60vh] text-slate-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+      <div className={`p-8 flex flex-col items-center justify-center min-h-[60vh] gap-3 ${classes.textMuted}`}>
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: buttonColor }} />
         <p className="text-sm">Cargando compras, entradas de almacén y proveedores...</p>
       </div>
     )
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className={`p-6 max-w-7xl mx-auto space-y-6 ${classes.textMain}`}>
       {/* Cabecera Principal */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
-            <Truck className="w-6 h-6 text-amber-400" />
+          <h1 className={`text-2xl font-bold flex items-center gap-2.5 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+            <Truck className="w-6 h-6" style={{ color: buttonColor }} />
             Compras
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className={`text-xs mt-1 ${classes.textMuted}`}>
             Carga de tickets y facturas de compra, abastecimiento directo al inventario y directorio de proveedores
           </p>
         </div>
@@ -633,7 +644,7 @@ export default function PurchasesPage() {
               <button
                 type="button"
                 onClick={() => handleOpenNewPurchase('INITIAL_STOCK')}
-                className="px-3.5 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer border border-slate-700"
+                className={`px-3.5 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer border ${classes.buttonGhost}`}
                 title="Cargar saldo inicial de materias primas para arrancar operaciones"
               >
                 <Boxes className="w-4 h-4 text-violet-400" />
@@ -644,10 +655,14 @@ export default function PurchasesPage() {
               <button
                 type="button"
                 onClick={() => handleOpenNewPurchase('EMERGENCY_STORE')}
-                className="px-3.5 py-2.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center gap-2 border border-amber-500/30 transition-all cursor-pointer"
+                className={`px-3.5 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 border transition-all cursor-pointer ${
+                  isLight
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
+                }`}
                 title="Compra de emergencia en tiendita o minisúper para sacar pedidos"
               >
-                <ShoppingBag className="w-4 h-4 text-amber-400" />
+                <ShoppingBag className="w-4 h-4 text-amber-500" />
                 <span>Compra Tiendita / Caja Chica</span>
               </button>
 
@@ -655,7 +670,8 @@ export default function PurchasesPage() {
               <button
                 type="button"
                 onClick={() => handleOpenNewPurchase('SUPPLIER')}
-                className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                className="px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg shadow-black/10 transition-all cursor-pointer hover:opacity-95"
               >
                 <Plus className="w-4 h-4" />
                 <span>Compra a Proveedor</span>
@@ -665,7 +681,8 @@ export default function PurchasesPage() {
             <button
               type="button"
               onClick={handleOpenNewSupplier}
-              className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+              style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+              className="px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg shadow-black/10 transition-all cursor-pointer hover:opacity-95"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo Proveedor</span>
@@ -676,52 +693,60 @@ export default function PurchasesPage() {
 
       {/* Tarjetas de Métricas Resumen */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-between shadow-sm">
+        <div className={`p-4 rounded-3xl border flex items-center justify-between shadow-sm ${classes.card}`}>
           <div>
-            <span className="text-xs text-slate-400 block font-medium">Inversión en Insumos</span>
-            <strong className="text-xl font-black text-amber-400 font-mono">
+            <span className={`text-xs block font-medium ${classes.textMuted}`}>Inversión en Insumos</span>
+            <strong className={`text-xl font-black font-mono ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
               ${totalPurchasesMonth.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
             </strong>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold">
+          <div
+            className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
+            style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+          >
             <DollarSign className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-between shadow-sm">
+        <div className={`p-4 rounded-3xl border flex items-center justify-between shadow-sm ${classes.card}`}>
           <div>
-            <span className="text-xs text-slate-400 block font-medium">Entradas Completadas</span>
-            <strong className="text-xl font-bold text-white font-mono">
+            <span className={`text-xs block font-medium ${classes.textMuted}`}>Entradas Completadas</span>
+            <strong className={`text-xl font-bold font-mono ${classes.textMain}`}>
               {completedPurchasesCount} entradas
             </strong>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold ${
+            isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/10 text-emerald-400'
+          }`}>
             <CheckCircle className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-between shadow-sm">
+        <div className={`p-4 rounded-3xl border flex items-center justify-between shadow-sm ${classes.card}`}>
           <div>
-            <span className="text-xs text-slate-400 block font-medium">Proveedores Registrados</span>
-            <strong className="text-xl font-bold text-white font-mono">
+            <span className={`text-xs block font-medium ${classes.textMuted}`}>Proveedores Registrados</span>
+            <strong className={`text-xl font-bold font-mono ${classes.textMain}`}>
               {activeSuppliersCount} activos
             </strong>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold">
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold ${
+            isLight ? 'bg-blue-100 text-blue-800' : 'bg-blue-500/10 text-blue-400'
+          }`}>
             <Building2 className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* Tabs de Navegación */}
-      <div className="flex gap-4 border-b border-slate-800 text-xs">
+      <div className={`flex gap-4 border-b text-xs ${classes.divider}`}>
         <button
           type="button"
           onClick={() => setActiveTab('purchases')}
+          style={activeTab === 'purchases' ? { borderColor: buttonColor, color: buttonColor } : undefined}
           className={`pb-3 font-semibold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'purchases'
-              ? 'border-b-2 border-amber-500 text-amber-400'
-              : 'text-slate-400 hover:text-white'
+              ? 'border-b-2'
+              : `${classes.textMuted} hover:${classes.textMain}`
           }`}
         >
           <Receipt className="w-4 h-4" />
@@ -731,10 +756,11 @@ export default function PurchasesPage() {
         <button
           type="button"
           onClick={() => setActiveTab('suppliers')}
+          style={activeTab === 'suppliers' ? { borderColor: buttonColor, color: buttonColor } : undefined}
           className={`pb-3 font-semibold transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'suppliers'
-              ? 'border-b-2 border-amber-500 text-amber-400'
-              : 'text-slate-400 hover:text-white'
+              ? 'border-b-2'
+              : `${classes.textMuted} hover:${classes.textMain}`
           }`}
         >
           <Building2 className="w-4 h-4" />
@@ -746,15 +772,15 @@ export default function PurchasesPage() {
       {activeTab === 'purchases' && (
         <div className="space-y-4">
           {/* Barra de Filtros */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+          <div className={`flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl border ${classes.card}`}>
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className={`w-4 h-4 absolute left-3 top-2.5 ${classes.textMuted}`} />
               <input
                 type="text"
                 placeholder="Buscar por folio, proveedor o insumo..."
                 value={searchPurchase}
                 onChange={(e) => setSearchPurchase(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className={`w-full pl-9 pr-4 py-1.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
               />
             </div>
 
@@ -763,7 +789,7 @@ export default function PurchasesPage() {
               <select
                 value={selectedEntryTypeFilter}
                 onChange={(e) => setSelectedEntryTypeFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-amber-500"
+                className={`px-3 py-1.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
               >
                 <option value="ALL">Todos los tipos de entrada</option>
                 <option value="SUPPLIER">🏢 Compra a Proveedor</option>
@@ -775,7 +801,7 @@ export default function PurchasesPage() {
               <select
                 value={selectedSupplierFilter}
                 onChange={(e) => setSelectedSupplierFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-amber-500"
+                className={`px-3 py-1.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
               >
                 <option value="ALL">Todos los proveedores</option>
                 {suppliers.map((s) => (
@@ -788,17 +814,17 @@ export default function PurchasesPage() {
           </div>
 
           {/* Tabla de Compras */}
-          <div className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-lg">
+          <div className={`rounded-3xl border overflow-hidden shadow-sm ${classes.card}`}>
             {filteredPurchases.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 text-xs space-y-2">
+              <div className={`p-12 text-center text-xs space-y-2 ${classes.textMuted}`}>
                 <Truck className="w-10 h-10 opacity-40 mx-auto" />
-                <p className="font-semibold text-slate-400">No se encontraron entradas registradas</p>
+                <p className={`font-semibold ${classes.textMain}`}>No se encontraron entradas registradas</p>
                 <p>Usa los botones superiores para registrar compras a proveedores, tiendita o cargar tu stock inicial.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800 uppercase font-semibold">
+                <table className="w-full text-left text-xs">
+                  <thead className={`border-b uppercase font-semibold text-[10px] tracking-wider ${classes.tableHeader}`}>
                     <tr>
                       <th className="py-3 px-4">Fecha</th>
                       <th className="py-3 px-4">Tipo de Entrada</th>
@@ -810,26 +836,38 @@ export default function PurchasesPage() {
                       <th className="py-3 px-4 text-right">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60">
+                  <tbody className={`divide-y ${classes.divider}`}>
                     {filteredPurchases.map((purchase) => {
                       const isCancelled = purchase.status === 'CANCELLED'
 
                       let typeBadge = (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center gap-1 w-fit">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                          isLight
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                        }`}>
                           <Building2 className="w-3 h-3" />
                           <span>Proveedor</span>
                         </span>
                       )
                       if (purchase.entryType === 'EMERGENCY_STORE') {
                         typeBadge = (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1 w-fit">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                            isLight
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                          }`}>
                             <ShoppingBag className="w-3 h-3" />
                             <span>Tiendita / Urgencia</span>
                           </span>
                         )
                       } else if (purchase.entryType === 'INITIAL_STOCK') {
                         typeBadge = (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/10 text-violet-400 border border-violet-500/20 flex items-center gap-1 w-fit">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                            isLight
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+                          }`}>
                             <Boxes className="w-3 h-3" />
                             <span>Stock Inicial</span>
                           </span>
@@ -839,11 +877,11 @@ export default function PurchasesPage() {
                       return (
                         <tr
                           key={purchase.id}
-                          className={`hover:bg-slate-800/40 transition-colors ${
+                          className={`transition-colors ${classes.tableRow} ${
                             isCancelled ? 'opacity-50' : ''
                           }`}
                         >
-                          <td className="py-3.5 px-4 font-mono text-slate-400">
+                          <td className={`py-3.5 px-4 font-mono ${classes.textMuted}`}>
                             {new Date(purchase.purchasedAt).toLocaleDateString('es-MX', {
                               year: 'numeric',
                               month: 'short',
@@ -855,20 +893,20 @@ export default function PurchasesPage() {
                             {typeBadge}
                           </td>
 
-                          <td className="py-3.5 px-4 font-bold text-white">
+                          <td className={`py-3.5 px-4 font-bold ${classes.textMain}`}>
                             {purchase.invoiceNumber}
                           </td>
 
                           <td className="py-3.5 px-4">
                             {purchase.supplier ? (
                               <div>
-                                <span className="font-semibold text-white block">{purchase.supplier.name}</span>
+                                <span className={`font-semibold block ${classes.textMain}`}>{purchase.supplier.name}</span>
                                 {purchase.supplier.contact && (
-                                  <span className="text-[10px] text-slate-500">{purchase.supplier.contact}</span>
+                                  <span className={`text-[10px] ${classes.textMuted}`}>{purchase.supplier.contact}</span>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-slate-500 italic">
+                              <span className={`italic ${classes.textMuted}`}>
                                 {purchase.entryType === 'INITIAL_STOCK'
                                   ? 'Inventario de Apertura'
                                   : 'Compra de Mostrador / Sin proveedor'}
@@ -879,29 +917,37 @@ export default function PurchasesPage() {
                           <td className="py-3.5 px-4">
                             <div className="flex flex-col gap-0.5 max-w-xs">
                               {purchase.items.slice(0, 2).map((it) => (
-                                <span key={it.id} className="text-[11px] text-slate-300 truncate">
+                                <span key={it.id} className={`text-[11px] truncate ${classes.textMuted}`}>
                                   • {it.itemName} ({it.quantityBought} {it.presentationName || formatUnitName(it.baseUnit)})
                                 </span>
                               ))}
                               {purchase.items.length > 2 && (
-                                <span className="text-[10px] text-amber-400/80 font-semibold">
+                                <span className={`text-[10px] font-semibold ${isLight ? 'text-amber-800' : 'text-amber-400/80'}`}>
                                   +{purchase.items.length - 2} insumos más...
                                 </span>
                               )}
                             </div>
                           </td>
 
-                          <td className="py-3.5 px-4 font-mono font-bold text-amber-400">
+                          <td className={`py-3.5 px-4 font-mono font-bold ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
                             ${purchase.total.toFixed(2)} MXN
                           </td>
 
                           <td className="py-3.5 px-4">
                             {isCancelled ? (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                isLight
+                                  ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                              }`}>
                                 Cancelada / Revertida
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                isLight
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              }`}>
                                 Aplicada en Almacén
                               </span>
                             )}
@@ -916,7 +962,7 @@ export default function PurchasesPage() {
                                   setSelectedPurchase(purchase)
                                   setShowDetailModal(true)
                                 }}
-                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
+                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost}`}
                                 title="Ver desglose completo de insumos"
                               >
                                 <Eye className="w-3.5 h-3.5" />
@@ -927,10 +973,10 @@ export default function PurchasesPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenEditPurchase(purchase)}
-                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 transition-all cursor-pointer"
+                                  className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost}`}
                                   title="Editar folio, notas o proveedor"
                                 >
-                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <Edit2 className="w-3.5 h-3.5" style={{ color: buttonColor }} />
                                 </button>
                               )}
 
@@ -939,7 +985,11 @@ export default function PurchasesPage() {
                                 <button
                                   type="button"
                                   onClick={() => handleCancelPurchase(purchase)}
-                                  className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all cursor-pointer"
+                                  className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                    isLight
+                                      ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                      : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-rose-500/20'
+                                  }`}
                                   title="Cancelar y revertir existencias del almacén"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -961,82 +1011,82 @@ export default function PurchasesPage() {
       {/* PESTAÑA 2: DIRECTORIO DE PROVEEDORES */}
       {activeTab === 'suppliers' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+          <div className={`flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl border ${classes.card}`}>
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className={`w-4 h-4 absolute left-3 top-2.5 ${classes.textMuted}`} />
               <input
                 type="text"
                 placeholder="Buscar por nombre, contacto, teléfono o RFC..."
                 value={searchSupplier}
                 onChange={(e) => setSearchSupplier(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className={`w-full pl-9 pr-4 py-1.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredSuppliers.length === 0 ? (
-              <div className="col-span-full p-12 text-center text-slate-500 text-xs space-y-2">
+              <div className={`col-span-full p-12 text-center text-xs space-y-2 ${classes.textMuted}`}>
                 <Building2 className="w-10 h-10 opacity-40 mx-auto" />
-                <p className="font-semibold text-slate-400">No se encontraron proveedores</p>
+                <p className={`font-semibold ${classes.textMain}`}>No se encontraron proveedores</p>
                 <p>Haz clic en "Nuevo Proveedor" para dar de alta distribuidores de café e insumos.</p>
               </div>
             ) : (
               filteredSuppliers.map((supplier) => (
                 <div
                   key={supplier.id}
-                  className={`p-4 rounded-3xl bg-slate-900 border transition-all flex flex-col justify-between space-y-3 ${
-                    supplier.active
-                      ? 'border-slate-800 hover:border-amber-500/50 shadow-sm'
-                      : 'border-slate-800/40 opacity-60'
+                  className={`p-4 rounded-3xl border transition-all flex flex-col justify-between space-y-3 ${classes.card} ${
+                    supplier.active ? 'shadow-sm' : 'opacity-60'
                   }`}
                 >
                   <div className="space-y-2">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-bold text-base text-white">{supplier.name}</h3>
+                        <h3 className={`font-bold text-base ${classes.textMain}`}>{supplier.name}</h3>
                         {supplier.taxId && (
-                          <span className="text-[10px] text-amber-400/90 font-mono">
+                          <span className={`text-[10px] font-mono ${isLight ? 'text-amber-800' : 'text-amber-400/90'}`}>
                             RFC: {supplier.taxId}
                           </span>
                         )}
                       </div>
 
                       <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
                           supplier.active
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-slate-800 text-slate-500'
+                            ? isLight
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            : `${classes.badge}`
                         }`}
                       >
                         {supplier.active ? 'Activo' : 'Inactivo'}
                       </span>
                     </div>
 
-                    <div className="text-xs text-slate-400 space-y-1 pt-1">
+                    <div className={`text-xs space-y-1 pt-1 ${classes.textMuted}`}>
                       {supplier.contact && (
                         <p className="flex items-center gap-2">
-                          <User className="w-3.5 h-3.5 text-slate-500" />
+                          <User className="w-3.5 h-3.5 opacity-60" />
                           <span>{supplier.contact}</span>
                         </p>
                       )}
                       {supplier.phone && (
                         <p className="flex items-center gap-2">
-                          <Phone className="w-3.5 h-3.5 text-slate-500" />
+                          <Phone className="w-3.5 h-3.5 opacity-60" />
                           <span>{supplier.phone}</span>
                         </p>
                       )}
                       {supplier.email && (
                         <p className="flex items-center gap-2 truncate">
-                          <Mail className="w-3.5 h-3.5 text-slate-500" />
+                          <Mail className="w-3.5 h-3.5 opacity-60" />
                           <span className="truncate">{supplier.email}</span>
                         </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
-                    <span className="text-[11px] text-slate-500">
+                  <div className={`flex items-center justify-between pt-2 border-t text-xs ${classes.divider}`}>
+                    <span className={`text-[11px] ${classes.textMuted}`}>
                       {supplier._count?.purchases || 0} compras registradas
                     </span>
 
@@ -1044,7 +1094,7 @@ export default function PurchasesPage() {
                       <button
                         type="button"
                         onClick={() => handleOpenEditSupplier(supplier)}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
+                        className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost}`}
                         title="Editar proveedor"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -1053,7 +1103,11 @@ export default function PurchasesPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteSupplier(supplier)}
-                        className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all cursor-pointer"
+                        className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                          isLight
+                            ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
+                            : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
+                        }`}
                         title="Eliminar o desactivar proveedor"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1069,17 +1123,20 @@ export default function PurchasesPage() {
 
       {/* MODAL PARA REGISTRAR COMPRA / ENTRADA */}
       {showPurchaseModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="w-full max-w-4xl max-h-[94vh] rounded-3xl bg-slate-900 border border-slate-800 flex flex-col shadow-2xl animate-in zoom-in-95 my-auto overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className={`w-full max-w-4xl max-h-[94vh] rounded-3xl border flex flex-col shadow-2xl animate-in zoom-in-95 my-auto overflow-hidden ${classes.modalContent}`}>
             {/* Cabecera del Modal */}
-            <div className="p-4 sm:px-6 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0">
+            <div className={`p-4 sm:px-6 border-b flex items-center justify-between shrink-0 ${classes.divider}`}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Registrar Entrada de Insumos</h3>
-                  <p className="text-xs text-slate-400">
+                  <h3 className={`text-base font-bold ${classes.textMain}`}>Registrar Entrada de Insumos</h3>
+                  <p className={`text-xs ${classes.textMuted}`}>
                     Calculadora asistida: ingresa paquetes completos o piezas sueltas de emergencia
                   </p>
                 </div>
@@ -1087,7 +1144,7 @@ export default function PurchasesPage() {
               <button
                 type="button"
                 onClick={() => setShowPurchaseModal(false)}
-                className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+                className={`w-8 h-8 rounded-xl border flex items-center justify-center font-bold cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
@@ -1097,15 +1154,16 @@ export default function PurchasesPage() {
             <form onSubmit={handleSavePurchase} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
               {/* Selector de Tipo de Entrada */}
               <div className="space-y-1.5">
-                <label className="text-slate-300 font-bold block text-xs">¿Qué tipo de entrada deseas realizar?</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-slate-950 rounded-2xl border border-slate-800">
+                <label className={`font-bold block text-xs ${classes.textMain}`}>¿Qué tipo de entrada deseas realizar?</label>
+                <div className={`grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 rounded-2xl border ${classes.subCard}`}>
                   <button
                     type="button"
                     onClick={() => setPurchaseForm((p) => ({ ...p, entryType: 'SUPPLIER' }))}
+                    style={purchaseForm.entryType === 'SUPPLIER' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
                     className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       purchaseForm.entryType === 'SUPPLIER'
-                        ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        ? 'font-bold shadow-md shadow-black/10'
+                        : `${classes.buttonGhost}`
                     }`}
                   >
                     <Building2 className="w-4 h-4" />
@@ -1115,10 +1173,11 @@ export default function PurchasesPage() {
                   <button
                     type="button"
                     onClick={() => setPurchaseForm((p) => ({ ...p, entryType: 'EMERGENCY_STORE' }))}
+                    style={purchaseForm.entryType === 'EMERGENCY_STORE' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
                     className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       purchaseForm.entryType === 'EMERGENCY_STORE'
-                        ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        ? 'font-bold shadow-md shadow-black/10'
+                        : `${classes.buttonGhost}`
                     }`}
                   >
                     <ShoppingBag className="w-4 h-4" />
@@ -1128,10 +1187,11 @@ export default function PurchasesPage() {
                   <button
                     type="button"
                     onClick={() => setPurchaseForm((p) => ({ ...p, entryType: 'INITIAL_STOCK' }))}
+                    style={purchaseForm.entryType === 'INITIAL_STOCK' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
                     className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       purchaseForm.entryType === 'INITIAL_STOCK'
-                        ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                        ? 'font-bold shadow-md shadow-black/10'
+                        : `${classes.buttonGhost}`
                     }`}
                   >
                     <Boxes className="w-4 h-4" />
@@ -1140,9 +1200,9 @@ export default function PurchasesPage() {
                 </div>
 
                 {/* Banner de Ayuda Dinámico */}
-                <div className="p-3 rounded-2xl border text-xs flex items-start gap-2.5 bg-slate-950/70 border-slate-800">
-                  <HelpCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-                  <div className="text-slate-300">
+                <div className={`p-3 rounded-2xl border text-xs flex items-start gap-2.5 ${classes.subCard}`}>
+                  <HelpCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: buttonColor }} />
+                  <div className={classes.textMain}>
                     {purchaseForm.entryType === 'SUPPLIER' && (
                       <p>
                         <strong>Compra formal a proveedor:</strong> Registra facturas o remisiones con lote grande (cajas de 12 litros, sacos de café, etc.).
@@ -1167,11 +1227,11 @@ export default function PurchasesPage() {
                 {/* Proveedor (solo si es SUPPLIER) */}
                 {purchaseForm.entryType === 'SUPPLIER' ? (
                   <div className="space-y-1">
-                    <label className="text-slate-300 font-medium">Proveedor Comercial:</label>
+                    <label className={`font-medium ${classes.textMain}`}>Proveedor Comercial:</label>
                     <select
                       value={purchaseForm.supplierId}
                       onChange={(e) => setPurchaseForm({ ...purchaseForm, supplierId: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                     >
                       <option value="">-- Sin proveedor asignado --</option>
                       {suppliers.map((s) => (
@@ -1183,7 +1243,7 @@ export default function PurchasesPage() {
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    <label className="text-slate-400 font-medium">Origen de los insumos:</label>
+                    <label className={`font-medium ${classes.textMuted}`}>Origen de los insumos:</label>
                     <input
                       type="text"
                       disabled
@@ -1192,14 +1252,14 @@ export default function PurchasesPage() {
                           ? 'Tiendita de la esquina / Caja Chica'
                           : 'Saldo Inicial de Apertura'
                       }
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-400"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs opacity-75 ${classes.input}`}
                     />
                   </div>
                 )}
 
                 {/* Factura / Folio */}
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">
+                  <label className={`font-medium ${classes.textMain}`}>
                     {purchaseForm.entryType === 'SUPPLIER'
                       ? 'No. de Factura / Remisión:'
                       : 'Folio o Referencia interna:'}
@@ -1209,29 +1269,29 @@ export default function PurchasesPage() {
                     placeholder="Ej. FAC-4819 o Ticket #01"
                     value={purchaseForm.invoiceNumber}
                     onChange={(e) => setPurchaseForm({ ...purchaseForm, invoiceNumber: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500 font-mono"
+                    className={`w-full px-3 py-2 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 {/* Fecha */}
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">Fecha de Entrada:</label>
+                  <label className={`font-medium ${classes.textMain}`}>Fecha de Entrada:</label>
                   <input
                     type="date"
                     value={purchaseForm.purchasedAt}
                     onChange={(e) => setPurchaseForm({ ...purchaseForm, purchasedAt: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500"
+                    className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               {/* Almacén Destino */}
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Almacén Destino en Sucursal:</label>
+                <label className={`font-medium ${classes.textMain}`}>Almacén Destino en Sucursal:</label>
                 <select
                   value={purchaseForm.warehouseId}
                   onChange={(e) => setPurchaseForm({ ...purchaseForm, warehouseId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 >
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
@@ -1245,11 +1305,11 @@ export default function PurchasesPage() {
               <div className="space-y-3 pt-2">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <label className="text-slate-200 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                      <Package className="w-3.5 h-3.5 text-amber-400" />
+                    <label className={`font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5 ${classes.textMain}`}>
+                      <Package className="w-3.5 h-3.5" style={{ color: buttonColor }} />
                       Partidas del Ticket / Insumos ({purchaseForm.items.length})
                     </label>
-                    <p className="text-[10px] text-slate-400">
+                    <p className={`text-[10px] ${classes.textMuted}`}>
                       Selecciona un insumo existente o agrégalo al vuelo directamente si es nuevo en tu cafetería
                     </p>
                   </div>
@@ -1258,18 +1318,22 @@ export default function PurchasesPage() {
                     <button
                       type="button"
                       onClick={() => handleAddItemRow(false)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs flex items-center gap-1 cursor-pointer transition-all border border-slate-700"
+                      className={`px-2.5 py-1.5 rounded-xl border font-semibold text-xs flex items-center gap-1 cursor-pointer transition-all ${classes.buttonGhost}`}
                     >
-                      <Plus className="w-3.5 h-3.5 text-amber-400" />
+                      <Plus className="w-3.5 h-3.5" style={{ color: buttonColor }} />
                       <span>+ Insumo Catálogo</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleAddItemRow(true)}
-                      className="px-3 py-1.5 rounded-xl bg-violet-600/30 hover:bg-violet-600/40 text-violet-300 border border-violet-500/40 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                      className={`px-3 py-1.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all shadow-sm ${
+                        isLight
+                          ? 'bg-purple-100 hover:bg-purple-200 text-purple-900 border-purple-300'
+                          : 'bg-violet-600/30 hover:bg-violet-600/40 text-violet-300 border-violet-500/40'
+                      }`}
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                       <span>✨ + Insumo Nuevo</span>
                     </button>
                   </div>
@@ -1294,20 +1358,25 @@ export default function PurchasesPage() {
                         key={idx}
                         className={`p-3.5 rounded-2xl border space-y-3 transition-all ${
                           row.isNewItem
-                            ? 'bg-slate-950/80 border-violet-500/40 shadow-sm'
-                            : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                            ? isLight
+                              ? 'bg-purple-50/60 border-purple-300'
+                              : 'bg-slate-950/80 border-violet-500/40 shadow-sm'
+                            : `${classes.subCard}`
                         }`}
                       >
                         {/* Barra superior de la partida */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+                        <div className={`flex flex-wrap items-center justify-between gap-2 pb-2 border-b ${classes.divider}`}>
                           <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-[10px]">
+                            <span
+                              className="w-5 h-5 rounded-full font-bold flex items-center justify-center text-[10px]"
+                              style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                            >
                               {idx + 1}
                             </span>
-                            <span className="text-[11px] font-semibold text-slate-300">
+                            <span className={`text-[11px] font-semibold ${classes.textMain}`}>
                               {row.isNewItem ? (
-                                <span className="text-violet-300 flex items-center gap-1 font-bold">
-                                  <Sparkles className="w-3 h-3 text-amber-400" />
+                                <span className="text-purple-600 dark:text-violet-300 flex items-center gap-1 font-bold">
+                                  <Sparkles className="w-3 h-3 text-amber-500" />
                                   Nuevo Insumo al Vuelo
                                 </span>
                               ) : (
@@ -1318,14 +1387,15 @@ export default function PurchasesPage() {
 
                           <div className="flex items-center gap-2">
                             {/* Toggle entre Catálogo y Nuevo */}
-                            <div className="flex bg-slate-900 p-0.5 rounded-xl border border-slate-800 text-[10px]">
+                            <div className={`flex p-0.5 rounded-xl border text-[10px] ${classes.card}`}>
                               <button
                                 type="button"
                                 onClick={() => handleItemChange(idx, 'isNewItem', false)}
+                                style={!row.isNewItem ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
                                 className={`px-2 py-0.5 rounded-lg font-semibold transition-all cursor-pointer ${
                                   !row.isNewItem
-                                    ? 'bg-amber-500 text-slate-950 font-bold'
-                                    : 'text-slate-400 hover:text-white'
+                                    ? 'font-bold'
+                                    : `${classes.textMuted} hover:${classes.textMain}`
                                 }`}
                               >
                                 Del Catálogo
@@ -1335,8 +1405,8 @@ export default function PurchasesPage() {
                                 onClick={() => handleItemChange(idx, 'isNewItem', true)}
                                 className={`px-2 py-0.5 rounded-lg font-semibold transition-all cursor-pointer ${
                                   row.isNewItem
-                                    ? 'bg-violet-600 text-white font-bold'
-                                    : 'text-slate-400 hover:text-white'
+                                    ? 'bg-purple-700 text-white font-bold'
+                                    : `${classes.textMuted} hover:${classes.textMain}`
                                 }`}
                               >
                                 + Nuevo Insumo
@@ -1348,7 +1418,7 @@ export default function PurchasesPage() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItemRow(idx)}
-                                className="p-1 rounded-lg text-slate-500 hover:text-rose-400 transition-all cursor-pointer"
+                                className="p-1 rounded-lg text-slate-400 hover:text-rose-500 transition-all cursor-pointer"
                                 title="Quitar este insumo"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1362,7 +1432,7 @@ export default function PurchasesPage() {
                           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
                             {/* Nombre del nuevo insumo */}
                             <div className="sm:col-span-6 space-y-1">
-                              <label className="block text-[10px] text-violet-300 font-semibold">
+                              <label className="block text-[10px] text-purple-700 dark:text-violet-300 font-semibold">
                                 Nombre de la Materia Prima / Insumo *
                               </label>
                               <input
@@ -1371,19 +1441,19 @@ export default function PurchasesPage() {
                                 value={row.newItemName}
                                 onChange={(e) => handleItemChange(idx, 'newItemName', e.target.value)}
                                 placeholder="Ej: Café de Grano de Chiapas, Leche Entera"
-                                className="w-full px-3 py-1.5 rounded-xl bg-slate-900 border border-violet-500/40 text-white text-xs font-medium focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                className={`w-full px-3 py-1.5 rounded-xl border text-xs font-medium focus:outline-none ${classes.input}`}
                               />
                             </div>
 
                             {/* Unidad de medida base */}
                             <div className="sm:col-span-3 space-y-1">
-                              <label className="block text-[10px] text-slate-300 font-semibold">
+                              <label className={`block text-[10px] font-semibold ${classes.textMain}`}>
                                 Unidad de Medida *
                               </label>
                               <select
                                 value={row.baseUnit}
                                 onChange={(e) => handleItemChange(idx, 'baseUnit', e.target.value)}
-                                className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs font-medium focus:outline-none focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                                className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-medium focus:outline-none cursor-pointer ${classes.input}`}
                               >
                                 {Object.values(UNIT_DEFINITIONS).map((u) => (
                                   <option key={u.code} value={u.code}>
@@ -1396,15 +1466,15 @@ export default function PurchasesPage() {
                             {/* SKU autogenerado con fragmentos */}
                             <div className="sm:col-span-3 space-y-1">
                               <div className="flex items-center justify-between">
-                                <label className="block text-[10px] text-slate-300 font-semibold">SKU / Código</label>
-                                <span className="text-[9px] text-violet-400 font-mono">Auto</span>
+                                <label className={`block text-[10px] font-semibold ${classes.textMain}`}>SKU / Código</label>
+                                <span className="text-[9px] text-purple-600 dark:text-violet-400 font-mono">Auto</span>
                               </div>
                               <input
                                 type="text"
                                 value={row.sku}
                                 onChange={(e) => handleItemChange(idx, 'sku', e.target.value)}
                                 placeholder="CAF-GRA-CHI"
-                                className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-300 font-mono text-xs font-bold uppercase focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                className={`w-full px-2.5 py-1.5 rounded-xl border font-mono text-xs font-bold uppercase focus:outline-none ${classes.input}`}
                               />
                             </div>
                           </div>
@@ -1412,13 +1482,13 @@ export default function PurchasesPage() {
                           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
                             {/* Insumo del catálogo */}
                             <div className="sm:col-span-7 space-y-1">
-                              <label className="block text-[10px] text-slate-400 font-semibold">
+                              <label className={`block text-[10px] font-semibold ${classes.textMuted}`}>
                                 Insumo Base del Catálogo:
                               </label>
                               <select
                                 value={row.inventoryItemId}
                                 onChange={(e) => handleItemChange(idx, 'inventoryItemId', e.target.value)}
-                                className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-medium text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+                                className={`w-full px-2.5 py-1.5 rounded-xl border font-medium text-xs focus:outline-none cursor-pointer ${classes.input}`}
                               >
                                 {inventoryItems.map((it) => (
                                   <option key={it.id} value={it.id}>
@@ -1430,13 +1500,13 @@ export default function PurchasesPage() {
 
                             {/* Presentación comercial */}
                             <div className="sm:col-span-5 space-y-1">
-                              <label className="block text-[10px] text-slate-400 font-semibold">
+                              <label className={`block text-[10px] font-semibold ${classes.textMuted}`}>
                                 Presentación de Compra:
                               </label>
                               <select
                                 value={row.inventoryPresentationId}
                                 onChange={(e) => handleItemChange(idx, 'inventoryPresentationId', e.target.value)}
-                                className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+                                className={`w-full px-2.5 py-1.5 rounded-xl border text-xs focus:outline-none cursor-pointer ${classes.input}`}
                               >
                                 <option value="">
                                   Pieza o Unidad Suelta ({formatUnitName(selectedItemObj?.baseUnit)})
@@ -1452,10 +1522,10 @@ export default function PurchasesPage() {
                         )}
 
                         {/* Calculadora Asistida: Cantidad, Modo, Unitario y Total */}
-                        <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                        <div className={`p-2.5 rounded-xl border grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center ${classes.card}`}>
                           {/* Cantidad */}
                           <div className="sm:col-span-3 space-y-1">
-                            <label className="block text-[10px] text-slate-400 font-semibold">
+                            <label className={`block text-[10px] font-semibold ${classes.textMuted}`}>
                               Cantidad a Comprar:
                             </label>
                             <div className="relative">
@@ -1465,9 +1535,9 @@ export default function PurchasesPage() {
                                 min="0.001"
                                 value={row.quantityBought}
                                 onChange={(e) => handleItemChange(idx, 'quantityBought', e.target.value)}
-                                className="w-full pl-2.5 pr-10 py-1 rounded-xl bg-slate-950 border border-slate-800 text-white font-bold text-xs focus:outline-none focus:border-amber-500 font-mono text-center"
+                                className={`w-full pl-2.5 pr-10 py-1 rounded-xl border font-bold text-xs focus:outline-none font-mono text-center ${classes.input}`}
                               />
-                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-semibold">
+                              <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold ${classes.textMuted}`}>
                                 {formatUnitSymbol(displayUnit)}
                               </span>
                             </div>
@@ -1475,17 +1545,18 @@ export default function PurchasesPage() {
 
                           {/* Selector de Modo */}
                           <div className="sm:col-span-3 space-y-1">
-                            <label className="block text-[10px] text-slate-400 font-semibold">
+                            <label className={`block text-[10px] font-semibold ${classes.textMuted}`}>
                               Modo de Cálculo:
                             </label>
-                            <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                            <div className={`flex p-0.5 rounded-lg border text-[10px] ${classes.subCard}`}>
                               <button
                                 type="button"
                                 onClick={() => handleItemChange(idx, 'calcMode', 'UNIT')}
+                                style={row.calcMode === 'UNIT' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
                                 className={`flex-1 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
                                   row.calcMode === 'UNIT'
-                                    ? 'bg-amber-500 text-slate-950 font-bold'
-                                    : 'text-slate-400 hover:text-white'
+                                    ? 'font-bold'
+                                    : `${classes.textMuted} hover:${classes.textMain}`
                                 }`}
                               >
                                 Por Unidad
@@ -1493,10 +1564,11 @@ export default function PurchasesPage() {
                               <button
                                 type="button"
                                 onClick={() => handleItemChange(idx, 'calcMode', 'TOTAL')}
+                                style={row.calcMode === 'TOTAL' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
                                 className={`flex-1 py-0.5 rounded-md font-semibold transition-all cursor-pointer ${
                                   row.calcMode === 'TOTAL'
-                                    ? 'bg-amber-500 text-slate-950 font-bold'
-                                    : 'text-slate-400 hover:text-white'
+                                    ? 'font-bold'
+                                    : `${classes.textMuted} hover:${classes.textMain}`
                                 }`}
                               >
                                 Total Lote
@@ -1506,11 +1578,11 @@ export default function PurchasesPage() {
 
                           {/* Input de Costo Unitario */}
                           <div className="sm:col-span-3 space-y-1">
-                            <label className="block text-[10px] text-slate-400 font-semibold">
+                            <label className={`block text-[10px] font-semibold ${classes.textMuted}`}>
                               Precio Unitario:
                             </label>
                             <div className="relative">
-                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs">$</span>
+                              <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-xs ${classes.textMuted}`}>$</span>
                               <input
                                 type="number"
                                 step="0.01"
@@ -1518,22 +1590,18 @@ export default function PurchasesPage() {
                                 placeholder="0.00"
                                 value={row.unitCost}
                                 onChange={(e) => handleItemChange(idx, 'unitCost', e.target.value)}
-                                className={`w-full pl-6 pr-2 py-1 rounded-lg bg-slate-950 border text-xs text-white font-mono focus:outline-none ${
-                                  row.calcMode === 'UNIT'
-                                    ? 'border-amber-500 ring-1 ring-amber-500/30'
-                                    : 'border-slate-800'
-                                }`}
+                                className={`w-full pl-6 pr-2 py-1 rounded-lg border text-xs font-mono focus:outline-none ${classes.input}`}
                               />
                             </div>
                           </div>
 
                           {/* Input de Total del Paquete */}
                           <div className="sm:col-span-3 space-y-1">
-                            <label className="block text-[10px] text-slate-400 font-semibold">
+                            <label className={`block text-[10px] font-semibold ${classes.textMuted}`}>
                               Total Pagado:
                             </label>
                             <div className="relative">
-                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs">$</span>
+                              <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-xs ${classes.textMuted}`}>$</span>
                               <input
                                 type="number"
                                 step="0.01"
@@ -1541,43 +1609,43 @@ export default function PurchasesPage() {
                                 placeholder="0.00"
                                 value={row.totalCostInput}
                                 onChange={(e) => handleItemChange(idx, 'totalCostInput', e.target.value)}
-                                className={`w-full pl-6 pr-2 py-1 rounded-lg bg-slate-950 border text-xs text-white font-mono focus:outline-none ${
-                                  row.calcMode === 'TOTAL'
-                                    ? 'border-amber-500 ring-1 ring-amber-500/30'
-                                    : 'border-slate-800'
-                                }`}
+                                className={`w-full pl-6 pr-2 py-1 rounded-lg border text-xs font-mono focus:outline-none ${classes.input}`}
                               />
                             </div>
                           </div>
                         </div>
 
                         {/* Desglose visual en tiempo real para el cliente */}
-                        <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 flex items-start gap-2">
-                          <Sparkles className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
+                        <div className={`p-2 rounded-xl border text-[11px] flex items-start gap-2 ${
+                          isLight
+                            ? 'bg-amber-50 border-amber-200 text-amber-900'
+                            : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                        }`}>
+                          <Sparkles className="w-3.5 h-3.5 shrink-0 text-amber-500 mt-0.5" />
                           <div>
                             {row.isNewItem ? (
                               <span>
                                 <strong>Se creará en inventario:</strong>{' '}
-                                <span className="font-bold text-white">
+                                <span className={`font-bold ${classes.textMain}`}>
                                   {row.newItemName || 'Nuevo Insumo'}
                                 </span>{' '}
-                                [SKU: <span className="font-mono text-amber-200 font-bold">{row.sku || 'PENDIENTE'}</span>] con{' '}
-                                <span className="font-bold text-white">
+                                [SKU: <span className="font-mono font-bold text-amber-600 dark:text-amber-200">{row.sku || 'PENDIENTE'}</span>] con{' '}
+                                <span className={`font-bold ${classes.textMain}`}>
                                   {qty} {formatUnitSymbol(row.baseUnit)}
                                 </span>{' '}
-                                en almacén a <span className="font-bold text-white">${unitCost.toFixed(2)} MXN</span> c/u.{' '}
+                                en almacén a <span className={`font-bold ${classes.textMain}`}>${unitCost.toFixed(2)} MXN</span> c/u.{' '}
                                 <strong>Subtotal: ${subtotalRow.toFixed(2)} MXN</strong>
                               </span>
                             ) : (
                               <span>
                                 <strong>Entrada neta:</strong> Ingresarán{' '}
-                                <span className="font-bold text-white">
+                                <span className={`font-bold ${classes.textMain}`}>
                                   {quantityBaseCalculated.toLocaleString('es-MX')} {formatUnitSymbol(selectedItemObj?.baseUnit)}
                                 </span>{' '}
                                 al almacén. Costo por {selectedPresentation ? selectedPresentation.name : 'pieza/unidad'}:{' '}
-                                <span className="font-bold text-white">${unitCost.toFixed(2)} MXN</span>{' '}
+                                <span className={`font-bold ${classes.textMain}`}>${unitCost.toFixed(2)} MXN</span>{' '}
                                 (sale a{' '}
-                                <span className="text-emerald-400 font-bold">
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
                                   ${unitCostBase.toFixed(4)} por {formatUnitSymbol(selectedItemObj?.baseUnit)}
                                 </span>
                                 ). <strong>Subtotal: ${subtotalRow.toFixed(2)} MXN</strong>
@@ -1593,21 +1661,21 @@ export default function PurchasesPage() {
 
               {/* Notas */}
               <div className="space-y-1">
-                <label className="text-slate-400 font-medium">Notas u observaciones:</label>
+                <label className={`font-medium ${classes.textMuted}`}>Notas u observaciones:</label>
                 <input
                   type="text"
                   placeholder="Ej. Insumo fresco, compra de emergencia para turno vespertino"
                   value={purchaseForm.notes}
                   onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 />
               </div>
 
               {/* Total y Botón de Envío */}
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+              <div className={`pt-3 border-t flex items-center justify-between ${classes.divider}`}>
                 <div>
-                  <span className="text-slate-400 text-xs block font-medium">Total de la Entrada:</span>
-                  <strong className="text-xl font-black text-amber-400 font-mono">
+                  <span className={`text-xs block font-medium ${classes.textMuted}`}>Total de la Entrada:</span>
+                  <strong className={`text-xl font-black font-mono ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
                     ${calculatedTotal.toFixed(2)} MXN
                   </strong>
                 </div>
@@ -1616,7 +1684,7 @@ export default function PurchasesPage() {
                   <button
                     type="button"
                     onClick={() => setShowPurchaseModal(false)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
+                    className={`px-4 py-2.5 rounded-xl border text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
                   >
                     Cancelar
                   </button>
@@ -1624,7 +1692,8 @@ export default function PurchasesPage() {
                   <button
                     type="submit"
                     disabled={savingPurchase || calculatedTotal <= 0}
-                    className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-40 cursor-pointer transition-all"
+                    style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                    className="px-6 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg shadow-black/10 disabled:opacity-40 cursor-pointer transition-all hover:opacity-95"
                   >
                     {savingPurchase ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                     <span>Registrar e Ingresar Stock</span>
@@ -1638,22 +1707,25 @@ export default function PurchasesPage() {
 
       {/* MODAL PARA EDITAR COMPRA */}
       {showEditPurchaseModal && editingPurchase && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Edit2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Editar Entrada</h3>
-                  <p className="text-xs text-slate-400">Modifica folio, notas o fecha del comprobante</p>
+                  <h3 className={`text-base font-bold ${classes.textMain}`}>Editar Entrada</h3>
+                  <p className={`text-xs ${classes.textMuted}`}>Modifica folio, notas o fecha del comprobante</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowEditPurchaseModal(false)}
-                className="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+                className={`w-7 h-7 rounded-lg border flex items-center justify-center font-bold cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
@@ -1661,21 +1733,21 @@ export default function PurchasesPage() {
 
             <form onSubmit={handleSaveEditPurchase} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Folio / No. Factura:</label>
+                <label className={`font-medium ${classes.textMain}`}>Folio / No. Factura:</label>
                 <input
                   type="text"
                   value={editPurchaseForm.invoiceNumber}
                   onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, invoiceNumber: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Proveedor:</label>
+                <label className={`font-medium ${classes.textMain}`}>Proveedor:</label>
                 <select
                   value={editPurchaseForm.supplierId}
                   onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, supplierId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 >
                   <option value="">-- Sin proveedor --</option>
                   {suppliers.map((s) => (
@@ -1687,37 +1759,38 @@ export default function PurchasesPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Fecha de Entrada:</label>
+                <label className={`font-medium ${classes.textMain}`}>Fecha de Entrada:</label>
                 <input
                   type="date"
                   value={editPurchaseForm.purchasedAt}
                   onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, purchasedAt: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Notas:</label>
+                <label className={`font-medium ${classes.textMain}`}>Notas:</label>
                 <textarea
                   rows={2}
                   value={editPurchaseForm.notes}
                   onChange={(e) => setEditPurchaseForm({ ...editPurchaseForm, notes: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+              <div className={`pt-3 border-t flex justify-end gap-2 ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowEditPurchaseModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                  className={`px-4 py-2 rounded-xl border text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingEditPurchase}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 disabled:opacity-40 cursor-pointer"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md shadow-black/10 disabled:opacity-40 cursor-pointer hover:opacity-95"
                 >
                   {savingEditPurchase && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Guardar Cambios</span>
@@ -1730,91 +1803,95 @@ export default function PurchasesPage() {
 
       {/* MODAL PARA CREAR / EDITAR PROVEEDOR */}
       {showSupplierModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 ${classes.modalContent}`}>
+            <div className={`flex items-center gap-3 border-b pb-3 ${classes.divider}`}>
+              <div
+                className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
+                style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+              >
                 <Building2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">
+                <h3 className={`text-base font-bold ${classes.textMain}`}>
                   {editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
                 </h3>
-                <p className="text-xs text-slate-400">Datos comerciales y de contacto</p>
+                <p className={`text-xs ${classes.textMuted}`}>Datos comerciales y de contacto</p>
               </div>
             </div>
 
             <form onSubmit={handleSaveSupplier} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Nombre Comercial *:</label>
+                <label className={`font-medium ${classes.textMain}`}>Nombre Comercial *:</label>
                 <input
                   type="text"
                   required
                   placeholder="Ej. Distribuidora de Café Veracruz"
                   value={supplierForm.name}
                   onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-amber-500"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Persona de Contacto / Vendedor:</label>
+                <label className={`font-medium ${classes.textMain}`}>Persona de Contacto / Vendedor:</label>
                 <input
                   type="text"
                   placeholder="Ej. Lic. Carlos Gómez"
                   value={supplierForm.contact}
                   onChange={(e) => setSupplierForm({ ...supplierForm, contact: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">Teléfono / WhatsApp:</label>
+                  <label className={`font-medium ${classes.textMain}`}>Teléfono / WhatsApp:</label>
                   <input
                     type="text"
                     placeholder="Ej. 55 1234 5678"
                     value={supplierForm.phone}
                     onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none"
+                    className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-medium">RFC / ID Fiscal:</label>
+                  <label className={`font-medium ${classes.textMain}`}>RFC / ID Fiscal:</label>
                   <input
                     type="text"
                     placeholder="Ej. DCV980101XYZ"
                     value={supplierForm.taxId}
                     onChange={(e) => setSupplierForm({ ...supplierForm, taxId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono focus:outline-none"
+                    className={`w-full px-3 py-2 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-medium">Correo Electrónico:</label>
+                <label className={`font-medium ${classes.textMain}`}>Correo Electrónico:</label>
                 <input
                   type="email"
                   placeholder="ventas@cafeveracruz.com"
                   value={supplierForm.email}
                   onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
+              <div className={`pt-3 border-t flex justify-end gap-2 ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowSupplierModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                  className={`px-4 py-2 rounded-xl border text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingSupplier}
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 disabled:opacity-40 cursor-pointer"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md shadow-black/10 disabled:opacity-40 cursor-pointer hover:opacity-95"
                 >
                   {savingSupplier && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingSupplier ? 'Actualizar' : 'Guardar Proveedor'}</span>
@@ -1827,32 +1904,35 @@ export default function PurchasesPage() {
 
       {/* MODAL DETALLE DE COMPRA */}
       {showDetailModal && selectedPurchase && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-lg rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Receipt className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Detalle de Entrada</h3>
-                  <p className="text-xs text-slate-400">Folio: {selectedPurchase.invoiceNumber}</p>
+                  <h3 className={`text-base font-bold ${classes.textMain}`}>Detalle de Entrada</h3>
+                  <p className={`text-xs ${classes.textMuted}`}>Folio: {selectedPurchase.invoiceNumber}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowDetailModal(false)}
-                className="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+                className={`w-7 h-7 rounded-lg border flex items-center justify-center font-bold cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 grid grid-cols-2 gap-2">
+              <div className={`p-3 rounded-2xl border grid grid-cols-2 gap-2 ${classes.subCard}`}>
                 <div>
-                  <span className="text-[10px] text-slate-500 block">Tipo:</span>
-                  <strong className="text-amber-400">
+                  <span className={`text-[10px] block ${classes.textMuted}`}>Tipo:</span>
+                  <strong className={isLight ? 'text-amber-800' : 'text-amber-400'}>
                     {selectedPurchase.entryType === 'INITIAL_STOCK'
                       ? 'Stock Inicial / Apertura'
                       : selectedPurchase.entryType === 'EMERGENCY_STORE'
@@ -1861,16 +1941,16 @@ export default function PurchasesPage() {
                   </strong>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-500 block">Fecha:</span>
-                  <strong className="text-slate-200">
+                  <span className={`text-[10px] block ${classes.textMuted}`}>Fecha:</span>
+                  <strong className={classes.textMain}>
                     {new Date(selectedPurchase.purchasedAt).toLocaleDateString('es-MX', {
                       dateStyle: 'medium',
                     })}
                   </strong>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-[10px] text-slate-500 block">Proveedor / Origen:</span>
-                  <strong className="text-slate-200">
+                  <span className={`text-[10px] block ${classes.textMuted}`}>Proveedor / Origen:</span>
+                  <strong className={classes.textMain}>
                     {selectedPurchase.supplier?.name ||
                       (selectedPurchase.entryType === 'INITIAL_STOCK'
                         ? 'Inventario de Apertura'
@@ -1878,35 +1958,35 @@ export default function PurchasesPage() {
                   </strong>
                 </div>
                 {selectedPurchase.notes && (
-                  <div className="col-span-2 pt-1 border-t border-slate-850">
-                    <span className="text-[10px] text-slate-500 block">Notas:</span>
-                    <p className="text-slate-300 italic">{selectedPurchase.notes}</p>
+                  <div className={`col-span-2 pt-1 border-t ${classes.divider}`}>
+                    <span className={`text-[10px] block ${classes.textMuted}`}>Notas:</span>
+                    <p className={`italic ${classes.textMain}`}>{selectedPurchase.notes}</p>
                   </div>
                 )}
               </div>
 
               {/* Desglose de Insumos */}
               <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">
+                <span className={`font-bold uppercase tracking-wider text-[10px] ${classes.textMuted}`}>
                   Insumos Ingresados:
                 </span>
                 {selectedPurchase.items.map((it) => (
                   <div
                     key={it.id}
-                    className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between"
+                    className={`p-2.5 rounded-xl border flex items-center justify-between ${classes.card}`}
                   >
                     <div>
-                      <span className="font-bold text-white block">{it.itemName}</span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className={`font-bold block ${classes.textMain}`}>{it.itemName}</span>
+                      <span className={`text-[10px] ${classes.textMuted}`}>
                         {it.quantityBought} {it.presentationName || formatUnitName(it.baseUnit)} (${it.unitCost.toFixed(2)} c/u)
                       </span>
                     </div>
 
                     <div className="text-right">
-                      <span className="font-mono font-bold text-amber-400 text-xs">
+                      <span className={`font-mono font-bold text-xs ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
                         ${it.subtotal.toFixed(2)} MXN
                       </span>
-                      <span className="block text-[9px] text-emerald-400">
+                      <span className="block text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold">
                         +{it.quantityBaseCalculated} {formatUnitSymbol(it.baseUnit)}
                       </span>
                     </div>
@@ -1914,9 +1994,9 @@ export default function PurchasesPage() {
                 ))}
               </div>
 
-              <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-sm font-bold">
-                <span className="text-slate-400">Total de la Entrada:</span>
-                <span className="text-amber-400 font-extrabold text-base">
+              <div className={`pt-2 border-t flex justify-between items-center text-sm font-bold ${classes.divider}`}>
+                <span className={classes.textMuted}>Total de la Entrada:</span>
+                <span className={`font-extrabold text-base ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
                   ${selectedPurchase.total.toFixed(2)} MXN
                 </span>
               </div>
@@ -1926,7 +2006,7 @@ export default function PurchasesPage() {
               <button
                 type="button"
                 onClick={() => setShowDetailModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer hover:bg-slate-700"
+                className={`px-4 py-2 rounded-xl border text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
               >
                 Cerrar
               </button>

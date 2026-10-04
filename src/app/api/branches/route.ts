@@ -188,10 +188,10 @@ export async function POST(request: Request) {
           countryCode: countryCode?.trim().toUpperCase() || 'MX',
           active: true,
           logoUrl: logoUrl?.trim() || null,
-          primaryColor: primaryColor?.trim() || '#7c3aed',
-          secondaryColor: secondaryColor?.trim() || '#4f46e5',
-          buttonColor: buttonColor?.trim() || '#f59e0b',
-          bgColor: bgColor?.trim() || '#020617',
+          primaryColor: primaryColor?.trim() || '#C08552',
+          secondaryColor: secondaryColor?.trim() || '#5E3023',
+          buttonColor: buttonColor?.trim() || '#C08552',
+          bgColor: bgColor?.trim() || '#14100E',
         },
       })
 

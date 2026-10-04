@@ -80,6 +80,8 @@ export async function PUT(
       postalCode,
       active,
       logoUrl,
+      isotypeUrl,
+      sidebarTheme,
       primaryColor,
       secondaryColor,
       buttonColor,
@@ -102,7 +104,9 @@ export async function PUT(
       secondaryColor !== undefined ||
       buttonColor !== undefined ||
       bgColor !== undefined ||
-      logoUrl !== undefined
+      logoUrl !== undefined ||
+      isotypeUrl !== undefined ||
+      sidebarTheme !== undefined
 
     if (hasColorChanges) {
       const biz = await prisma.business.findUnique({
@@ -136,6 +140,8 @@ export async function PUT(
         ...(postalCode !== undefined && { postalCode: postalCode?.trim() || null }),
         ...(active !== undefined && { active: Boolean(active) }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl?.trim() || null }),
+        ...(isotypeUrl !== undefined && { isotypeUrl: isotypeUrl?.trim() || null }),
+        ...(sidebarTheme !== undefined && { sidebarTheme: sidebarTheme?.trim() || 'DARK' }),
         ...(primaryColor !== undefined && { primaryColor: primaryColor?.trim() || null }),
         ...(secondaryColor !== undefined && { secondaryColor: secondaryColor?.trim() || null }),
         ...(buttonColor !== undefined && { buttonColor: buttonColor?.trim() || null }),

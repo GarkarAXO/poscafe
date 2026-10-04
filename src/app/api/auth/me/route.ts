@@ -60,6 +60,26 @@ export async function GET() {
       user.userBranches.find((ub) => ub.isDefault)?.branch ||
       user.userBranches[0]?.branch
 
+    let activeBranchIsotype = (activeBranch as any)?.isotypeUrl ?? null
+    let activeBranchSidebarTheme = (activeBranch as any)?.sidebarTheme ?? 'DARK'
+    let activeBranchServiceMode = (activeBranch as any)?.tableServiceMode ?? 'FREE'
+
+    if (activeBranch && ((activeBranch as any).isotypeUrl === undefined || (activeBranch as any).tableServiceMode === undefined)) {
+      try {
+        const raw = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT "isotypeUrl", "sidebarTheme", "tableServiceMode" FROM "branches" WHERE id = $1 LIMIT 1`,
+          activeBranch.id
+        )
+        if (raw && raw[0]) {
+          if (raw[0].isotypeUrl !== undefined) activeBranchIsotype = raw[0].isotypeUrl
+          if (raw[0].sidebarTheme !== undefined) activeBranchSidebarTheme = raw[0].sidebarTheme || 'DARK'
+          if (raw[0].tableServiceMode !== undefined) activeBranchServiceMode = raw[0].tableServiceMode || 'FREE'
+        }
+      } catch {
+        // Fallback silencioso
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -87,6 +107,9 @@ export async function GET() {
                 primaryColor: activeBranch.primaryColor,
                 secondaryColor: activeBranch.secondaryColor,
                 buttonColor: activeBranch.buttonColor,
+                isotypeUrl: activeBranchIsotype,
+                sidebarTheme: activeBranchSidebarTheme,
+                tableServiceMode: activeBranchServiceMode,
               }
             : null,
           branches: user.userBranches

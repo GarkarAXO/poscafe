@@ -92,8 +92,36 @@ export default async function DashboardLayout({
     }
   }
 
+  // Enriquecer sucursales con isotypeUrl y sidebarTheme de forma resiliente
+  let enrichedBranches = business.branches.map((b) => ({
+    ...b,
+    isotypeUrl: (b as any).isotypeUrl ?? null,
+    sidebarTheme: (b as any).sidebarTheme ?? 'DARK',
+  }))
+
+  try {
+    const rawBranchRows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, "isotypeUrl", "sidebarTheme" FROM branches WHERE "businessId" = $1 AND active = true`,
+      session.businessId
+    )
+    if (rawBranchRows && rawBranchRows.length > 0) {
+      const map = new Map(rawBranchRows.map((r) => [r.id, r]))
+      enrichedBranches = enrichedBranches.map((b) => {
+        const raw = map.get(b.id)
+        return {
+          ...b,
+          isotypeUrl: raw?.isotypeUrl ?? b.isotypeUrl,
+          sidebarTheme: raw?.sidebarTheme ?? b.sidebarTheme ?? 'DARK',
+        }
+      })
+    }
+  } catch {
+    // Fallback silencioso
+  }
+
   const mergedBusiness = {
     ...business,
+    branches: enrichedBranches,
     settings: business.settings
       ? {
           ...business.settings,

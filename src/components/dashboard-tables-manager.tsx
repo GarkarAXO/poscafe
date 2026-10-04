@@ -18,6 +18,8 @@ import {
   MapPin,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
+import { useDashboardTheme } from '@/context/dashboard-theme-context'
+import { getStatusBadgeStyles, getContrastTextColor } from '@/lib/theme-utils'
 
 interface AreaOption {
   id: string
@@ -59,6 +61,10 @@ export default function DashboardTablesManager({
   branchName,
   primaryColor = '#C08552',
 }: DashboardTablesManagerProps) {
+  const theme = useDashboardTheme()
+  const activePrimary = primaryColor || theme.primaryColor
+  const { isLight, buttonColor, classes } = theme
+
   const [loading, setLoading] = useState(true)
   const [tableServiceMode, setTableServiceMode] = useState<'FREE' | 'ASSIGNED'>('FREE')
   const [tables, setTables] = useState<TableItem[]>([])
@@ -412,18 +418,24 @@ export default function DashboardTablesManager({
   const unassignedCount = tables.length - assignedCount
 
   return (
-    <div className="p-6 rounded-3xl bg-[#14100e] border border-[#382b25] space-y-6 shadow-xl relative overflow-hidden">
+    <div className={`p-6 rounded-3xl border space-y-6 shadow-xl relative overflow-hidden backdrop-blur-md ${classes.card}`}>
       {/* Cabecera Principal de la Sección de Mesas */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#2a201c] pb-5">
+      <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b pb-5 ${classes.divider}`}>
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border border-[#C08552]/30 bg-[#C08552]/10 text-[#C08552] mb-2">
+          <div
+            className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border mb-2 ${
+              isLight
+                ? 'border-[#C08552]/30 bg-[#C08552]/10 text-[#895737]'
+                : 'border-white/15 bg-white/10 text-amber-300'
+            }`}
+          >
             <Coffee className="w-3.5 h-3.5" />
             Configuración de Servicio en Salón • {branchName}
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+          <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
             Control de Mesas y Asignación de Meseros
           </h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+          <p className={`text-xs mt-1 max-w-2xl leading-relaxed ${classes.textMuted}`}>
             Define cuántas mesas tiene tu sucursal y el modo de atención del equipo: asigna meseros fijos
             por mesa o permite servicio libre donde cualquier colaborador puede tomar cualquier mesa.
           </p>
@@ -444,9 +456,9 @@ export default function DashboardTablesManager({
               })
               setShowAreaModal(true)
             }}
-            className="px-3.5 py-2 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95 ${classes.buttonGhost}`}
           >
-            <Layers className="w-3.5 h-3.5 text-[#C08552]" />
+            <Layers className="w-3.5 h-3.5" style={{ color: buttonColor }} />
             <span>Zonas / Áreas</span>
           </button>
 
@@ -458,9 +470,9 @@ export default function DashboardTablesManager({
               setBulkData((prev) => ({ ...prev, startNumber: nextNum }))
               setShowBulkModal(true)
             }}
-            className="px-3.5 py-2 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95 ${classes.buttonGhost}`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-[#C08552]" />
+            <Sparkles className="w-3.5 h-3.5" style={{ color: buttonColor }} />
             <span>Generar Lote</span>
           </button>
 
@@ -476,8 +488,11 @@ export default function DashboardTablesManager({
               })
               setShowCreateModal(true)
             }}
-            style={{ backgroundColor: primaryColor }}
-            className="px-4 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-[#C08552]/20 hover:opacity-95 transition-all cursor-pointer active:scale-95"
+            style={{
+              backgroundColor: activePrimary,
+              color: getContrastTextColor(activePrimary),
+            }}
+            className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg hover:opacity-95 transition-all cursor-pointer active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>Nueva Mesa</span>
@@ -488,11 +503,11 @@ export default function DashboardTablesManager({
       {/* Selector de Modo de Atención: MODO LIBRE vs MODO ASIGNADO */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
+          <label className={`text-xs font-black uppercase tracking-wider flex items-center gap-2 ${classes.textMuted}`}>
             <span>Modo de Atención de Meseros:</span>
-            {updatingMode && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C08552]" />}
+            {updatingMode && <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: buttonColor }} />}
           </label>
-          <span className="text-[11px] text-slate-400">
+          <span className={`text-[11px] ${classes.textSub}`}>
             Aplica a la comandera de piso y terminales touch
           </span>
         </div>
@@ -505,8 +520,10 @@ export default function DashboardTablesManager({
             disabled={updatingMode}
             className={`p-4 rounded-2xl border text-left transition-all cursor-pointer relative group flex flex-col justify-between ${
               tableServiceMode === 'FREE'
-                ? 'bg-emerald-950/20 border-emerald-500/60 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/30'
-                : 'bg-[#1c1715] border-[#382b25] hover:border-slate-700 opacity-80 hover:opacity-100'
+                ? isLight
+                  ? 'bg-emerald-50/90 border-emerald-500 shadow-md ring-1 ring-emerald-500/30'
+                  : 'bg-emerald-950/20 border-emerald-500/60 shadow-lg ring-1 ring-emerald-500/30'
+                : `${classes.subCard} ${classes.subCardHover} opacity-85 hover:opacity-100`
             }`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -514,22 +531,24 @@ export default function DashboardTablesManager({
                 <div
                   className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
                     tableServiceMode === 'FREE'
-                      ? 'bg-emerald-500/20 text-emerald-400'
+                      ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                      : isLight
+                      ? 'bg-stone-100 text-stone-600'
                       : 'bg-slate-800 text-slate-400'
                   }`}
                 >
                   <Users className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h4 className={`text-sm font-bold flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
                     Servicio Libre / Colaborativo
                     {tableServiceMode === 'FREE' && (
-                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                         ACTIVO
                       </span>
                     )}
                   </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className={`text-[11px] mt-0.5 ${classes.textMuted}`}>
                     Cualquier mesero puede tomar y atender cualquier mesa
                   </p>
                 </div>
@@ -542,7 +561,7 @@ export default function DashboardTablesManager({
               )}
             </div>
 
-            <p className="text-[11px] text-slate-400/90 mt-3 pt-2.5 border-t border-[#2a201c] leading-relaxed">
+            <p className={`text-[11px] mt-3 pt-2.5 border-t leading-relaxed ${classes.divider} ${classes.textMuted}`}>
               Ideal para cafeterías ágiles, barras y turnos donde el equipo comparte el piso. Al abrir
               una comanda, se registra temporalmente al mesero que tomó el pedido.
             </p>
@@ -555,8 +574,10 @@ export default function DashboardTablesManager({
             disabled={updatingMode}
             className={`p-4 rounded-2xl border text-left transition-all cursor-pointer relative group flex flex-col justify-between ${
               tableServiceMode === 'ASSIGNED'
-                ? 'bg-[#C08552]/15 border-[#C08552] shadow-lg shadow-[#C08552]/15 ring-1 ring-[#C08552]/40'
-                : 'bg-[#1c1715] border-[#382b25] hover:border-slate-700 opacity-80 hover:opacity-100'
+                ? isLight
+                  ? 'bg-amber-50/90 border-amber-500 shadow-md ring-1 ring-amber-500/30'
+                  : 'bg-[#C08552]/15 border-[#C08552] shadow-lg ring-1 ring-[#C08552]/40'
+                : `${classes.subCard} ${classes.subCardHover} opacity-85 hover:opacity-100`
             }`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -564,35 +585,40 @@ export default function DashboardTablesManager({
                 <div
                   className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
                     tableServiceMode === 'ASSIGNED'
-                      ? 'bg-[#C08552]/20 text-[#C08552]'
+                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                      : isLight
+                      ? 'bg-stone-100 text-stone-600'
                       : 'bg-slate-800 text-slate-400'
                   }`}
                 >
                   <UserCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h4 className={`text-sm font-bold flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
                     Meseros Asignados por Mesa
                     {tableServiceMode === 'ASSIGNED' && (
-                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#C08552]/20 text-[#C08552] border border-[#C08552]/30">
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-[#C08552] border border-amber-500/30">
                         ACTIVO
                       </span>
                     )}
                   </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className={`text-[11px] mt-0.5 ${classes.textMuted}`}>
                     Cada mesa tiene un mesero titular responsable
                   </p>
                 </div>
               </div>
 
               {tableServiceMode === 'ASSIGNED' && (
-                <div className="w-6 h-6 rounded-full bg-[#C08552] text-white flex items-center justify-center font-bold shrink-0">
+                <div
+                  style={{ backgroundColor: buttonColor }}
+                  className="w-6 h-6 rounded-full text-white flex items-center justify-center font-bold shrink-0"
+                >
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
               )}
             </div>
 
-            <p className="text-[11px] text-slate-400/90 mt-3 pt-2.5 border-t border-[#2a201c] leading-relaxed">
+            <p className={`text-[11px] mt-3 pt-2.5 border-t leading-relaxed ${classes.divider} ${classes.textMuted}`}>
               Ideal para restaurantes por secciones o turnos con propinas por rango. En la comandera,
               los meseros pueden filtrar con un toque en &quot;Mis Mesas&quot; para ver sus mesas a cargo.
             </p>
@@ -601,17 +627,23 @@ export default function DashboardTablesManager({
       </div>
 
       {/* Métricas y Filtros de Áreas */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#1a1412] p-3 sm:p-4 rounded-2xl border border-[#382b25]">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4 rounded-2xl border ${classes.card}`}>
         {/* Contadores */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="px-2.5 py-1 rounded-xl bg-[#251e1b] text-slate-300 font-bold border border-[#382b25]">
-            Total: <strong className="text-white">{tables.length} mesas</strong>
+          <span className={`px-2.5 py-1 rounded-xl font-bold border ${classes.badge}`}>
+            Total: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{tables.length} mesas</strong>
           </span>
-          <span className="px-2.5 py-1 rounded-xl bg-[#251e1b] text-slate-300 font-bold border border-[#382b25]">
-            Capacidad: <strong className="text-[#C08552]">{totalCapacity} comensales</strong>
+          <span className={`px-2.5 py-1 rounded-xl font-bold border ${classes.badge}`}>
+            Capacidad: <strong style={{ color: buttonColor }}>{totalCapacity} comensales</strong>
           </span>
           {tableServiceMode === 'ASSIGNED' && (
-            <span className="px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-300 font-bold border border-amber-500/20">
+            <span
+              className={`px-2.5 py-1 rounded-xl font-bold border ${
+                isLight
+                  ? 'bg-amber-100 text-amber-950 border-amber-300'
+                  : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+              }`}
+            >
               Asignadas: {assignedCount} / {tables.length}
               {unassignedCount > 0 && ` (${unassignedCount} libres)`}
             </span>
@@ -623,25 +655,40 @@ export default function DashboardTablesManager({
           <button
             type="button"
             onClick={() => setSelectedAreaFilter('ALL')}
+            style={
+              selectedAreaFilter === 'ALL'
+                ? {
+                    backgroundColor: buttonColor,
+                    color: getContrastTextColor(buttonColor),
+                  }
+                : undefined
+            }
             className={`px-3 py-1 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
               selectedAreaFilter === 'ALL'
-                ? 'bg-[#C08552] text-white shadow-sm'
-                : 'bg-[#251e1b] text-slate-400 hover:text-white border border-[#382b25]'
+                ? 'shadow-sm'
+                : classes.buttonGhost
             }`}
           >
             Todas ({tables.length})
           </button>
           {areas.map((a) => {
             const count = tables.filter((t) => t.areaId === a.id).length
+            const isSel = selectedAreaFilter === a.id
             return (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => setSelectedAreaFilter(a.id)}
+                style={
+                  isSel
+                    ? {
+                        backgroundColor: buttonColor,
+                        color: getContrastTextColor(buttonColor),
+                      }
+                    : undefined
+                }
                 className={`px-3 py-1 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
-                  selectedAreaFilter === a.id
-                    ? 'bg-[#C08552] text-white shadow-sm'
-                    : 'bg-[#251e1b] text-slate-400 hover:text-white border border-[#382b25]'
+                  isSel ? 'shadow-sm' : classes.buttonGhost
                 }`}
               >
                 {a.name} ({count})
@@ -652,10 +699,18 @@ export default function DashboardTablesManager({
             <button
               type="button"
               onClick={() => setSelectedAreaFilter('UNASSIGNED')}
+              style={
+                selectedAreaFilter === 'UNASSIGNED'
+                  ? {
+                      backgroundColor: buttonColor,
+                      color: getContrastTextColor(buttonColor),
+                    }
+                  : undefined
+              }
               className={`px-3 py-1 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                 selectedAreaFilter === 'UNASSIGNED'
-                  ? 'bg-[#C08552] text-white shadow-sm'
-                  : 'bg-[#251e1b] text-slate-400 hover:text-white border border-[#382b25]'
+                  ? 'shadow-sm'
+                  : classes.buttonGhost
               }`}
             >
               Sin Área ({tables.filter((t) => !t.areaId).length})
@@ -676,7 +731,11 @@ export default function DashboardTablesManager({
               })
               setShowAreaModal(true)
             }}
-            className="px-2.5 py-1 rounded-xl text-xs font-bold shrink-0 bg-[#C08552]/15 text-[#C08552] hover:bg-[#C08552]/25 border border-[#C08552]/30 flex items-center gap-1 transition-all cursor-pointer"
+            className={`px-2.5 py-1 rounded-xl text-xs font-bold shrink-0 border flex items-center gap-1 transition-all cursor-pointer ${
+              isLight
+                ? 'bg-[#C08552]/15 text-[#895737] hover:bg-[#C08552]/25 border-[#C08552]/30'
+                : 'bg-white/10 text-amber-300 hover:bg-white/15 border-white/20'
+            }`}
             title="Añadir nueva área (ej: Terraza, Frente, Trasera)"
           >
             <Plus className="w-3 h-3" />
@@ -692,19 +751,25 @@ export default function DashboardTablesManager({
           if (!currentArea) return null
           const areaTablesCount = tables.filter((t) => t.areaId === currentArea.id).length
           return (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#1a1412] px-4 py-3 rounded-2xl border border-[#382b25]">
+            <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-2xl border ${classes.subCard}`}>
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#C08552]/20 text-[#C08552] flex items-center justify-center">
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center font-bold"
+                  style={{
+                    backgroundColor: `${buttonColor}25`,
+                    color: buttonColor,
+                  }}
+                >
                   <Layers className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                  <h4 className={`text-xs font-bold flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
                     Zona: {currentArea.name}
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#251e1b] text-[#C08552] border border-[#382b25]">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border ${classes.badge}`}>
                       {areaTablesCount} mesas
                     </span>
                   </h4>
-                  <p className="text-[11px] text-slate-400">
+                  <p className={`text-[11px] ${classes.textMuted}`}>
                     Mesas ubicadas en la sección {currentArea.name}.
                   </p>
                 </div>
@@ -724,9 +789,9 @@ export default function DashboardTablesManager({
                     })
                     setShowBulkModal(true)
                   }}
-                  className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] text-[#C08552] text-xs font-bold flex items-center gap-1.5 border border-[#382b25] transition-all cursor-pointer"
+                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5" style={{ color: buttonColor }} />
                   <span>+ Agregar Mesas</span>
                 </button>
 
@@ -752,24 +817,31 @@ export default function DashboardTablesManager({
 
       {/* Grid de Mesas */}
       {loading ? (
-        <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
-          <Loader2 className="w-7 h-7 animate-spin text-[#C08552]" />
+        <div className={`py-12 flex flex-col items-center justify-center gap-2 ${classes.textMuted}`}>
+          <Loader2 className="w-7 h-7 animate-spin" style={{ color: buttonColor }} />
           <span className="text-xs">Cargando mesas de la sucursal...</span>
         </div>
       ) : tables.length === 0 ? (
-        <div className="py-12 text-center border border-dashed border-[#382b25] rounded-3xl p-8 space-y-3 bg-[#1a1412]/40">
-          <div className="w-12 h-12 rounded-2xl bg-[#C08552]/10 text-[#C08552] flex items-center justify-center mx-auto">
+        <div className={`py-12 text-center border border-dashed rounded-3xl p-8 space-y-3 ${classes.card}`}>
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto"
+            style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+          >
             <Coffee className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-white">No hay mesas configuradas aún</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>No hay mesas configuradas aún</h3>
+          <p className={`text-xs max-w-sm mx-auto ${classes.textMuted}`}>
             Agrega las mesas de tu salón para que los meseros puedan tomar comandas y gestionar consumos.
           </p>
           <div className="flex justify-center gap-2 pt-2">
             <button
               type="button"
               onClick={() => setShowBulkModal(true)}
-              className="px-4 py-2 rounded-xl bg-[#C08552] text-white text-xs font-bold shadow-md cursor-pointer hover:opacity-90"
+              style={{
+                backgroundColor: buttonColor,
+                color: getContrastTextColor(buttonColor),
+              }}
+              className="px-4 py-2 rounded-xl text-xs font-bold shadow-md cursor-pointer hover:opacity-90"
             >
               Generar Lote Rápido (ej. 6 o 10 Mesas)
             </button>
@@ -786,31 +858,33 @@ export default function DashboardTablesManager({
                 key={table.id}
                 className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 relative group ${
                   isOccupied
-                    ? 'bg-amber-950/20 border-amber-500/50 shadow-md shadow-amber-500/10'
-                    : 'bg-[#1c1715] border-[#382b25] hover:border-[#C08552]/50'
+                    ? isLight
+                      ? 'bg-amber-50/90 border-amber-300 shadow-md ring-1 ring-amber-300/40 text-[#2B1712]'
+                      : 'bg-amber-950/20 border-amber-500/50 shadow-md shadow-amber-500/10 text-white'
+                    : `${classes.card} hover:border-[#C08552]/60`
                 }`}
               >
                 {/* Cabecera de la Tarjeta */}
                 <div className="flex items-start justify-between">
                   <div>
-                    <h4 className="text-base font-black text-white">{table.name}</h4>
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#C08552]" />
+                    <h4 className={`text-base font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>{table.name}</h4>
+                    <span className={`text-[11px] flex items-center gap-1.5 mt-0.5 ${classes.textMuted}`}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: buttonColor }} />
                       {table.areaName}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
                     {/* Badge de Capacidad */}
-                    <span className="px-2 py-0.5 rounded-lg bg-[#251e1b] border border-[#382b25] text-[11px] text-slate-300 font-bold flex items-center gap-1">
-                      <Users className="w-3 h-3 text-slate-400" />
+                    <span className={`px-2 py-0.5 rounded-lg border text-[11px] font-bold flex items-center gap-1 ${classes.badge}`}>
+                      <Users className="w-3 h-3" />
                       {table.capacity}
                     </span>
 
                     {/* Badge Estado */}
                     <span
                       className={`w-2.5 h-2.5 rounded-full ${
-                        isOccupied ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+                        isOccupied ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
                       }`}
                       title={isOccupied ? 'Mesa Ocupada con comanda' : 'Mesa Libre'}
                     />
@@ -818,14 +892,14 @@ export default function DashboardTablesManager({
                 </div>
 
                 {/* Sección de Asignación de Mesero Titular */}
-                <div className="space-y-1.5 bg-[#14100e] p-2.5 rounded-xl border border-[#2a201c]">
+                <div className={`space-y-1.5 p-2.5 rounded-xl border ${classes.subCard}`}>
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400 font-medium flex items-center gap-1">
-                      <UserCheck className="w-3 h-3 text-[#C08552]" />
+                    <span className={`font-medium flex items-center gap-1 ${classes.textMuted}`}>
+                      <UserCheck className="w-3 h-3" style={{ color: buttonColor }} />
                       Mesero Titular:
                     </span>
                     {tableServiceMode === 'FREE' && (
-                      <span className="text-[10px] text-emerald-400 font-semibold">
+                      <span className={`text-[10px] font-semibold ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
                         Modo Libre
                       </span>
                     )}
@@ -837,11 +911,7 @@ export default function DashboardTablesManager({
                         value={table.assignedWaiter?.id || ''}
                         disabled={assigningTableId === table.id}
                         onChange={(e) => handleQuickAssignWaiter(table.id, e.target.value)}
-                        className={`w-full text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-[#1c1715] border text-white transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
-                          isAssigned
-                            ? 'border-[#C08552]/40 text-amber-200'
-                            : 'border-slate-700/80 text-slate-400'
-                        }`}
+                        className={`w-full text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer focus:outline-none focus:ring-1 ${classes.input}`}
                       >
                         <option value="">(Sin asignar - Mesa Libre)</option>
                         {waiters.map((w) => (
@@ -852,12 +922,12 @@ export default function DashboardTablesManager({
                       </select>
                       {assigningTableId === table.id && (
                         <div className="absolute right-2 top-2">
-                          <Loader2 className="w-3 h-3 animate-spin text-[#C08552]" />
+                          <Loader2 className="w-3 h-3 animate-spin" style={{ color: buttonColor }} />
                         </div>
                       )}
                     </div>
                   ) : (
-                    <p className="text-[11px] text-slate-400 italic">
+                    <p className={`text-[11px] italic ${classes.textMuted}`}>
                       {isAssigned
                         ? `Preferente: ${table.assignedWaiter?.name}`
                         : 'Abierta para cualquier mesero'}
@@ -867,14 +937,20 @@ export default function DashboardTablesManager({
 
                 {/* Comanda en curso si está ocupada */}
                 {table.activeOrder && (
-                  <div className="text-[11px] bg-amber-500/10 border border-amber-500/20 p-2 rounded-xl flex items-center justify-between text-amber-300">
+                  <div
+                    className={`text-[11px] p-2 rounded-xl flex items-center justify-between border ${
+                      isLight
+                        ? 'bg-amber-100 text-amber-950 border-amber-300 font-bold'
+                        : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                    }`}
+                  >
                     <span>Comanda #{table.activeOrder.orderNumber}</span>
                     <strong className="font-mono">${table.activeOrder.total.toFixed(2)}</strong>
                   </div>
                 )}
 
                 {/* Acciones Editar / Eliminar */}
-                <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-[#251e1b]">
+                <div className={`flex items-center justify-end gap-1.5 pt-1 border-t ${classes.divider}`}>
                   <button
                     type="button"
                     onClick={() => {
@@ -887,7 +963,7 @@ export default function DashboardTablesManager({
                       })
                       setShowCreateModal(true)
                     }}
-                    className="p-1.5 rounded-lg bg-[#251e1b] hover:bg-[#332924] text-slate-400 hover:text-white transition-all cursor-pointer"
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${classes.buttonGhost}`}
                     title="Editar mesa"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -896,7 +972,7 @@ export default function DashboardTablesManager({
                   <button
                     type="button"
                     onClick={() => handleDeleteTable(table)}
-                    className="p-1.5 rounded-lg bg-[#251e1b] hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all cursor-pointer"
+                    className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-500 transition-all cursor-pointer"
                     title="Eliminar mesa"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -910,16 +986,16 @@ export default function DashboardTablesManager({
 
       {/* MODAL CREAR / EDITAR MESA INDIVIDUAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-[#14100e] border border-[#382b25] p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-[#2a201c] pb-3">
-              <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+              <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
                 {editingTable ? `Editar ${editingTable.name}` : 'Nueva Mesa de Salón'}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="w-7 h-7 rounded-xl bg-[#251e1b] text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
@@ -927,37 +1003,38 @@ export default function DashboardTablesManager({
 
             <form onSubmit={handleSaveTable} className="space-y-3.5 text-xs">
               <div className="space-y-1">
-                <label className="text-slate-300 font-bold">Nombre o Número de Mesa *</label>
+                <label className={`font-bold block ${classes.textMain}`}>Nombre o Número de Mesa *</label>
                 <input
                   type="text"
                   placeholder="Ej: Mesa 1, Barra 2, Terraza A"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
-                  className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-bold">Capacidad (Personas)</label>
+                  <label className={`font-bold block ${classes.textMain}`}>Capacidad (Personas)</label>
                   <input
                     type="number"
                     min="1"
                     max="50"
                     value={formData.capacity}
                     onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) || 4 })}
-                    className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="text-slate-300 font-bold">Área / Zona</label>
+                    <label className={`font-bold block ${classes.textMain}`}>Área / Zona</label>
                     <button
                       type="button"
                       onClick={() => setShowAreaModal(true)}
-                      className="text-[10px] text-[#C08552] hover:underline font-bold cursor-pointer"
+                      style={{ color: buttonColor }}
+                      className="text-[10px] hover:underline font-bold cursor-pointer"
                     >
                       + Nueva Zona
                     </button>
@@ -965,7 +1042,7 @@ export default function DashboardTablesManager({
                   <select
                     value={formData.areaId}
                     onChange={(e) => setFormData({ ...formData, areaId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   >
                     <option value="">General (Sin área)</option>
                     {areas.map((a) => (
@@ -978,16 +1055,16 @@ export default function DashboardTablesManager({
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-bold flex items-center justify-between">
+                <label className={`font-bold flex items-center justify-between ${classes.textMain}`}>
                   <span>Mesero Titular Responsable</span>
-                  <span className="text-[10px] text-slate-500 font-normal">
+                  <span className={`text-[10px] font-normal ${classes.textSub}`}>
                     {tableServiceMode === 'FREE' ? 'Opcional (Modo Libre activo)' : 'Recomendado'}
                   </span>
                 </label>
                 <select
                   value={formData.assignedWaiterId}
                   onChange={(e) => setFormData({ ...formData, assignedWaiterId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                 >
                   <option value="">(Sin mesero asignado - Libre)</option>
                   {waiters.map((w) => (
@@ -998,19 +1075,22 @@ export default function DashboardTablesManager({
                 </select>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-[#2a201c]">
+              <div className={`pt-2 flex justify-end gap-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#251e1b] text-slate-300 font-bold cursor-pointer"
+                  className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  style={{ backgroundColor: primaryColor }}
-                  className="px-5 py-2 rounded-xl text-white font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+                  style={{
+                    backgroundColor: activePrimary,
+                    color: getContrastTextColor(activePrimary),
+                  }}
+                  className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingTable ? 'Actualizar Mesa' : 'Crear Mesa'}</span>
@@ -1023,22 +1103,25 @@ export default function DashboardTablesManager({
 
       {/* MODAL GENERACIÓN RÁPIDA EN LOTE */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-[#14100e] border border-[#382b25] p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-[#2a201c] pb-3">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-[#C08552]/20 text-[#C08552] flex items-center justify-center font-bold">
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center font-bold"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Generar Lote de Mesas</h3>
-                  <p className="text-[11px] text-slate-400">Crea múltiples mesas numeradas en 1 clic</p>
+                  <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Generar Lote de Mesas</h3>
+                  <p className={`text-[11px] ${classes.textMuted}`}>Crea múltiples mesas numeradas en 1 clic</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowBulkModal(false)}
-                className="w-7 h-7 rounded-xl bg-[#251e1b] text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
@@ -1047,7 +1130,7 @@ export default function DashboardTablesManager({
             <form onSubmit={handleBulkGenerate} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-bold">¿Cuántas mesas crear?</label>
+                  <label className={`font-bold block ${classes.textMain}`}>¿Cuántas mesas crear?</label>
                   <input
                     type="number"
                     min="1"
@@ -1055,38 +1138,38 @@ export default function DashboardTablesManager({
                     value={bulkData.count}
                     onChange={(e) => setBulkData({ ...bulkData, count: Number(e.target.value) || 1 })}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-bold">Número Inicial</label>
+                  <label className={`font-bold block ${classes.textMain}`}>Número Inicial</label>
                   <input
                     type="number"
                     min="1"
                     value={bulkData.startNumber}
                     onChange={(e) => setBulkData({ ...bulkData, startNumber: Number(e.target.value) || 1 })}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-bold">Prefijo de Nombre</label>
+                  <label className={`font-bold block ${classes.textMain}`}>Prefijo de Nombre</label>
                   <input
                     type="text"
                     placeholder="Mesa"
                     value={bulkData.prefix}
                     onChange={(e) => setBulkData({ ...bulkData, prefix: e.target.value })}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-300 font-bold">Capacidad (Comensales)</label>
+                  <label className={`font-bold block ${classes.textMain}`}>Capacidad (Comensales)</label>
                   <input
                     type="number"
                     min="1"
@@ -1094,21 +1177,22 @@ export default function DashboardTablesManager({
                     value={bulkData.capacity}
                     onChange={(e) => setBulkData({ ...bulkData, capacity: Number(e.target.value) || 4 })}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-slate-300 font-bold">Área / Zona de Destino</label>
+                  <label className={`font-bold block ${classes.textMain}`}>Área / Zona de Destino</label>
                   <button
                     type="button"
                     onClick={() => {
                       setShowBulkModal(false)
                       setShowAreaModal(true)
                     }}
-                    className="text-[10px] text-[#C08552] hover:underline font-bold cursor-pointer"
+                    style={{ color: buttonColor }}
+                    className="text-[10px] hover:underline font-bold cursor-pointer"
                   >
                     + Nueva Zona
                   </button>
@@ -1116,7 +1200,7 @@ export default function DashboardTablesManager({
                 <select
                   value={bulkData.areaId}
                   onChange={(e) => setBulkData({ ...bulkData, areaId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                 >
                   <option value="">General (Sin área asignada)</option>
                   {areas.map((a) => (
@@ -1128,30 +1212,33 @@ export default function DashboardTablesManager({
               </div>
 
               {/* Previsualización */}
-              <div className="p-3 rounded-2xl bg-[#1c1715] border border-[#2a201c] text-slate-400 space-y-1">
-                <span className="font-semibold text-slate-300 block">Previsualización del lote:</span>
-                <p className="text-[11px]">
-                  Se generarán: <strong className="text-white">{bulkData.prefix} {bulkData.startNumber}</strong> hasta{' '}
-                  <strong className="text-white">
+              <div className={`p-3 rounded-2xl border space-y-1 ${classes.subCard}`}>
+                <span className={`font-semibold block ${classes.textMain}`}>Previsualización del lote:</span>
+                <p className={`text-[11px] ${classes.textMuted}`}>
+                  Se generarán: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{bulkData.prefix} {bulkData.startNumber}</strong> hasta{' '}
+                  <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>
                     {bulkData.prefix} {bulkData.startNumber + bulkData.count - 1}
                   </strong>{' '}
                   con capacidad de {bulkData.capacity} comensales.
                 </p>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-[#2a201c]">
+              <div className={`pt-2 flex justify-end gap-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowBulkModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#251e1b] text-slate-300 font-bold cursor-pointer"
+                  className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submittingBulk}
-                  style={{ backgroundColor: primaryColor }}
-                  className="px-5 py-2 rounded-xl text-white font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+                  style={{
+                    backgroundColor: activePrimary,
+                    color: getContrastTextColor(activePrimary),
+                  }}
+                  className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {submittingBulk && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Generar {bulkData.count} Mesas</span>
@@ -1164,16 +1251,19 @@ export default function DashboardTablesManager({
 
       {/* MODAL GESTIÓN Y CREACIÓN DE ÁREAS / ZONAS */}
       {showAreaModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-[#14100e] border border-[#382b25] p-6 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[#2a201c] pb-3.5">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto border ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3.5 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-[#C08552]/20 text-[#C08552] flex items-center justify-center font-bold">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center font-bold"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Zonas y Áreas de Salón</h3>
-                  <p className="text-[11px] text-slate-400">
+                  <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Zonas y Áreas de Salón</h3>
+                  <p className={`text-[11px] ${classes.textMuted}`}>
                     Crea áreas (Terraza, Frente, Salón) y genera sus mesas en un solo clic
                   </p>
                 </div>
@@ -1181,7 +1271,7 @@ export default function DashboardTablesManager({
               <button
                 type="button"
                 onClick={() => setShowAreaModal(false)}
-                className="w-7 h-7 rounded-xl bg-[#251e1b] text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
@@ -1190,35 +1280,45 @@ export default function DashboardTablesManager({
             {/* Formulario de Nueva Área */}
             <form onSubmit={handleSaveArea} className="space-y-4 text-xs">
               <div className="space-y-2">
-                <label className="text-slate-300 font-bold block">
+                <label className={`font-bold block ${classes.textMain}`}>
                   Sugerencias rápidas de zonas:
                 </label>
                 <div className="flex flex-wrap gap-1.5">
-                  {popularAreaSuggestions.map((item) => (
-                    <button
-                      key={item.name}
-                      type="button"
-                      onClick={() => {
-                        setAreaFormData((prev) => ({
-                          ...prev,
-                          name: item.name,
-                          prefix: item.prefix,
-                        }))
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
-                        areaFormData.name === item.name
-                          ? 'bg-[#C08552] text-white border-[#C08552]'
-                          : 'bg-[#1c1715] text-slate-300 border-[#382b25] hover:border-slate-600'
-                      }`}
-                    >
-                      {item.name}
-                    </button>
-                  ))}
+                  {popularAreaSuggestions.map((item) => {
+                    const isSelected = areaFormData.name === item.name
+                    return (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => {
+                          setAreaFormData((prev) => ({
+                            ...prev,
+                            name: item.name,
+                            prefix: item.prefix,
+                          }))
+                        }}
+                        style={
+                          isSelected
+                            ? {
+                                backgroundColor: buttonColor,
+                                color: getContrastTextColor(buttonColor),
+                                borderColor: buttonColor,
+                              }
+                            : undefined
+                        }
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
+                          isSelected ? 'shadow-xs' : classes.buttonGhost
+                        }`}
+                      >
+                        {item.name}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-300 font-bold">Nombre del Área / Zona *</label>
+                <label className={`font-bold block ${classes.textMain}`}>Nombre del Área / Zona *</label>
                 <input
                   type="text"
                   placeholder="Ej: Terraza, Parte Frontal, Patio Trasero"
@@ -1231,16 +1331,16 @@ export default function DashboardTablesManager({
                     })
                   }
                   required
-                  className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                 />
               </div>
 
               {/* Opción de crear mesas automáticamente */}
-              <div className="p-3.5 rounded-2xl bg-[#1c1715] border border-[#2a201c] space-y-3">
+              <div className={`p-3.5 rounded-2xl border space-y-3 ${classes.subCard}`}>
                 <label className="flex items-center justify-between cursor-pointer">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#C08552]" />
-                    <span className="font-bold text-white text-xs">
+                    <Sparkles className="w-4 h-4" style={{ color: buttonColor }} />
+                    <span className={`font-bold text-xs ${classes.textMain}`}>
                       ¿Generar mesas automáticamente en esta área?
                     </span>
                   </div>
@@ -1250,15 +1350,16 @@ export default function DashboardTablesManager({
                     onChange={(e) =>
                       setAreaFormData({ ...areaFormData, generateTables: e.target.checked })
                     }
-                    className="w-4 h-4 accent-[#C08552] rounded cursor-pointer"
+                    className="w-4 h-4 rounded cursor-pointer"
+                    style={{ accentColor: buttonColor }}
                   />
                 </label>
 
                 {areaFormData.generateTables && (
-                  <div className="space-y-3 pt-2 border-t border-[#2a201c] animate-in fade-in-50">
+                  <div className={`space-y-3 pt-2 border-t animate-in fade-in-50 ${classes.divider}`}>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-slate-300 font-bold">Cantidad de mesas</label>
+                        <label className={`font-bold block ${classes.textMain}`}>Cantidad de mesas</label>
                         <input
                           type="number"
                           min="1"
@@ -1270,12 +1371,12 @@ export default function DashboardTablesManager({
                               tablesCount: Number(e.target.value) || 1,
                             })
                           }
-                          className="w-full px-3 py-1.5 rounded-xl bg-[#251e1b] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-slate-300 font-bold">Capacidad por mesa</label>
+                        <label className={`font-bold block ${classes.textMain}`}>Capacidad por mesa</label>
                         <input
                           type="number"
                           min="1"
@@ -1287,14 +1388,14 @@ export default function DashboardTablesManager({
                               capacity: Number(e.target.value) || 4,
                             })
                           }
-                          className="w-full px-3 py-1.5 rounded-xl bg-[#251e1b] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-slate-300 font-bold">Prefijo de las mesas</label>
+                        <label className={`font-bold block ${classes.textMain}`}>Prefijo de las mesas</label>
                         <input
                           type="text"
                           placeholder={areaFormData.name || 'Mesa'}
@@ -1302,12 +1403,12 @@ export default function DashboardTablesManager({
                           onChange={(e) =>
                             setAreaFormData({ ...areaFormData, prefix: e.target.value })
                           }
-                          className="w-full px-3 py-1.5 rounded-xl bg-[#251e1b] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-slate-300 font-bold">Mesero titular (Opcional)</label>
+                        <label className={`font-bold block ${classes.textMain}`}>Mesero titular (Opcional)</label>
                         <select
                           value={areaFormData.defaultWaiterId}
                           onChange={(e) =>
@@ -1316,7 +1417,7 @@ export default function DashboardTablesManager({
                               defaultWaiterId: e.target.value,
                             })
                           }
-                          className="w-full px-3 py-1.5 rounded-xl bg-[#251e1b] border border-[#382b25] text-white focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
                         >
                           <option value="">(Sin asignar)</option>
                           {waiters.map((w) => (
@@ -1328,7 +1429,13 @@ export default function DashboardTablesManager({
                       </div>
                     </div>
 
-                    <p className="text-[11px] text-amber-200/80 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
+                    <p
+                      className={`text-[11px] p-2.5 rounded-xl border ${
+                        isLight
+                          ? 'bg-amber-50 text-amber-950 border-amber-300'
+                          : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                      }`}
+                    >
                       💡 Se creará la zona <strong>{areaFormData.name || 'Nueva'}</strong> con{' '}
                       <strong>{areaFormData.tablesCount} mesas</strong> ({areaFormData.prefix || areaFormData.name || 'Mesa'} 1 a {areaFormData.prefix || areaFormData.name || 'Mesa'}{' '}
                       {areaFormData.tablesCount}) para {areaFormData.capacity} comensales.
@@ -1337,19 +1444,22 @@ export default function DashboardTablesManager({
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-1 border-t border-[#2a201c]">
+              <div className={`flex justify-end gap-2 pt-1 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowAreaModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#251e1b] text-slate-300 font-bold cursor-pointer"
+                  className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submittingArea || !areaFormData.name.trim()}
-                  style={{ backgroundColor: primaryColor }}
-                  className="px-5 py-2 rounded-xl text-white font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+                  style={{
+                    backgroundColor: activePrimary,
+                    color: getContrastTextColor(activePrimary),
+                  }}
+                  className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {submittingArea && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>
@@ -1363,8 +1473,8 @@ export default function DashboardTablesManager({
 
             {/* Listado de Áreas Actuales */}
             {areas.length > 0 && (
-              <div className="space-y-2 pt-3 border-t border-[#2a201c]">
-                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              <div className={`space-y-2 pt-3 border-t ${classes.divider}`}>
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${classes.textMuted}`}>
                   Áreas existentes ({areas.length})
                 </h4>
                 <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
@@ -1373,12 +1483,12 @@ export default function DashboardTablesManager({
                     return (
                       <div
                         key={a.id}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-[#1c1715] border border-[#2a201c]"
+                        className={`flex items-center justify-between p-2.5 rounded-xl border ${classes.subCard}`}
                       >
                         <div className="flex items-center gap-2">
-                          <Layers className="w-3.5 h-3.5 text-[#C08552]" />
-                          <span className="font-bold text-white text-xs">{a.name}</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#251e1b] text-slate-400 border border-[#382b25]">
+                          <Layers className="w-3.5 h-3.5" style={{ color: buttonColor }} />
+                          <span className={`font-bold text-xs ${classes.textMain}`}>{a.name}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-md border ${classes.badge}`}>
                             {count} {count === 1 ? 'mesa' : 'mesas'}
                           </span>
                         </div>
@@ -1390,7 +1500,7 @@ export default function DashboardTablesManager({
                               setSelectedAreaFilter(a.id)
                               setShowAreaModal(false)
                             }}
-                            className="px-2 py-1 rounded-lg bg-[#251e1b] hover:bg-[#332924] text-xs text-slate-300 font-semibold cursor-pointer"
+                            className={`px-2 py-1 rounded-lg text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
                           >
                             Ver mesas
                           </button>
@@ -1398,7 +1508,7 @@ export default function DashboardTablesManager({
                             type="button"
                             disabled={deletingAreaId === a.id}
                             onClick={() => handleDeleteArea(a.id, a.name)}
-                            className="p-1 rounded-lg bg-[#251e1b] hover:bg-red-500/20 text-slate-400 hover:text-red-400 cursor-pointer"
+                            className="p-1 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-500 cursor-pointer"
                             title="Eliminar área"
                           >
                             {deletingAreaId === a.id ? (

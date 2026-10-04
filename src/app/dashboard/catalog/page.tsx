@@ -18,6 +18,7 @@ import {
   CheckCircle,
 } from 'lucide-react'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
+import { useDashboardTheme } from '@/context/dashboard-theme-context'
 
 interface InventoryItem {
   id: string
@@ -59,6 +60,7 @@ interface Product {
 }
 
 export default function CatalogManagerPage() {
+  const { isLight, buttonColor, primaryColor, contrastTextButton, classes } = useDashboardTheme()
   const [activeTab, setActiveTab] = useState<'products' | 'ingredients' | 'categories'>('products')
 
   const [products, setProducts] = useState<Product[]>([])
@@ -285,26 +287,26 @@ export default function CatalogManagerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
       {/* Top Navbar */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+      <header className={`border-b px-6 py-4 flex items-center justify-between sticky top-0 z-30 transition-colors ${classes.header}`}>
         <div className="flex items-center gap-4">
           <Link
             href="/dashboard"
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all flex items-center gap-1.5 text-xs font-medium"
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
-          <div className="h-5 w-px bg-slate-800"></div>
+          <div className={`h-5 w-px border-l ${classes.divider}`}></div>
           <div>
-            <h1 className="font-bold text-base text-white flex items-center gap-2">
-              <Package className="w-5 h-5 text-violet-400" />
+            <h1 className={`font-bold text-base flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Package className="w-5 h-5" style={{ color: buttonColor }} />
               {businessSettings.recipesEnabled
                 ? 'Catálogo, Insumos y Recetario'
                 : 'Catálogo de Productos'}
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className={`text-xs ${classes.textMuted}`}>
               {businessSettings.recipesEnabled
                 ? 'Motor de productos con desglose de ingredientes por porción'
                 : 'Gestión de productos y categorías de venta'}
@@ -324,7 +326,8 @@ export default function CatalogManagerPage() {
                 }
                 setShowProductModal(true)
               }}
-              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-xs flex items-center gap-2 shadow-lg shadow-violet-600/30 transition-all cursor-pointer"
+              style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+              className="px-4 py-2 rounded-xl font-medium text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo Producto</span>
@@ -338,7 +341,8 @@ export default function CatalogManagerPage() {
                 setError(null)
                 setShowItemModal(true)
               }}
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs flex items-center gap-2 shadow-lg shadow-amber-600/30 transition-all cursor-pointer"
+              style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+              className="px-4 py-2 rounded-xl font-medium text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo Insumo Base</span>
@@ -352,7 +356,8 @@ export default function CatalogManagerPage() {
                 setError(null)
                 setShowCategoryModal(true)
               }}
-              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+              style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+              className="px-4 py-2 rounded-xl font-medium text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
             >
               <Plus className="w-4 h-4" />
               <span>Nueva Categoría</span>
@@ -364,14 +369,15 @@ export default function CatalogManagerPage() {
       {/* Main Body */}
       <main className="flex-1 w-full p-6 sm:p-8 space-y-6 transition-all duration-300">
         {/* Navigation Tabs */}
-        <div className="flex gap-2 border-b border-slate-800 pb-3">
+        <div className={`flex gap-2 border-b pb-3 ${classes.divider}`}>
           <button
             type="button"
             onClick={() => setActiveTab('products')}
+            style={activeTab === 'products' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
             className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'products'
-                ? 'bg-violet-600 text-white shadow-md shadow-violet-600/20'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
+                ? 'shadow-md font-bold'
+                : `${classes.buttonGhost} ${classes.textMuted}`
             }`}
           >
             <Coffee className="w-4 h-4" />
@@ -382,10 +388,11 @@ export default function CatalogManagerPage() {
             <button
               type="button"
               onClick={() => setActiveTab('ingredients')}
+              style={activeTab === 'ingredients' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
               className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 activeTab === 'ingredients'
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-                  : 'bg-slate-900 text-slate-400 hover:text-white'
+                  ? 'shadow-md font-bold'
+                  : `${classes.buttonGhost} ${classes.textMuted}`
               }`}
             >
               <Scale className="w-4 h-4" />
@@ -396,10 +403,11 @@ export default function CatalogManagerPage() {
           <button
             type="button"
             onClick={() => setActiveTab('categories')}
+            style={activeTab === 'categories' ? { backgroundColor: buttonColor, color: contrastTextButton } : undefined}
             className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'categories'
-                ? 'bg-slate-800 text-white'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
+                ? 'shadow-md font-bold'
+                : `${classes.buttonGhost} ${classes.textMuted}`
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -409,7 +417,7 @@ export default function CatalogManagerPage() {
 
         {/* Error notification */}
         {error && (
-          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -417,8 +425,8 @@ export default function CatalogManagerPage() {
 
         {/* Loading state */}
         {loading && (
-          <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
-            <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+          <div className={`py-20 flex flex-col items-center justify-center space-y-3 ${classes.textMuted}`}>
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: buttonColor }} />
             <p className="text-xs">Cargando catálogo e inventario...</p>
           </div>
         )}
@@ -436,45 +444,45 @@ export default function CatalogManagerPage() {
               return (
                 <div
                   key={p.id}
-                  className="rounded-3xl bg-slate-900/60 border border-slate-800 p-5 space-y-4 hover:border-slate-700 transition-all flex flex-col justify-between"
+                  className={`rounded-3xl border p-5 space-y-4 transition-all flex flex-col justify-between ${classes.card}`}
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-800 text-violet-300">
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${classes.badge}`}>
                           {p.category.name}
                         </span>
-                        <h3 className="text-base font-bold text-white mt-1">{p.name}</h3>
-                        <span className="text-[10px] font-mono text-slate-500">{p.code}</span>
+                        <h3 className={`text-base font-bold mt-1 ${classes.textMain}`}>{p.name}</h3>
+                        <span className={`text-[10px] font-mono ${classes.textSub}`}>{p.code}</span>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => handleDeleteProduct(p.id, p.name)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer"
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer hover:bg-rose-500/10 hover:text-rose-500 ${classes.textSub}`}
                         title="Archivar producto"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
 
-                    <p className="text-xs text-slate-400 line-clamp-2">
+                    <p className={`text-xs line-clamp-2 ${classes.textMuted}`}>
                       {p.description || 'Sin descripción'}
                     </p>
 
                     {/* Policy Badge & Recipe Details */}
                     <div>
                       {p.inventoryPolicy === 'RECIPE' && recipe && (
-                        <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-850 space-y-1.5">
-                          <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
+                        <div className={`p-2.5 rounded-xl border space-y-1.5 ${classes.subCard}`}>
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                             <Sparkles className="w-3 h-3" />
                             Receta ({recipe.items.length} insumos):
                           </span>
-                          <div className="text-[11px] text-slate-400 space-y-0.5">
+                          <div className={`text-[11px] space-y-0.5 ${classes.textMuted}`}>
                             {recipe.items.map((it) => (
                               <div key={it.id} className="flex justify-between">
                                 <span>{it.inventoryItem.name}</span>
-                                <strong className="text-slate-300">
+                                <strong className={`font-semibold ${classes.textMain}`}>
                                   {Number(it.quantityBase)} {formatUnitSymbol(it.inventoryItem.baseUnit)}
                                 </strong>
                               </div>
@@ -484,13 +492,13 @@ export default function CatalogManagerPage() {
                       )}
 
                       {p.inventoryPolicy === 'DIRECT' && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
                           📦 Inventario Directo (1 unidad)
                         </span>
                       )}
 
                       {p.inventoryPolicy === 'NONE' && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400">
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg border ${classes.badge}`}>
                           🚫 Sin Inventario
                         </span>
                       )}
@@ -498,20 +506,20 @@ export default function CatalogManagerPage() {
                   </div>
 
                   {/* Financial Metrics Footer */}
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                  <div className={`pt-3 border-t flex items-center justify-between text-xs ${classes.divider}`}>
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Precio Venta</span>
-                      <strong className="text-sm font-bold text-white">${price.toFixed(2)} MXN</strong>
+                      <span className={`text-[10px] block ${classes.textSub}`}>Precio Venta</span>
+                      <strong className={`text-sm font-bold ${classes.textMain}`}>${price.toFixed(2)} MXN</strong>
                     </div>
 
                     <div className="text-center">
-                      <span className="text-[10px] text-slate-500 block">Costo Insumos</span>
-                      <span className="text-xs text-slate-300 font-semibold">${cost.toFixed(2)}</span>
+                      <span className={`text-[10px] block ${classes.textSub}`}>Costo Insumos</span>
+                      <span className={`text-xs font-semibold ${classes.textMuted}`}>${cost.toFixed(2)}</span>
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] text-slate-500 block">Margen</span>
-                      <span className="text-xs font-bold text-emerald-400">{margin}%</span>
+                      <span className={`text-[10px] block ${classes.textSub}`}>Margen</span>
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{margin}%</span>
                     </div>
                   </div>
                 </div>
@@ -522,21 +530,21 @@ export default function CatalogManagerPage() {
 
         {/* TAB 2: INSUMOS EN UNIDAD BASE */}
         {!loading && activeTab === 'ingredients' && (
-          <div className="rounded-3xl bg-slate-900/50 border border-slate-800 overflow-hidden">
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+          <div className={`rounded-3xl border overflow-hidden ${classes.card}`}>
+            <div className={`p-5 border-b flex items-center justify-between ${classes.divider}`}>
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Scale className="w-4 h-4 text-amber-400" /> Insumos Base de Inventario
+                <h3 className={`text-sm font-bold flex items-center gap-2 ${classes.textMain}`}>
+                  <Scale className="w-4 h-4 text-amber-500" /> Insumos Base de Inventario
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className={`text-xs ${classes.textMuted}`}>
                   Todo insumo se registra en una única unidad base (ml, g, piezas) para alimentar recetas y compras.
                 </p>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase font-semibold text-[10px] border-b border-slate-800">
+              <table className={`w-full text-left text-xs ${classes.textMain}`}>
+                <thead className={`uppercase font-semibold text-[10px] border-b ${classes.tableHeader}`}>
                   <tr>
                     <th className="p-3.5">SKU / Insumo</th>
                     <th className="p-3.5">Unidad Base</th>
@@ -546,40 +554,40 @@ export default function CatalogManagerPage() {
                     <th className="p-3.5">Pto. Reorden</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className={`divide-y ${isLight ? 'divide-[#E6D5C3]/60' : 'divide-white/5'}`}>
                   {ingredients.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="p-3.5 font-semibold text-white">
-                        <span className="font-mono text-[10px] text-slate-500 block">{item.sku}</span>
+                    <tr key={item.id} className={`transition-colors ${classes.tableRow}`}>
+                      <td className={`p-3.5 font-semibold ${classes.textMain}`}>
+                        <span className={`font-mono text-[10px] block ${classes.textSub}`}>{item.sku}</span>
                         {item.name}
                       </td>
                       <td className="p-3.5">
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[11px]">
+                        <span className={`px-2 py-0.5 rounded border font-mono text-[11px] ${classes.badge}`}>
                           {formatUnitFull(item.baseUnit)}
                         </span>
                       </td>
-                      <td className="p-3.5 font-medium text-slate-200">
+                      <td className={`p-3.5 font-medium ${classes.textMuted}`}>
                         ${Number(item.costPerUnit).toFixed(4)} / {formatUnitSymbol(item.baseUnit)}
                       </td>
                       <td className="p-3.5">
                         {item.presentations.length > 0 ? (
                           <div className="space-y-0.5">
                             {item.presentations.map((pr) => (
-                              <span key={pr.id} className="block text-slate-300">
+                              <span key={pr.id} className={`block ${classes.textMuted}`}>
                                 {pr.name}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-slate-500">Unitaria</span>
+                          <span className={classes.textSub}>Unitaria</span>
                         )}
                       </td>
-                      <td className="p-3.5 font-mono text-slate-400">
+                      <td className={`p-3.5 font-mono ${classes.textSub}`}>
                         {item.presentations.length > 0
                           ? `1 = ${Number(item.presentations[0].factorToBase)} ${formatUnitSymbol(item.baseUnit)}`
                           : '1 a 1'}
                       </td>
-                      <td className="p-3.5 text-slate-400">
+                      <td className={`p-3.5 ${classes.textSub}`}>
                         {item.reorderPoint ? `${item.reorderPoint} ${formatUnitSymbol(item.baseUnit)}` : '—'}
                       </td>
                     </tr>
@@ -596,16 +604,16 @@ export default function CatalogManagerPage() {
             {categories.map((cat) => (
               <div
                 key={cat.id}
-                className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between"
+                className={`p-5 rounded-2xl border flex items-center justify-between ${classes.card}`}
               >
                 <div>
-                  <span className="font-mono text-[10px] text-slate-500 block">{cat.slug}</span>
-                  <h4 className="text-sm font-bold text-white mt-0.5">{cat.name}</h4>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <span className={`font-mono text-[10px] block ${classes.textSub}`}>{cat.slug}</span>
+                  <h4 className={`text-sm font-bold mt-0.5 ${classes.textMain}`}>{cat.name}</h4>
+                  <p className={`text-xs mt-1 ${classes.textMuted}`}>
                     {cat._count?.products || 0} producto(s) asignados
                   </p>
                 </div>
-                <Tag className="w-5 h-5 text-violet-400" />
+                <Tag className="w-5 h-5 opacity-70" style={{ color: buttonColor }} />
               </div>
             ))}
           </div>
@@ -615,21 +623,24 @@ export default function CatalogManagerPage() {
       {/* MODAL NUEVO PRODUCTO Y CONSTRUCTOR DE RECETAS */}
       {showProductModal && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-violet-600/20 text-violet-400 flex items-center justify-center">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Coffee className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Registrar Producto</h3>
-                  <p className="text-xs text-slate-400">Con cálculo automático de costos e inventario</p>
+                  <h3 className={`text-base font-bold ${classes.textMain}`}>Registrar Producto</h3>
+                  <p className={`text-xs ${classes.textMuted}`}>Con cálculo automático de costos e inventario</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowProductModal(false)}
-                className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer"
+                className={`text-lg cursor-pointer hover:opacity-75 ${classes.textMuted}`}
               >
                 ✕
               </button>
@@ -638,12 +649,12 @@ export default function CatalogManagerPage() {
             <form onSubmit={handleCreateProduct} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Categoría *</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Categoría *</label>
                   <select
                     value={prodForm.categoryId}
                     onChange={(e) => setProdForm({ ...prodForm, categoryId: e.target.value })}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   >
                     <option value="">Selecciona categoría</option>
                     {categories.map((c) => (
@@ -655,32 +666,32 @@ export default function CatalogManagerPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Código / SKU</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Código / SKU</label>
                   <input
                     type="text"
                     value={prodForm.code}
                     onChange={(e) => setProdForm({ ...prodForm, code: e.target.value.toUpperCase() })}
                     placeholder="Ej: BEB-LATTE-12"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono uppercase focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border font-mono uppercase focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Nombre del Producto *</label>
+                <label className={`block font-medium mb-1 ${classes.textMuted}`}>Nombre del Producto *</label>
                 <input
                   type="text"
                   required
                   value={prodForm.name}
                   onChange={(e) => setProdForm({ ...prodForm, name: e.target.value })}
                   placeholder="Ej: Café Mocha 12oz"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Precio de Venta ($ MXN) *</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Precio de Venta ($ MXN) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -688,12 +699,12 @@ export default function CatalogManagerPage() {
                     value={prodForm.price}
                     onChange={(e) => setProdForm({ ...prodForm, price: e.target.value })}
                     placeholder="Ej: 65.00"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Política de Inventario *</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Política de Inventario *</label>
                   <select
                     value={prodForm.inventoryPolicy}
                     onChange={(e) =>
@@ -702,7 +713,7 @@ export default function CatalogManagerPage() {
                         inventoryPolicy: e.target.value as any,
                       })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   >
                     <option value="RECIPE">RECETA (Descuenta ingredientes por porción)</option>
                     <option value="DIRECT">DIRECTO (Descuenta 1 unidad de insumo)</option>
@@ -713,14 +724,14 @@ export default function CatalogManagerPage() {
 
               {/* CONSTRUCTOR DE RECETAS INTERACTIVO */}
               {prodForm.inventoryPolicy === 'RECIPE' && (
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-850 space-y-3">
+                <div className={`p-4 rounded-2xl border space-y-3 ${classes.subCard}`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-semibold text-white flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className={`font-semibold flex items-center gap-1.5 ${classes.textMain}`}>
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
                         Ingredientes de la Receta
                       </span>
-                      <p className="text-[11px] text-slate-400">
+                      <p className={`text-[11px] ${classes.textMuted}`}>
                         Insumos que se descontarán en cada venta
                       </p>
                     </div>
@@ -735,7 +746,7 @@ export default function CatalogManagerPage() {
                   </div>
 
                   {prodForm.recipeItems.length === 0 ? (
-                    <div className="py-4 text-center text-slate-500 text-[11px]">
+                    <div className={`py-4 text-center text-[11px] ${classes.textSub}`}>
                       Haz clic en &quot;Agregar Insumo&quot; para definir los ingredientes de este producto.
                     </div>
                   ) : (
@@ -751,7 +762,7 @@ export default function CatalogManagerPage() {
                                 newItems[idx].inventoryItemId = e.target.value
                                 setProdForm({ ...prodForm, recipeItems: newItems })
                               }}
-                              className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white"
+                              className={`flex-1 px-2.5 py-1.5 rounded-lg border text-xs ${classes.input}`}
                             >
                               {ingredients.map((ing) => (
                                 <option key={ing.id} value={ing.id}>
@@ -770,9 +781,9 @@ export default function CatalogManagerPage() {
                                   newItems[idx].quantityBase = e.target.value
                                   setProdForm({ ...prodForm, recipeItems: newItems })
                                 }}
-                                className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-right"
+                                className={`w-full px-2 py-1.5 rounded-lg border text-right ${classes.input}`}
                               />
-                              <span className="text-[10px] text-slate-400 font-mono w-10">
+                              <span className={`text-[10px] font-mono w-10 ${classes.textSub}`}>
                                 {formatUnitSymbol(selectedIng?.baseUnit)}
                               </span>
                             </div>
@@ -780,7 +791,7 @@ export default function CatalogManagerPage() {
                             <button
                               type="button"
                               onClick={() => removeRecipeRow(idx)}
-                              className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                              className="text-rose-500 hover:text-rose-400 p-1 cursor-pointer"
                             >
                               ✕
                             </button>
@@ -788,9 +799,9 @@ export default function CatalogManagerPage() {
                         )
                       })}
 
-                      <div className="pt-2 border-t border-slate-850 flex justify-between text-xs text-slate-400">
-                        <span>Costo estimado de insumos por porción:</span>
-                        <strong className="text-emerald-400">${liveRecipeCost.toFixed(2)} MXN</strong>
+                      <div className={`pt-2 border-t flex justify-between text-xs ${classes.divider}`}>
+                        <span className={classes.textMuted}>Costo estimado de insumos por porción:</span>
+                        <strong className="text-emerald-600 dark:text-emerald-400">${liveRecipeCost.toFixed(2)} MXN</strong>
                       </div>
                     </div>
                   )}
@@ -799,13 +810,13 @@ export default function CatalogManagerPage() {
 
               {/* SELECCIÓN DE INVENTARIO DIRECTO */}
               {prodForm.inventoryPolicy === 'DIRECT' && (
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-850 space-y-2">
-                  <label className="block text-slate-300 font-medium">Insumo a descontar por venta</label>
+                <div className={`p-4 rounded-2xl border space-y-2 ${classes.subCard}`}>
+                  <label className={`block font-medium ${classes.textMuted}`}>Insumo a descontar por venta</label>
                   <select
                     value={prodForm.directItemId}
                     onChange={(e) => setProdForm({ ...prodForm, directItemId: e.target.value })}
                     required
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                    className={`w-full px-3 py-2 rounded-xl border ${classes.input}`}
                   >
                     <option value="">Selecciona un insumo</option>
                     {ingredients.map((ing) => (
@@ -817,18 +828,19 @@ export default function CatalogManagerPage() {
                 </div>
               )}
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-800">
+              <div className={`pt-3 flex justify-end gap-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowProductModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
+                  className={`px-4 py-2 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submittingProduct}
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium flex items-center gap-1.5 shadow-lg shadow-violet-600/30 cursor-pointer disabled:opacity-50"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2 rounded-xl font-medium flex items-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95"
                 >
                   {submittingProduct && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Guardar Producto</span>
@@ -842,21 +854,24 @@ export default function CatalogManagerPage() {
       {/* MODAL NUEVO INSUMO BASE */}
       {showItemModal && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className={`w-full max-w-lg rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Scale className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Nuevo Insumo de Inventario</h3>
-                  <p className="text-xs text-slate-400">Definido en unidad base para recetas exactas</p>
+                  <h3 className={`text-base font-bold ${classes.textMain}`}>Nuevo Insumo de Inventario</h3>
+                  <p className={`text-xs ${classes.textMuted}`}>Definido en unidad base para recetas exactas</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowItemModal(false)}
-                className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer"
+                className={`text-lg cursor-pointer hover:opacity-75 ${classes.textMuted}`}
               >
                 ✕
               </button>
@@ -865,36 +880,36 @@ export default function CatalogManagerPage() {
             <form onSubmit={handleCreateItem} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Nombre del Insumo *</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Nombre del Insumo *</label>
                   <input
                     type="text"
                     required
                     value={itemForm.name}
                     onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
                     placeholder="Ej: Jarabe de Vainilla"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">SKU / Código</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>SKU / Código</label>
                   <input
                     type="text"
                     value={itemForm.sku}
                     onChange={(e) => setItemForm({ ...itemForm, sku: e.target.value.toUpperCase() })}
                     placeholder="Ej: INS-JAR-VAIN"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono uppercase focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className={`w-full px-3 py-2 rounded-xl border font-mono uppercase focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Unidad Base *</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Unidad Base *</label>
                   <select
                     value={itemForm.baseUnit}
                     onChange={(e) => setItemForm({ ...itemForm, baseUnit: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   >
                     {Object.values(UNIT_DEFINITIONS).map((u) => (
                       <option key={u.code} value={u.code}>
@@ -905,7 +920,7 @@ export default function CatalogManagerPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Costo por Unidad Base ($)</label>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Costo por Unidad Base ($)</label>
                   <input
                     type="number"
                     step="0.0001"
@@ -913,14 +928,14 @@ export default function CatalogManagerPage() {
                     value={itemForm.costPerUnit}
                     onChange={(e) => setItemForm({ ...itemForm, costPerUnit: e.target.value })}
                     placeholder="Ej: 0.1500"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
               </div>
 
               {/* Presentación de compra */}
-              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-850 space-y-2.5">
-                <span className="font-semibold text-slate-300 block">
+              <div className={`p-3.5 rounded-2xl border space-y-2.5 ${classes.subCard}`}>
+                <span className={`font-semibold block ${classes.textMain}`}>
                   Presentación de Compra (Opcional)
                 </span>
                 <div className="grid grid-cols-2 gap-2">
@@ -929,30 +944,31 @@ export default function CatalogManagerPage() {
                     value={itemForm.presentationName}
                     onChange={(e) => setItemForm({ ...itemForm, presentationName: e.target.value })}
                     placeholder="Ej: Botella 750ml"
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white"
+                    className={`px-2.5 py-1.5 rounded-lg border ${classes.input}`}
                   />
                   <input
                     type="number"
                     value={itemForm.presentationFactor}
                     onChange={(e) => setItemForm({ ...itemForm, presentationFactor: e.target.value })}
                     placeholder="Factor (Ej: 750)"
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white"
+                    className={`px-2.5 py-1.5 rounded-lg border ${classes.input}`}
                   />
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-800">
+              <div className={`pt-3 flex justify-end gap-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowItemModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium cursor-pointer"
+                  className={`px-4 py-2 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submittingItem}
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-medium flex items-center gap-1.5 shadow-lg shadow-amber-600/30 cursor-pointer disabled:opacity-50"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2 rounded-xl font-medium flex items-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95"
                 >
                   {submittingItem && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Guardar Insumo</span>
@@ -966,36 +982,37 @@ export default function CatalogManagerPage() {
       {/* MODAL NUEVA CATEGORÍA */}
       {showCategoryModal && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-4 shadow-2xl">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Tag className="w-4 h-4 text-violet-400" /> Nueva Categoría
+          <div className={`w-full max-w-sm rounded-3xl border p-6 space-y-4 shadow-2xl ${classes.modalContent}`}>
+            <h3 className={`text-sm font-bold flex items-center gap-2 ${classes.textMain}`}>
+              <Tag className="w-4 h-4" style={{ color: buttonColor }} /> Nueva Categoría
             </h3>
 
             <form onSubmit={handleCreateCategory} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Nombre de Categoría *</label>
+                <label className={`block font-medium mb-1 ${classes.textMuted}`}>Nombre de Categoría *</label>
                 <input
                   type="text"
                   required
                   value={catName}
                   onChange={(e) => setCatName(e.target.value)}
                   placeholder="Ej: Panadería, Postres, Frappes"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className={`flex justify-end gap-2 pt-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowCategoryModal(false)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-medium cursor-pointer"
+                  className={`px-3 py-1.5 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submittingCategory}
-                  className="px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-4 py-1.5 rounded-xl font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 hover:opacity-95"
                 >
                   {submittingCategory && <Loader2 className="w-3 h-3 animate-spin" />}
                   <span>Guardar</span>

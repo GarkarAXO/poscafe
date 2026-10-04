@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
+import { useDashboardTheme } from '@/context/dashboard-theme-context'
 
 interface Presentation {
   id: string
@@ -64,6 +65,7 @@ interface InventoryItem {
 }
 
 export default function InventoryDashboardPage() {
+  const { isLight, buttonColor, primaryColor, contrastTextButton, classes } = useDashboardTheme()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<InventoryItem[]>([])
   const [search, setSearch] = useState('')
@@ -314,19 +316,19 @@ export default function InventoryDashboardPage() {
   })
 
   return (
-    <div className="flex-1 p-6 sm:p-8 space-y-6 max-w-7xl w-full mx-auto font-sans">
+    <div className={`flex-1 p-6 sm:p-8 space-y-6 max-w-7xl w-full mx-auto font-sans ${classes.textMain}`}>
       {/* Cabecera Principal */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            <h1 className={`text-xl sm:text-2xl font-black tracking-tight ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
               Inventario de Insumos y Materias Primas
             </h1>
-            <span className="px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 text-xs font-semibold">
+            <span className={`px-2 py-0.5 rounded-full border text-xs font-semibold ${classes.badge}`}>
               Control de Stock
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+          <p className={`text-xs sm:text-sm mt-1 ${classes.textMuted}`}>
             Materias primas en unidades base (gramos, mililitros, piezas) que alimentan compras y recetarios.
           </p>
         </div>
@@ -334,7 +336,8 @@ export default function InventoryDashboardPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/dashboard/purchases"
-            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+            style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
           >
             <Truck className="w-4 h-4" />
             <span>+ Cargar Compra o Ticket</span>
@@ -342,51 +345,54 @@ export default function InventoryDashboardPage() {
 
           <Link
             href="/dashboard/catalog"
-            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            className={`px-3.5 py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
           >
-            <Coffee className="w-4 h-4 text-amber-400" />
+            <Coffee className="w-4 h-4 text-amber-500" />
             <span>Recetarios</span>
           </Link>
 
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="px-3.5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            className={`px-3.5 py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
           >
-            <Plus className="w-4 h-4 text-violet-400" />
+            <Plus className="w-4 h-4" style={{ color: buttonColor }} />
             <span>Alta Manual</span>
           </button>
         </div>
       </div>
 
       {/* Cadena Operativa: Banner Explicativo del Flujo */}
-      <div className="p-4 rounded-3xl bg-gradient-to-r from-violet-950/40 via-slate-900/60 to-indigo-950/40 border border-violet-500/20 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
+      <div className={`p-4 rounded-3xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs ${classes.card}`}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-violet-600/20 text-violet-400 flex items-center justify-center shrink-0">
+          <div
+            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+          >
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <strong className="text-white block font-semibold">Monitor de Existencias y Auditoría de Stock</strong>
-            <span className="text-slate-400">
+            <strong className={`block font-semibold ${classes.textMain}`}>Monitor de Existencias y Auditoría de Stock</strong>
+            <span className={classes.textMuted}>
               Tus materias primas se alimentan automáticamente al capturar tus compras y tickets (sin tener que crearlas por duplicado). Al vender en caja, se descuentan en tiempo real según el recetario.
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 font-medium text-slate-300 overflow-x-auto pb-1 md:pb-0">
-          <span className="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400 flex items-center gap-1">
+        <div className="flex items-center gap-2 shrink-0 font-medium overflow-x-auto pb-1 md:pb-0">
+          <span className={`px-2.5 py-1 rounded-xl border text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 ${classes.subCard}`}>
             1. Insumos Base
           </span>
-          <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
-          <span className="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-cyan-400 flex items-center gap-1">
+          <ArrowRight className={`w-3.5 h-3.5 opacity-50 ${classes.textSub}`} />
+          <span className={`px-2.5 py-1 rounded-xl border text-cyan-600 dark:text-cyan-400 font-semibold flex items-center gap-1 ${classes.subCard}`}>
             2. Compras
           </span>
-          <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
-          <span className="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-amber-400 flex items-center gap-1">
+          <ArrowRight className={`w-3.5 h-3.5 opacity-50 ${classes.textSub}`} />
+          <span className={`px-2.5 py-1 rounded-xl border text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 ${classes.subCard}`}>
             3. Recetarios
           </span>
-          <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
-          <span className="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-violet-400 flex items-center gap-1">
+          <ArrowRight className={`w-3.5 h-3.5 opacity-50 ${classes.textSub}`} />
+          <span className={`px-2.5 py-1 rounded-xl border font-semibold flex items-center gap-1 ${classes.subCard}`} style={{ color: buttonColor }}>
             4. Venta POS
           </span>
         </div>
@@ -394,61 +400,61 @@ export default function InventoryDashboardPage() {
 
       {/* Tarjetas KPI */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800/80 shadow-md">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className={`p-5 rounded-3xl border shadow-sm ${classes.card}`}>
+          <div className={`flex items-center justify-between mb-2 ${classes.textMuted}`}>
             <span className="text-xs font-semibold uppercase tracking-wider">Insumos en Catálogo</span>
-            <Boxes className="w-4 h-4 text-violet-400" />
+            <Boxes className="w-4 h-4" style={{ color: buttonColor }} />
           </div>
-          <p className="text-2xl font-extrabold text-white">{totalItems}</p>
-          <span className="text-[11px] text-slate-500">Materias primas registradas</span>
+          <p className={`text-2xl font-extrabold ${classes.textMain}`}>{totalItems}</p>
+          <span className={`text-[11px] ${classes.textSub}`}>Materias primas registradas</span>
         </div>
 
-        <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800/80 shadow-md">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className={`p-5 rounded-3xl border shadow-sm ${classes.card}`}>
+          <div className={`flex items-center justify-between mb-2 ${classes.textMuted}`}>
             <span className="text-xs font-semibold uppercase tracking-wider">Punto de Reorden</span>
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
           </div>
           <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-extrabold text-amber-400">{lowStockCount}</p>
-            <span className="text-[11px] text-slate-400">insumos por agotarse</span>
+            <p className="text-2xl font-extrabold text-amber-600 dark:text-amber-400">{lowStockCount}</p>
+            <span className={`text-[11px] ${classes.textMuted}`}>insumos por agotarse</span>
           </div>
-          <span className="text-[11px] text-slate-500">Requieren orden de compra</span>
+          <span className={`text-[11px] ${classes.textSub}`}>Requieren orden de compra</span>
         </div>
 
-        <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800/80 shadow-md">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className={`p-5 rounded-3xl border shadow-sm ${classes.card}`}>
+          <div className={`flex items-center justify-between mb-2 ${classes.textMuted}`}>
             <span className="text-xs font-semibold uppercase tracking-wider">Sin Existencias</span>
-            <XCircle className="w-4 h-4 text-rose-400" />
+            <XCircle className="w-4 h-4 text-rose-500" />
           </div>
           <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-extrabold text-rose-400">{outOfStockCount}</p>
-            <span className="text-[11px] text-slate-400">en ceros</span>
+            <p className="text-2xl font-extrabold text-rose-600 dark:text-rose-400">{outOfStockCount}</p>
+            <span className={`text-[11px] ${classes.textMuted}`}>en ceros</span>
           </div>
-          <span className="text-[11px] text-slate-500">Afecta recetas activas</span>
+          <span className={`text-[11px] ${classes.textSub}`}>Afecta recetas activas</span>
         </div>
 
-        <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800/80 shadow-md">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className={`p-5 rounded-3xl border shadow-sm ${classes.card}`}>
+          <div className={`flex items-center justify-between mb-2 ${classes.textMuted}`}>
             <span className="text-xs font-semibold uppercase tracking-wider">Valor Estimado Stock</span>
-            <TrendingDown className="w-4 h-4 text-emerald-400" />
+            <TrendingDown className="w-4 h-4 text-emerald-500" />
           </div>
-          <p className="text-2xl font-extrabold text-emerald-400">
+          <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
             ${totalInventoryValue.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[11px] text-slate-500">Valuado al costo unitario base</span>
+          <span className={`text-[11px] ${classes.textSub}`}>Valuado al costo unitario base</span>
         </div>
       </div>
 
       {/* Barra de Filtros */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/50 p-3 rounded-2xl border border-slate-800">
+      <div className={`flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl border ${classes.card}`}>
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${classes.textSub}`} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar insumo por nombre o SKU..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            className={`w-full pl-9 pr-4 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
           />
         </div>
 
@@ -457,7 +463,7 @@ export default function InventoryDashboardPage() {
           <select
             value={filterActive}
             onChange={(e) => setFilterActive(e.target.value as any)}
-            className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none"
+            className={`px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
           >
             <option value="ALL">Todos (Activos e Inactivos)</option>
             <option value="ACTIVE">Solo Activos (En uso)</option>
@@ -468,7 +474,7 @@ export default function InventoryDashboardPage() {
           <select
             value={filterUnit}
             onChange={(e) => setFilterUnit(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none"
+            className={`px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
           >
             <option value="ALL">Todas las Unidades Base</option>
             {Object.values(UNIT_DEFINITIONS).map((u) => (
@@ -482,7 +488,7 @@ export default function InventoryDashboardPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 focus:outline-none"
+            className={`px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
           >
             <option value="ALL">Todos los Estados</option>
             <option value="OK">En Stock Normal</option>
@@ -493,10 +499,10 @@ export default function InventoryDashboardPage() {
       </div>
 
       {/* Tabla de Insumos y Existencias */}
-      <div className="rounded-3xl bg-slate-900/60 border border-slate-800 overflow-hidden shadow-lg">
+      <div className={`rounded-3xl border overflow-hidden shadow-lg ${classes.card}`}>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950 text-slate-400 uppercase font-semibold text-[10px] border-b border-slate-800">
+          <table className={`w-full text-left text-xs ${classes.textMain}`}>
+            <thead className={`uppercase font-semibold text-[10px] border-b ${classes.tableHeader}`}>
               <tr>
                 <th className="p-4">SKU / Insumo</th>
                 <th className="p-4">Unidad Base</th>
@@ -508,17 +514,17 @@ export default function InventoryDashboardPage() {
                 <th className="p-4 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className={`divide-y ${isLight ? 'divide-[#E6D5C3]/60' : 'divide-white/5'}`}>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-violet-400" />
+                  <td colSpan={8} className={`p-8 text-center ${classes.textMuted}`}>
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" style={{ color: buttonColor }} />
                     Cargando inventario de insumos...
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                  <td colSpan={8} className={`p-8 text-center ${classes.textMuted}`}>
                     No se encontraron insumos que coincidan con la búsqueda o filtro seleccionado.
                   </td>
                 </tr>
@@ -536,43 +542,43 @@ export default function InventoryDashboardPage() {
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-slate-800/30 transition-colors ${
-                        !item.active ? 'opacity-55 bg-slate-950/40' : ''
+                      className={`transition-colors ${classes.tableRow} ${
+                        !item.active ? 'opacity-55' : ''
                       }`}
                     >
                       <td className="p-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[10px] text-slate-500 block">
+                          <span className={`font-mono text-[10px] block ${classes.textSub}`}>
                             {item.sku || 'SIN-SKU'}
                           </span>
                           {!item.active && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded border ${classes.badge}`}>
                               Descontinuado
                             </span>
                           )}
                         </div>
-                        <strong className="text-white text-xs block mt-0.5">{item.name}</strong>
+                        <strong className={`text-xs block mt-0.5 ${classes.textMain}`}>{item.name}</strong>
                       </td>
 
                       <td className="p-4">
-                        <span className="px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-800 text-amber-300 font-mono text-[11px] font-semibold">
+                        <span className={`px-2 py-0.5 rounded-lg border font-mono text-[11px] font-semibold ${classes.badge}`}>
                           {unitLabel}
                         </span>
                       </td>
 
-                      <td className="p-4 font-mono font-medium text-slate-200">
-                        ${Number(item.costPerUnit).toFixed(4)} <span className="text-slate-500 text-[10px]">/{unitSymbol}</span>
+                      <td className={`p-4 font-mono font-medium ${classes.textMuted}`}>
+                        ${Number(item.costPerUnit).toFixed(4)} <span className={`text-[10px] ${classes.textSub}`}>/{unitSymbol}</span>
                       </td>
 
                       <td className="p-4">
                         {item.warehouseStock.length === 0 ? (
-                          <span className="text-slate-500 font-mono">0 {unitSymbol}</span>
+                          <span className={`font-mono ${classes.textSub}`}>0 {unitSymbol}</span>
                         ) : (
                           <div className="space-y-0.5">
-                            <strong className="text-white font-mono text-xs block">
+                            <strong className={`font-mono text-xs block ${classes.textMain}`}>
                               {totalStock.toLocaleString('es-MX')} {unitSymbol}
                             </strong>
-                            <div className="text-[10px] text-slate-400 space-x-1.5">
+                            <div className={`text-[10px] space-x-1.5 ${classes.textSub}`}>
                               {item.warehouseStock.map((ws) => {
                                 const stockVal = Number((ws as any).quantity ?? ws.currentStock) || 0
                                 return (
@@ -586,7 +592,7 @@ export default function InventoryDashboardPage() {
                         )}
                       </td>
 
-                      <td className="p-4 font-mono text-slate-400">
+                      <td className={`p-4 font-mono ${classes.textSub}`}>
                         {item.reorderPoint ? `${Number(item.reorderPoint).toLocaleString('es-MX')} ${unitSymbol}` : '—'}
                       </td>
 
@@ -594,31 +600,31 @@ export default function InventoryDashboardPage() {
                         {item.presentations.length > 0 ? (
                           <div className="space-y-0.5">
                             {item.presentations.map((pr) => (
-                              <span key={pr.id} className="block text-slate-300 text-[11px]">
-                                {pr.name} <span className="text-slate-500 font-mono text-[10px]">({pr.factorToBase} {unitSymbol})</span>
+                              <span key={pr.id} className={`block text-[11px] ${classes.textMuted}`}>
+                                {pr.name} <span className={`font-mono text-[10px] ${classes.textSub}`}>({pr.factorToBase} {unitSymbol})</span>
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-slate-500 text-[11px]">Unitaria</span>
+                          <span className={`text-[11px] ${classes.textSub}`}>Unitaria</span>
                         )}
                       </td>
 
                       <td className="p-4 text-center">
                         {!item.active ? (
-                          <span className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 text-[10px] font-semibold inline-flex items-center gap-1">
+                          <span className={`px-2.5 py-1 rounded-full border text-[10px] font-semibold inline-flex items-center gap-1 ${classes.badge}`}>
                             Inactivo
                           </span>
                         ) : isOutOfStock ? (
-                          <span className="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                          <span className="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
                             <XCircle className="w-3 h-3" /> Agotado
                           </span>
                         ) : isLowStock ? (
-                          <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                          <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3" /> Stock Bajo
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
                             <CheckCircle className="w-3 h-3" /> En Stock
                           </span>
                         )}
@@ -630,7 +636,7 @@ export default function InventoryDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(item)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 transition-all cursor-pointer"
+                            className={`p-1.5 rounded-lg border text-amber-600 dark:text-amber-400 transition-all cursor-pointer ${classes.buttonGhost}`}
                             title="Editar insumo o corregir existencias"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -640,10 +646,10 @@ export default function InventoryDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleToggleActive(item)}
-                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost} ${
                               item.active
-                                ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
-                                : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-slate-400'
                             }`}
                             title={item.active ? 'Desactivar insumo (no se comprará ni usará)' : 'Reactivar insumo'}
                           >
@@ -654,7 +660,7 @@ export default function InventoryDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleDeleteItem(item)}
-                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all cursor-pointer"
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition-all cursor-pointer"
                             title="Archivar insumo"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -671,24 +677,28 @@ export default function InventoryDashboardPage() {
       </div>
 
       {/* Modal Registrar Nuevo Insumo */}
+      {/* Modal Registrar Nuevo Insumo */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 animate-in fade-in zoom-in-95">
+          <div className={`w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 ${classes.modalContent}`}>
             {/* Header del Modal */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-violet-600/20 text-violet-400 flex items-center justify-center">
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Scale className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">Nuevo Insumo / Materia Prima</h3>
-                  <p className="text-xs text-slate-400">Registra el insumo definiendo su unidad base indivisible para recetas e inventario</p>
+                  <h3 className={`text-base sm:text-lg font-bold ${classes.textMain}`}>Nuevo Insumo / Materia Prima</h3>
+                  <p className={`text-xs ${classes.textMuted}`}>Registra el insumo definiendo su unidad base indivisible para recetas e inventario</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
-                className="w-9 h-9 rounded-xl bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center font-bold transition-colors cursor-pointer"
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold transition-colors cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
@@ -696,16 +706,21 @@ export default function InventoryDashboardPage() {
 
             <form onSubmit={handleSaveItem} className="space-y-5 text-xs">
               {/* Bloque 1: Identificación del Insumo */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 space-y-4">
-                <div className="flex items-center gap-2 pb-1 border-b border-slate-800/60">
-                  <span className="w-5 h-5 rounded-full bg-violet-600/20 text-violet-400 flex items-center justify-center text-[11px] font-bold">1</span>
-                  <h4 className="font-semibold text-slate-200 text-xs">Identificación del Insumo</h4>
+              <div className={`p-4 sm:p-5 rounded-2xl border space-y-4 ${classes.subCard}`}>
+                <div className={`flex items-center gap-2 pb-1 border-b ${classes.divider}`}>
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold"
+                    style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                  >
+                    1
+                  </span>
+                  <h4 className={`font-semibold text-xs ${classes.textMain}`}>Identificación del Insumo</h4>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                   <div className="sm:col-span-2 space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">
-                      Nombre del Insumo <span className="text-violet-400">*</span>
+                    <label className={`block font-semibold ${classes.textMuted}`}>
+                      Nombre del Insumo <span style={{ color: buttonColor }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -713,42 +728,47 @@ export default function InventoryDashboardPage() {
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                       placeholder="Ej: Café de Grano Mezcla Espresso, Leche Entera"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500 font-medium text-xs"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border font-medium text-xs focus:outline-none ${classes.input}`}
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <label className="block text-slate-300 font-semibold">SKU / Código</label>
-                      <span className="text-[10px] text-slate-500">Opcional</span>
+                      <label className={`block font-semibold ${classes.textMuted}`}>SKU / Código</label>
+                      <span className={`text-[10px] ${classes.textSub}`}>Opcional</span>
                     </div>
                     <input
                       type="text"
                       value={form.sku}
                       onChange={(e) => setForm({ ...form, sku: e.target.value })}
                       placeholder="Ej: INS-001"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono text-xs"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                     />
                   </div>
                 </div>
               </div>
 
               {/* Bloque 2: Unidad de Medida Base y Costos */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 space-y-4">
-                <div className="flex items-center gap-2 pb-1 border-b border-slate-800/60">
-                  <span className="w-5 h-5 rounded-full bg-violet-600/20 text-violet-400 flex items-center justify-center text-[11px] font-bold">2</span>
-                  <h4 className="font-semibold text-slate-200 text-xs">Unidad Base y Parámetros de Stock</h4>
+              <div className={`p-4 sm:p-5 rounded-2xl border space-y-4 ${classes.subCard}`}>
+                <div className={`flex items-center gap-2 pb-1 border-b ${classes.divider}`}>
+                  <span
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold"
+                    style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                  >
+                    2
+                  </span>
+                  <h4 className={`font-semibold text-xs ${classes.textMain}`}>Unidad Base y Parámetros de Stock</h4>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-semibold">
-                    Unidad de Medida Base <span className="text-violet-400">*</span>
+                  <label className={`block font-semibold ${classes.textMuted}`}>
+                    Unidad de Medida Base <span style={{ color: buttonColor }}>*</span>
                   </label>
                   <select
                     value={form.baseUnit}
                     onChange={(e) => setForm({ ...form, baseUnit: e.target.value })}
                     required
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-violet-500 font-medium text-xs cursor-pointer"
+                    className={`w-full px-3.5 py-2.5 rounded-xl border font-medium text-xs focus:outline-none cursor-pointer ${classes.input}`}
                   >
                     {Object.values(UNIT_DEFINITIONS).map((u) => (
                       <option key={u.code} value={u.code}>
@@ -756,17 +776,17 @@ export default function InventoryDashboardPage() {
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-slate-400 flex items-center gap-1.5 pt-0.5">
-                    <Info className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
+                  <p className={`text-[11px] flex items-center gap-1.5 pt-0.5 ${classes.textSub}`}>
+                    <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ color: buttonColor }} />
                     <span>Es la unidad indivisible con la que se descuenta en recetas (ej: gramos para café, mililitros para leche, piezas para panes).</span>
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div className="space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">Costo Unitario Base</label>
+                    <label className={`block font-semibold ${classes.textMuted}`}>Costo Unitario Base</label>
                     <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs">$</span>
+                      <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 font-semibold text-xs ${classes.textSub}`}>$</span>
                       <input
                         type="number"
                         step="0.0001"
@@ -774,19 +794,19 @@ export default function InventoryDashboardPage() {
                         value={form.costPerUnit}
                         onChange={(e) => setForm({ ...form, costPerUnit: e.target.value })}
                         placeholder="0.0000"
-                        className="w-full pl-8 pr-16 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono text-xs"
+                        className={`w-full pl-8 pr-16 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md border text-[10px] font-mono ${classes.badge}`}>
                         / {formatUnitSymbol(form.baseUnit)}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 block">
+                    <span className={`text-[10px] block ${classes.textSub}`}>
                       Costo estimado por cada {formatUnitName(form.baseUnit)} ({formatUnitSymbol(form.baseUnit)})
                     </span>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">Punto de Reorden (Mínimo)</label>
+                    <label className={`block font-semibold ${classes.textMuted}`}>Punto de Reorden (Mínimo)</label>
                     <div className="relative">
                       <input
                         type="number"
@@ -795,13 +815,13 @@ export default function InventoryDashboardPage() {
                         value={form.reorderPoint}
                         onChange={(e) => setForm({ ...form, reorderPoint: e.target.value })}
                         placeholder="Sin alerta"
-                        className="w-full pl-3.5 pr-16 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono text-xs"
+                        className={`w-full pl-3.5 pr-16 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md border text-[10px] font-mono ${classes.badge}`}>
                         {formatUnitSymbol(form.baseUnit)}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 block">
+                    <span className={`text-[10px] block ${classes.textSub}`}>
                       Alerta cuando las existencias totales bajen de este nivel
                     </span>
                   </div>
@@ -809,36 +829,41 @@ export default function InventoryDashboardPage() {
               </div>
 
               {/* Bloque 3: Presentación Comercial de Compra (Opcional) */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 space-y-4">
-                <div className="flex items-center justify-between pb-1 border-b border-slate-800/60">
+              <div className={`p-4 sm:p-5 rounded-2xl border space-y-4 ${classes.subCard}`}>
+                <div className={`flex items-center justify-between pb-1 border-b ${classes.divider}`}>
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[11px] font-bold">3</span>
+                    <span
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold"
+                      style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                    >
+                      3
+                    </span>
                     <div className="flex items-center gap-2">
-                      <Package className="w-4 h-4 text-amber-400" />
-                      <h4 className="font-semibold text-slate-200 text-xs">Presentación de Compra Habitual</h4>
+                      <Package className="w-4 h-4 text-amber-500" />
+                      <h4 className={`font-semibold text-xs ${classes.textMain}`}>Presentación de Compra Habitual</h4>
                     </div>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium">Opcional</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${classes.badge}`}>Opcional</span>
                 </div>
 
-                <p className="text-[11px] text-slate-400">
+                <p className={`text-[11px] ${classes.textMuted}`}>
                   Si compras este insumo en cajas, bidones o bultos, configúralo aquí para que al recibir compras se convierta automáticamente a tu unidad base.
                 </p>
 
                 <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-semibold">Nombre de la Presentación</label>
+                  <label className={`block font-semibold ${classes.textMuted}`}>Nombre de la Presentación</label>
                   <input
                     type="text"
                     value={form.presentationName}
                     onChange={(e) => setForm({ ...form, presentationName: e.target.value })}
                     placeholder="Ej: Caja x 12 Litros, Costal de 25 kg, Garrafa de 5L"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">Contenido por Presentación</label>
+                    <label className={`block font-semibold ${classes.textMuted}`}>Contenido por Presentación</label>
                     <div className="relative">
                       <input
                         type="number"
@@ -847,18 +872,18 @@ export default function InventoryDashboardPage() {
                         value={form.presentationFactor}
                         onChange={(e) => setForm({ ...form, presentationFactor: e.target.value })}
                         placeholder="Ej: 12000 si son 12 L en ml"
-                        className="w-full pl-3.5 pr-16 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
+                        className={`w-full pl-3.5 pr-16 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md border text-[10px] font-mono ${classes.badge}`}>
                         {formatUnitSymbol(form.baseUnit)}
                       </span>
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">Costo Estimado del Empaque</label>
+                    <label className={`block font-semibold ${classes.textMuted}`}>Costo Estimado del Empaque</label>
                     <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs">$</span>
+                      <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 font-semibold text-xs ${classes.textSub}`}>$</span>
                       <input
                         type="number"
                         step="0.01"
@@ -866,9 +891,9 @@ export default function InventoryDashboardPage() {
                         value={form.presentationCost}
                         onChange={(e) => setForm({ ...form, presentationCost: e.target.value })}
                         placeholder="0.00"
-                        className="w-full pl-8 pr-16 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
+                        className={`w-full pl-8 pr-16 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md border text-[10px] font-mono ${classes.badge}`}>
                         MXN
                       </span>
                     </div>
@@ -878,11 +903,11 @@ export default function InventoryDashboardPage() {
                 {/* Calculadora en vivo de costo unitario */}
                 {Number(form.presentationFactor) > 0 && Number(form.presentationCost) > 0 && (
                   <div className="p-3 sm:p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
-                    <div className="flex items-center gap-2 text-amber-300">
+                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
                       <Calculator className="w-4 h-4 flex-shrink-0" />
                       <span>
                         Costo calculado por {formatUnitName(form.baseUnit)}:{' '}
-                        <strong className="font-mono font-bold text-amber-200">
+                        <strong className="font-mono font-bold text-amber-800 dark:text-amber-200">
                           ${(Number(form.presentationCost) / Number(form.presentationFactor)).toFixed(4)} MXN
                         </strong>
                       </span>
@@ -895,7 +920,7 @@ export default function InventoryDashboardPage() {
                           costPerUnit: (Number(form.presentationCost) / Number(form.presentationFactor)).toFixed(4),
                         })
                       }
-                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 font-semibold text-[11px] transition-colors cursor-pointer flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 border border-amber-500/30 font-semibold text-[11px] transition-colors cursor-pointer flex items-center gap-1.5"
                     >
                       <span>⚡ Usar como Costo Base</span>
                     </button>
@@ -904,11 +929,11 @@ export default function InventoryDashboardPage() {
               </div>
 
               {/* Botones de acción */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className={`flex items-center justify-end gap-3 pt-3 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+                  className={`px-4 py-2.5 rounded-xl border font-semibold text-xs transition-colors cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
@@ -916,7 +941,8 @@ export default function InventoryDashboardPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-violet-600/30 transition-all cursor-pointer disabled:opacity-50"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2.5 rounded-xl font-semibold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50 hover:opacity-95"
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Guardar Insumo</span>
@@ -930,22 +956,25 @@ export default function InventoryDashboardPage() {
       {/* Modal Editar Insumo y Corrección de Stock */}
       {showEditModal && editingItem && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl max-h-[94vh] overflow-y-auto rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 animate-in fade-in zoom-in-95">
+          <div className={`w-full max-w-2xl max-h-[94vh] overflow-y-auto rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 ${classes.modalContent}`}>
             {/* Header del Modal */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center"
+                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                >
                   <Edit2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">Editar Insumo / Materia Prima</h3>
-                  <p className="text-xs text-slate-400">Modifica datos del insumo, estado activo/inactivo o corrige existencias de stock</p>
+                  <h3 className={`text-base sm:text-lg font-bold ${classes.textMain}`}>Editar Insumo / Materia Prima</h3>
+                  <p className={`text-xs ${classes.textMuted}`}>Modifica datos del insumo, estado activo/inactivo o corrige existencias de stock</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowEditModal(false)}
-                className="w-9 h-9 rounded-xl bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center font-bold transition-colors cursor-pointer"
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold transition-colors cursor-pointer ${classes.buttonGhost}`}
               >
                 ✕
               </button>
@@ -953,10 +982,10 @@ export default function InventoryDashboardPage() {
 
             <form onSubmit={handleSaveEdit} className="space-y-5 text-xs">
               {/* Tarjeta de Estado Activo / Inactivo */}
-              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between gap-4">
+              <div className={`p-4 rounded-2xl border flex items-center justify-between gap-4 ${classes.subCard}`}>
                 <div>
-                  <strong className="text-white block font-semibold text-xs">Estado en Catálogo</strong>
-                  <span className="text-[11px] text-slate-400">
+                  <strong className={`block font-semibold text-xs ${classes.textMain}`}>Estado en Catálogo</strong>
+                  <span className={`text-[11px] ${classes.textMuted}`}>
                     {editForm.active
                       ? 'Activo: Disponible para compras y para descontar en recetas vendibles.'
                       : 'Inactivo / Descontinuado: No se comprará ni estará disponible para nuevas recetas.'}
@@ -967,8 +996,8 @@ export default function InventoryDashboardPage() {
                   onClick={() => setEditForm({ ...editForm, active: !editForm.active })}
                   className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer flex-shrink-0 ${
                     editForm.active
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
-                      : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-750'
+                      ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
                   }`}
                 >
                   <Power className="w-3.5 h-3.5" />
@@ -977,49 +1006,49 @@ export default function InventoryDashboardPage() {
               </div>
 
               {/* Tarjeta: Datos Generales */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 space-y-4">
-                <h4 className="font-semibold text-slate-200 text-xs pb-1 border-b border-slate-800/60">
+              <div className={`p-4 sm:p-5 rounded-2xl border space-y-4 ${classes.subCard}`}>
+                <h4 className={`font-semibold text-xs pb-1 border-b ${classes.textMain} ${classes.divider}`}>
                   Identificación del Insumo
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                   <div className="sm:col-span-2 space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">
-                      Nombre del Insumo <span className="text-amber-400">*</span>
+                    <label className={`block font-semibold ${classes.textMuted}`}>
+                      Nombre del Insumo <span style={{ color: buttonColor }}>*</span>
                     </label>
                     <input
                       type="text"
                       required
                       value={editForm.name}
                       onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium text-xs"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border font-medium text-xs focus:outline-none ${classes.input}`}
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">SKU / Código</label>
+                    <label className={`block font-semibold ${classes.textMuted}`}>SKU / Código</label>
                     <input
                       type="text"
                       value={editForm.sku}
                       onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                     />
                   </div>
                 </div>
               </div>
 
               {/* Tarjeta: Unidad Base y Parámetros */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 space-y-4">
-                <h4 className="font-semibold text-slate-200 text-xs pb-1 border-b border-slate-800/60">
+              <div className={`p-4 sm:p-5 rounded-2xl border space-y-4 ${classes.subCard}`}>
+                <h4 className={`font-semibold text-xs pb-1 border-b ${classes.textMain} ${classes.divider}`}>
                   Unidad de Medida Base y Costos
                 </h4>
 
                 <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-semibold">Unidad Base</label>
+                  <label className={`block font-semibold ${classes.textMuted}`}>Unidad Base</label>
                   <select
                     value={editForm.baseUnit}
                     onChange={(e) => setEditForm({ ...editForm, baseUnit: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium text-xs cursor-pointer"
+                    className={`w-full px-3.5 py-2.5 rounded-xl border font-medium text-xs focus:outline-none cursor-pointer ${classes.input}`}
                   >
                     {Object.values(UNIT_DEFINITIONS).map((u) => (
                       <option key={u.code} value={u.code}>
@@ -1031,25 +1060,25 @@ export default function InventoryDashboardPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <div className="space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">Costo Unitario Base</label>
+                    <label className={`block font-semibold ${classes.textMuted}`}>Costo Unitario Base</label>
                     <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs">$</span>
+                      <span className={`absolute left-3.5 top-1/2 -translate-y-1/2 font-semibold text-xs ${classes.textSub}`}>$</span>
                       <input
                         type="number"
                         step="0.0001"
                         min="0"
                         value={editForm.costPerUnit}
                         onChange={(e) => setEditForm({ ...editForm, costPerUnit: e.target.value })}
-                        className="w-full pl-8 pr-16 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
+                        className={`w-full pl-8 pr-16 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md border text-[10px] font-mono ${classes.badge}`}>
                         / {formatUnitSymbol(editForm.baseUnit)}
                       </span>
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-slate-300 font-semibold">Punto de Reorden (Mínimo)</label>
+                    <label className={`block font-semibold ${classes.textMuted}`}>Punto de Reorden (Mínimo)</label>
                     <div className="relative">
                       <input
                         type="number"
@@ -1058,9 +1087,9 @@ export default function InventoryDashboardPage() {
                         placeholder="Sin alerta"
                         value={editForm.reorderPoint}
                         onChange={(e) => setEditForm({ ...editForm, reorderPoint: e.target.value })}
-                        className="w-full pl-3.5 pr-16 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
+                        className={`w-full pl-3.5 pr-16 py-2.5 rounded-xl border font-mono text-xs focus:outline-none ${classes.input}`}
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md border text-[10px] font-mono ${classes.badge}`}>
                         {formatUnitSymbol(editForm.baseUnit)}
                       </span>
                     </div>
@@ -1070,11 +1099,11 @@ export default function InventoryDashboardPage() {
 
               {/* Tarjeta de Corrección Directa de Stock */}
               <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-3">
-                <div className="flex items-center gap-2 text-amber-400">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
                   <RefreshCw className="w-4 h-4 flex-shrink-0" />
                   <strong className="text-xs font-semibold">Corregir / Ajustar Existencias Actuales en Almacén</strong>
                 </div>
-                <p className="text-[11px] text-slate-300">
+                <p className={`text-[11px] ${classes.textMuted}`}>
                   Si hubo un error de captura o configuración inicial (como existencias en &ldquo;NaN&rdquo; o diferencias físicas), ingresa aquí la cantidad real comprobada para corregirla automáticamente.
                 </p>
 
@@ -1087,24 +1116,24 @@ export default function InventoryDashboardPage() {
                       value={editForm.newStockQuantity}
                       onChange={(e) => setEditForm({ ...editForm, newStockQuantity: e.target.value })}
                       placeholder="0"
-                      className="w-full pl-3.5 pr-16 py-2.5 rounded-xl bg-slate-950 border border-amber-500/40 text-amber-300 font-mono font-bold text-sm focus:outline-none focus:border-amber-500 text-center"
+                      className={`w-full pl-3.5 pr-16 py-2.5 rounded-xl border font-mono font-bold text-sm focus:outline-none text-center ${classes.input}`}
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-slate-900 text-amber-400 text-[11px] font-mono font-semibold">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[11px] font-mono font-semibold">
                       {formatUnitSymbol(editForm.baseUnit)}
                     </span>
                   </div>
-                  <span className="text-[11px] text-slate-400">
+                  <span className={`text-[11px] ${classes.textSub}`}>
                     Ajustará el stock en el almacén principal automáticamente creando un movimiento de corrección.
                   </span>
                 </div>
               </div>
 
               {/* Botones de acción */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className={`flex items-center justify-end gap-3 pt-3 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+                  className={`px-4 py-2.5 rounded-xl border font-semibold text-xs transition-colors cursor-pointer ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
@@ -1112,7 +1141,8 @@ export default function InventoryDashboardPage() {
                 <button
                   type="submit"
                   disabled={submittingEdit}
-                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                  className="px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50 hover:opacity-95"
                 >
                   {submittingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Guardar Cambios</span>

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
+import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
 
 interface TableItem {
   id: string
@@ -138,7 +139,6 @@ export default function ComanderaPage() {
   const [activeTable, setActiveTable] = useState<TableItem | null>(null)
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [orderViewTab, setOrderViewTab] = useState<'catalog' | 'order' | 'split'>('catalog')
-  const [refreshing, setRefreshing] = useState(false)
   const [stagedItems, setStagedItems] = useState<StagedItem[]>([])
   const [customerName, setCustomerName] = useState('')
   const [orderNotes, setOrderNotes] = useState('')
@@ -322,6 +322,9 @@ export default function ComanderaPage() {
     try {
       const res = await fetch('/api/comandas/tables').then((r) => r.json())
       if (res.success) {
+        if (res.data.branch) {
+          setActiveBranch(res.data.branch)
+        }
         const loadedAreas: Area[] = [...(res.data.areas || [])]
         if (res.data.unassignedTables && res.data.unassignedTables.length > 0) {
           loadedAreas.push({
@@ -351,9 +354,55 @@ export default function ComanderaPage() {
 
   useEffect(() => {
     loadComanderaData()
-    const interval = setInterval(refreshTables, 8000)
-    return () => clearInterval(interval)
+    // Sondeo periódico cada 6 segundos
+    const interval = setInterval(refreshTables, 6000)
+
+    // Sincronización instantánea al volver al apartado o enfocar la pestaña
+    const handleFocus = () => {
+      refreshTables()
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshTables()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
+
+  // Sincronización en caliente del tema y colores
+  useEffect(() => {
+    const handleThemeUpdate = (e: any) => {
+      const detail = e.detail
+      if (!detail) return
+      if (!detail.branchId || detail.branchId === activeBranch?.id) {
+        setActiveBranch((prev: any) => (prev ? { ...prev, ...detail } : prev))
+      }
+    }
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === 'poscafe_theme_event' && e.newValue) {
+        try {
+          const detail = JSON.parse(e.newValue)
+          if (!detail.branchId || detail.branchId === activeBranch?.id) {
+            setActiveBranch((prev: any) => (prev ? { ...prev, ...detail } : prev))
+          }
+        } catch {}
+      }
+    }
+    window.addEventListener('poscafe:theme-updated', handleThemeUpdate)
+    window.addEventListener('storage', handleStorageUpdate)
+    return () => {
+      window.removeEventListener('poscafe:theme-updated', handleThemeUpdate)
+      window.removeEventListener('storage', handleStorageUpdate)
+    }
+  }, [activeBranch?.id])
 
   const openTableOrder = (table: TableItem) => {
     setActiveTable(table)
@@ -381,14 +430,6 @@ export default function ComanderaPage() {
     }
 
     openTableOrder(table)
-  }
-
-  // Refresco manual táctil
-  const handleManualRefresh = async () => {
-    setRefreshing(true)
-    await refreshTables()
-    setTimeout(() => setRefreshing(false), 500)
-    notify.success('Mesas actualizadas', 'Sincronizado con cocina y caja')
   }
 
   // Agregar platillo al pedido nuevo
@@ -734,34 +775,48 @@ export default function ComanderaPage() {
     currentUser?.permissions?.canManageSettings ||
     currentUser?.permissions?.canManageUsers
 
+  // Determina si una mesa es visible para el usuario actual:
+  // - Dueños / Administradores / Gerentes: ven todo el plano para supervisión general.
+  // - Modo Libre (FREE): todas las mesas son libres y visibles para todos los meseros.
+  // - Modo Asignado (ASSIGNED): un mesero solo ve sus mesas asignadas (titular), comandas que atiende,
+  //   mesas encargadas/traspasadas a él, o mesas libres/sin asignar en el salón. NUNCA ve las mesas de los demás.
+  const isTableVisibleForUser = (table: TableItem) => {
+    if (isOwnerOrAdmin) return true
+    if (tableServiceMode === 'FREE') return true
+
+    // En Modo Asignado (ASSIGNED):
+    const isOwnAssigned = table.assignedWaiter?.id === currentUser?.id
+    const isMyActiveOrder = table.activeOrder?.waiter?.id === currentUser?.id
+    const isTransferredToMe = table.currentWaiter?.id === currentUser?.id
+    const isUnassignedFree = !table.assignedWaiter && table.status === 'AVAILABLE'
+
+    return isOwnAssigned || isMyActiveOrder || isTransferredToMe || isUnassignedFree
+  }
+
+  const isMyTable = (table: TableItem) =>
+    table.assignedWaiter?.id === currentUser?.id ||
+    table.currentWaiter?.id === currentUser?.id ||
+    table.activeOrder?.waiter?.id === currentUser?.id
+
   // Todas las mesas en lista plana para traspasos y conteos rápidos
   const allTablesList = areas.flatMap((a) => a.tables)
-  const availableTargetTables = allTablesList.filter(
-    (t) => t.status === 'AVAILABLE' && t.id !== activeTable?.id
-  )
 
-  // Mesas visibles según el modo de servicio y rol:
-  // En Modo ASIGNADO: un mesero estándar solo ve sus mesas asignadas o las que le hayan encargado/transferido
+  // Mesas visibles según el modo de servicio, permisos y filtro "Mis Mesas"
   const visibleTablesList = allTablesList.filter((table) => {
-    if (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin) {
-      return (
-        table.assignedWaiter?.id === currentUser?.id ||
-        table.currentWaiter?.id === currentUser?.id ||
-        table.activeOrder?.waiter?.id === currentUser?.id
-      )
-    }
+    if (!isTableVisibleForUser(table)) return false
+    if (filterOnlyMyTables && !isMyTable(table)) return false
     return true
   })
+
+  // Mesas disponibles como destino de traspaso (solo entre las mesas que el mesero puede ver y usar)
+  const availableTargetTables = visibleTablesList.filter(
+    (t) => t.status === 'AVAILABLE' && t.id !== activeTable?.id
+  )
 
   const totalAvailable = visibleTablesList.filter((t) => t.status === 'AVAILABLE').length
   const totalOccupied = visibleTablesList.filter((t) => t.status === 'OCCUPIED').length
   const totalBillPrinted = visibleTablesList.filter((t) => t.status === 'BILL_PRINTED').length
-  const myTablesCount = allTablesList.filter(
-    (t) =>
-      t.assignedWaiter?.id === currentUser?.id ||
-      t.currentWaiter?.id === currentUser?.id ||
-      t.activeOrder?.waiter?.id === currentUser?.id
-  ).length
+  const myTablesCount = allTablesList.filter(isMyTable).length
 
   // Cantidad total de artículos en la comanda (ronda por marchar + marchados en cocina)
   const totalOrderCount =
@@ -772,10 +827,18 @@ export default function ComanderaPage() {
   const displayedAreas =
     selectedAreaId === 'ALL' ? areas : areas.filter((a) => a.id === selectedAreaId)
 
+  // Colores dinámicos del tema configurados en la base de datos para la sucursal activa
+  const themeBg = activeBranch?.bgColor || '#14100E'
+  const themePrimary = activeBranch?.primaryColor || '#C08552'
+  const themeSecondary = activeBranch?.secondaryColor || '#5E3023'
+  const themeButton = activeBranch?.buttonColor || activeBranch?.primaryColor || '#C08552'
+  const isLight = isLightColor(themeBg)
+  const isLightButton = isLightColor(themeButton)
+
   if (loading) {
     return (
-      <div className="h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+      <div className="h-screen bg-[#14100E] flex flex-col items-center justify-center text-slate-400 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-[#C08552]" />
         <p className="text-xs">Sincronizando mesas y comandas...</p>
       </div>
     )
@@ -783,71 +846,97 @@ export default function ComanderaPage() {
 
   return (
     <div
-      className="h-screen text-slate-100 flex flex-col overflow-hidden selection:bg-amber-500 selection:text-black"
-      style={{ backgroundColor: activeBranch?.bgColor || '#020617' }}
+      className={`h-screen flex flex-col overflow-hidden selection:bg-[#C08552] selection:text-white relative ${
+        isLight ? 'text-[#2B1712]' : 'text-slate-100'
+      }`}
+      style={{ backgroundColor: themeBg }}
     >
+      {/* Resplandores ambientales cálidos según los colores del tema de la BD */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute -top-32 left-1/3 w-[600px] h-[600px] rounded-full blur-[140px]"
+          style={{ backgroundColor: themePrimary, opacity: isLight ? 0.08 : 0.14 }}
+        />
+        <div
+          className="absolute -bottom-32 right-1/4 w-[500px] h-[500px] rounded-full blur-[130px]"
+          style={{ backgroundColor: themeSecondary, opacity: isLight ? 0.06 : 0.12 }}
+        />
+      </div>
+
       {/* Top Navbar estilo Android App Bar */}
-      <header className="border-b border-[#382b25] bg-[#1a1412]/95 backdrop-blur-md px-3 sm:px-4 py-2 flex items-center justify-between shrink-0 z-20 shadow-md">
+      <header
+        className="border-b px-3 sm:px-4 py-2 flex items-center justify-between shrink-0 z-20 shadow-md backdrop-blur-md"
+        style={{
+          backgroundColor: isLight ? '#FFFFFFE6' : `${themeBg}F2`,
+          borderColor: isLight ? '#DECEBD' : `${themeSecondary}50`,
+        }}
+      >
         <div className="flex items-center gap-2 sm:gap-3">
           {isOwnerOrAdmin && (
             <Link
               href="/dashboard"
-              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-all text-xs flex items-center gap-1 cursor-pointer"
+              className={`p-2 rounded-xl transition-all text-xs flex items-center gap-1 cursor-pointer ${
+                isLight
+                  ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD] shadow-xs'
+                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+              }`}
               title="Volver al Panel Administrativo"
             >
-              <ArrowLeft className="w-4 h-4 text-[#C08552]" />
+              <ArrowLeft className="w-4 h-4" style={{ color: themePrimary }} />
             </Link>
           )}
 
-          {activeBranch?.logoUrl ? (
+          {/* Isologo / Isotipo de la Sucursal (libre y sin encerrar) */}
+          {activeBranch?.isotypeUrl || activeBranch?.logoUrl ? (
             <img
-              src={activeBranch.logoUrl}
-              alt="Logo Sucursal"
-              className="w-8 h-8 rounded-xl object-contain bg-white/10 p-0.5 border border-[#382b25]"
+              src={activeBranch.isotypeUrl || activeBranch.logoUrl}
+              alt={activeBranch.name || 'Isologo'}
+              className="h-8 sm:h-9 w-auto max-w-[44px] object-contain drop-shadow-md select-none transition-transform hover:scale-105"
               onError={(e) => {
                 ;(e.target as any).style.display = 'none'
               }}
             />
           ) : (
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center font-bold bg-[#C08552]/20 text-[#C08552] border border-[#C08552]/30">
-              <Coffee className="w-4 h-4" />
-            </div>
+            <Coffee className="w-6 h-6 shrink-0" style={{ color: themePrimary }} />
           )}
 
           <div>
-            <h1 className="text-sm font-black text-white flex items-center gap-1.5 sm:gap-2 leading-tight">
+            <h1 className={`text-sm font-black flex items-center gap-1.5 sm:gap-2 leading-tight ${
+              isLight ? 'text-[#2B1712]' : 'text-white'
+            }`}>
               <span className="truncate">Comandera</span>
-              {activeBranch && (
-                <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#C08552]/20 text-[#C08552] border border-[#C08552]/30 truncate max-w-[130px] sm:max-w-none">
+              {activeBranch && currentUser?.branches && currentUser.branches.length > 1 && (
+                <span
+                  className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full border truncate max-w-[130px] sm:max-w-none"
+                  style={{
+                    backgroundColor: `${themePrimary}${isLight ? '15' : '20'}`,
+                    borderColor: `${themePrimary}${isLight ? '35' : '40'}`,
+                    color: isLight ? '#5E3023' : themePrimary,
+                  }}
+                >
                   {activeBranch.name}
                 </span>
               )}
             </h1>
-            <div className="flex items-center gap-1 text-[11px] text-slate-400 sm:hidden">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              <span className="truncate max-w-[120px]">{currentUser?.name}</span>
+            <div className="flex items-center gap-1.5 text-[11px] sm:hidden">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className={`truncate max-w-[110px] font-medium ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                {currentUser?.name}
+              </span>
             </div>
           </div>
         </div>
 
         {/* User Info & Quick Links */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="text-right hidden sm:block">
-            <span className="text-xs font-bold text-slate-200 block">{currentUser?.name}</span>
-            <span className="text-[10px] text-[#C08552] font-semibold">Mesero / Turno activo</span>
+            <span className={`text-xs font-bold block ${isLight ? 'text-[#2B1712]' : 'text-slate-200'}`}>
+              {currentUser?.name}
+            </span>
+            <span className={`text-[10px] font-semibold ${isLight ? 'text-[#7A5A43]' : ''}`} style={isLight ? {} : { color: themePrimary }}>
+              Mesero / Turno activo
+            </span>
           </div>
-
-          {/* Botón Refrescar táctil */}
-          <button
-            type="button"
-            onClick={handleManualRefresh}
-            disabled={refreshing}
-            className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1"
-            title="Sincronizar mesas y pedidos"
-          >
-            <RotateCcw className={`w-3.5 h-3.5 text-[#C08552] ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden md:inline text-[11px]">Sincronizar</span>
-          </button>
 
           {/* Enlace a KDS Cocina (Oculto para mesero estricto) */}
           {(currentUser?.permissions?.canManageInventory ||
@@ -856,7 +945,7 @@ export default function ComanderaPage() {
             currentUser?.roleCodes?.includes('KITCHEN')) && (
             <Link
               href="/kds"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-xs text-cyan-300 font-medium transition-all"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs transition-all ${getStatusBadgeStyles('KDS', isLight).className}`}
               title="Abrir pantalla KDS de Cocina"
             >
               <MonitorPlay className="w-3.5 h-3.5" />
@@ -870,7 +959,7 @@ export default function ComanderaPage() {
             currentUser?.roleCodes?.includes('CASHIER')) && (
             <Link
               href="/pos"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs text-amber-300 font-medium transition-all"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs transition-all ${getStatusBadgeStyles('POS', isLight).className}`}
               title="Abrir Terminal de Cobro"
             >
               <Coffee className="w-3.5 h-3.5" />
@@ -886,11 +975,23 @@ export default function ComanderaPage() {
               setUnlockError(null)
               setIsTerminalLocked(true)
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#C08552]/20 border border-[#382b25] hover:border-[#C08552]/40 text-xs text-slate-300 hover:text-[#C08552] transition-all cursor-pointer"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs transition-all cursor-pointer shadow-xs active:scale-95 ${
+              isLight
+                ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
+                : ''
+            }`}
+            style={
+              isLight
+                ? {}
+                : {
+                    backgroundColor: `${themeSecondary}60`,
+                    borderColor: `${themeSecondary}90`,
+                  }
+            }
             title="Bloquear pantalla o relevar mesero con PIN"
           >
-            <Lock className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Relevo</span>
+            <Lock className="w-3.5 h-3.5" style={{ color: isLight ? '#5E3023' : themePrimary }} />
+            <span className="hidden sm:inline font-semibold">Relevo</span>
           </button>
         </div>
       </header>
@@ -916,36 +1017,39 @@ export default function ComanderaPage() {
       {/* Main Floor / Tables Area */}
       <div className="flex-1 flex flex-col p-3 sm:p-5 overflow-y-auto space-y-4 sm:space-y-6">
         {/* Header con Filtros de Áreas, Filtro Mis Mesas y Leyenda de Estados */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#1a1412] p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#382b25] shadow-lg">
+        <div
+          className={`flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 sm:p-4 rounded-2xl sm:rounded-3xl border shadow-lg backdrop-blur-sm ${
+            isLight ? 'bg-white/90 border-[#DECEBD]' : ''
+          }`}
+          style={
+            isLight
+              ? {}
+              : {
+                  backgroundColor: `${themeSecondary}25`,
+                  borderColor: `${themeSecondary}40`,
+                }
+          }
+        >
           {/* Selector de Áreas y Filtro Mis Mesas */}
           <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1 md:pb-0">
             <button
               type="button"
               onClick={() => setSelectedAreaId('ALL')}
+              style={selectedAreaId === 'ALL' ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' } : {}}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                 selectedAreaId === 'ALL'
-                  ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/30'
-                  : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
+                  ? 'shadow-md'
+                  : isLight
+                  ? 'bg-[#F3E9DC]/80 border border-[#DECEBD] text-[#5E3023] hover:bg-[#DECEBD]'
+                  : 'bg-[#251e1b]/80 border border-[#382b25] text-slate-300 hover:bg-[#332924]'
               }`}
             >
               Todas ({visibleTablesList.length})
             </button>
             {areas.map((a) => {
               const countInArea = a.tables.filter((t) => {
-                if (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin) {
-                  return (
-                    t.assignedWaiter?.id === currentUser?.id ||
-                    t.currentWaiter?.id === currentUser?.id ||
-                    t.activeOrder?.waiter?.id === currentUser?.id
-                  )
-                }
-                if (filterOnlyMyTables) {
-                  return (
-                    t.assignedWaiter?.id === currentUser?.id ||
-                    t.currentWaiter?.id === currentUser?.id ||
-                    t.activeOrder?.waiter?.id === currentUser?.id
-                  )
-                }
+                if (!isTableVisibleForUser(t)) return false
+                if (filterOnlyMyTables && !isMyTable(t)) return false
                 return true
               }).length
 
@@ -953,15 +1057,19 @@ export default function ComanderaPage() {
                 return null
               }
 
+              const isActive = selectedAreaId === a.id
               return (
                 <button
                   key={a.id}
                   type="button"
                   onClick={() => setSelectedAreaId(a.id)}
+                  style={isActive ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' } : {}}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
-                    selectedAreaId === a.id
-                      ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/30'
-                      : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
+                    isActive
+                      ? 'shadow-md'
+                      : isLight
+                      ? 'bg-[#F3E9DC]/80 border border-[#DECEBD] text-[#5E3023] hover:bg-[#DECEBD]'
+                      : 'bg-[#251e1b]/80 border border-[#382b25] text-slate-300 hover:bg-[#332924]'
                   }`}
                 >
                   {a.name} ({countInArea})
@@ -970,17 +1078,17 @@ export default function ComanderaPage() {
             })}
 
             {/* Separador vertical */}
-            <div className="h-6 w-px bg-[#382b25] mx-1 shrink-0" />
+            <div className={`h-6 w-px mx-1 shrink-0 ${isLight ? 'bg-[#DECEBD]' : 'bg-[#382b25]'}`} />
 
             {/* Filtro Mis Mesas / Mis Comandas según Modo */}
             {tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin ? (
               <div
-                className="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-300"
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 ${getStatusBadgeStyles('MODE_ASSIGNED', isLight).className}`}
                 title="En Modo Asignado solo verás tus mesas asignadas o las que te hayan encargado"
               >
-                <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+                <UserCheck className="w-3.5 h-3.5" />
                 <span>Mis Mesas</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-slate-950 text-amber-400">
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${isLight ? 'bg-amber-200 text-amber-950' : 'bg-slate-950 text-amber-400'}`}>
                   {myTablesCount}
                 </span>
               </div>
@@ -990,7 +1098,11 @@ export default function ComanderaPage() {
                 onClick={() => setFilterOnlyMyTables(!filterOnlyMyTables)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all cursor-pointer ${
                   filterOnlyMyTables
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 ring-2 ring-amber-400/50'
+                    ? isLight
+                      ? 'bg-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
+                      : 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 ring-2 ring-amber-400/50'
+                    : isLight
+                    ? 'bg-[#F3E9DC]/80 border border-[#DECEBD] text-[#5E3023] hover:bg-[#DECEBD]'
                     : 'bg-[#251e1b] border border-[#382b25] text-slate-300 hover:bg-[#332924]'
                 }`}
                 title={
@@ -1003,7 +1115,13 @@ export default function ComanderaPage() {
                 <span>{tableServiceMode === 'FREE' ? 'Mis Comandas' : 'Mis Mesas'}</span>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                    filterOnlyMyTables ? 'bg-slate-950 text-amber-400' : 'bg-slate-800 text-slate-300'
+                    filterOnlyMyTables
+                      ? isLight
+                        ? 'bg-white text-amber-950'
+                        : 'bg-slate-950 text-amber-400'
+                      : isLight
+                      ? 'bg-white text-[#5E3023] border border-[#DECEBD]'
+                      : 'bg-slate-800 text-slate-300'
                   }`}
                 >
                   {myTablesCount}
@@ -1013,34 +1131,34 @@ export default function ComanderaPage() {
           </div>
 
           {/* Estadísticas de Estado / Leyenda de Colores */}
-          <div className="flex items-center gap-2 sm:gap-3 text-[11px] text-slate-300 overflow-x-auto pb-0.5">
+          <div className="flex items-center gap-2 sm:gap-3 text-[11px] overflow-x-auto pb-0.5">
             {tableServiceMode === 'FREE' ? (
               <span
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold shrink-0 shadow-sm"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg shrink-0 ${getStatusBadgeStyles('MODE_FREE', isLight).className}`}
                 title="Servicio Libre: Cualquier mesero puede abrir y tomar cualquier mesa"
               >
-                <Sparkles className="w-3 h-3 text-emerald-400" />
+                <Sparkles className="w-3 h-3" />
                 Modo Libre
               </span>
             ) : (
               <span
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold shrink-0 shadow-sm"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg shrink-0 ${getStatusBadgeStyles('MODE_ASSIGNED', isLight).className}`}
                 title="Servicio Asignado: Mesas asignadas a meseros titulares"
               >
-                <UserCheck className="w-3 h-3 text-amber-400" />
+                <UserCheck className="w-3 h-3" />
                 Modo Asignado
               </span>
             )}
-            <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-semibold shrink-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg shrink-0 ${getStatusBadgeStyles('AVAILABLE', isLight).className}`}>
+              <span className={`w-2 h-2 rounded-full ${getStatusBadgeStyles('AVAILABLE', isLight).dotClass}`}></span>
               {totalAvailable} Libres
             </span>
-            <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 font-semibold shrink-0">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg shrink-0 ${getStatusBadgeStyles('OCCUPIED', isLight).className}`}>
+              <span className={`w-2 h-2 rounded-full ${getStatusBadgeStyles('OCCUPIED', isLight).dotClass}`}></span>
               {totalOccupied} Ocupadas
             </span>
-            <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-300 font-semibold shrink-0">
-              <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse"></span>
+            <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg shrink-0 ${getStatusBadgeStyles('BILL_PRINTED', isLight).className}`}>
+              <span className={`w-2 h-2 rounded-full ${getStatusBadgeStyles('BILL_PRINTED', isLight).dotClass} animate-pulse`}></span>
               {totalBillPrinted} Pre-cuenta
             </span>
           </div>
@@ -1049,49 +1167,56 @@ export default function ComanderaPage() {
         {/* Plano de Mesas por Área */}
         <div className="space-y-6">
           {visibleTablesList.length === 0 ? (
-            <div className="p-8 sm:p-12 rounded-3xl bg-[#1a1412] border border-[#382b25] text-center space-y-3 max-w-md mx-auto my-12">
+            <div className={`p-8 sm:p-12 rounded-3xl border text-center space-y-3 max-w-md mx-auto my-12 ${
+              isLight ? 'bg-white border-[#DECEBD] shadow-sm' : 'bg-[#1a1412] border-[#382b25]'
+            }`}>
               <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
                 <UserCheck className="w-7 h-7" />
               </div>
-              <h3 className="text-base font-bold text-white">No tienes mesas asignadas</h3>
-              <p className="text-xs text-slate-400">
-                El modo de servicio de esta sucursal está configurado como <strong className="text-amber-300">Mesero Asignado</strong>.
-                Solicita a un administrador o encargado que te asigne mesas, o que un compañero te encargue una temporalmente.
+              <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                {filterOnlyMyTables
+                  ? 'No tienes comandas activas'
+                  : tableServiceMode === 'ASSIGNED'
+                  ? 'No tienes mesas asignadas ni libres'
+                  : 'No hay mesas disponibles en esta área'}
+              </h3>
+              <p className={`text-xs ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                {filterOnlyMyTables
+                  ? 'Actualmente no tienes mesas o comandas a tu cargo en este filtro.'
+                  : tableServiceMode === 'ASSIGNED'
+                  ? 'El modo de servicio está configurado como Mesero Asignado. Solicita a un administrador que te asigne mesas, o que un compañero te traspase una.'
+                  : 'No se encontraron mesas configuradas en este sector.'}
               </p>
             </div>
           ) : (
             displayedAreas.map((area) => {
               const tablesToRender = area.tables.filter((table) => {
-                if (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin) {
-                  return (
-                    table.assignedWaiter?.id === currentUser?.id ||
-                    table.currentWaiter?.id === currentUser?.id ||
-                    table.activeOrder?.waiter?.id === currentUser?.id
-                  )
-                }
-                if (!filterOnlyMyTables) return true
-                return (
-                  table.assignedWaiter?.id === currentUser?.id ||
-                  table.currentWaiter?.id === currentUser?.id ||
-                  table.activeOrder?.waiter?.id === currentUser?.id
-                )
+                if (!isTableVisibleForUser(table)) return false
+                if (filterOnlyMyTables && !isMyTable(table)) return false
+                return true
               })
 
               if (tablesToRender.length === 0) return null
 
               return (
                 <div key={area.id} className="space-y-3">
-                  <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <h2 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-2 ${
+                    isLight ? 'text-[#2B1712]' : 'text-slate-300'
+                  }`}>
                     <Store className="w-4 h-4 text-[#C08552]" />
                     {area.name}
                     {(filterOnlyMyTables || (tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin)) && (
-                      <span className="text-[10px] text-amber-400 normal-case bg-amber-500/10 px-2 py-0.5 rounded-full font-bold">
-                        ({tablesToRender.length} asignadas)
+                      <span className={`text-[10px] normal-case px-2 py-0.5 rounded-full font-bold ${
+                        isLight
+                          ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                          : 'bg-amber-500/10 text-amber-400'
+                      }`}>
+                        ({tablesToRender.length} {tableServiceMode === 'ASSIGNED' && !isOwnerOrAdmin ? 'visibles' : 'mis mesas'})
                       </span>
                     )}
                   </h2>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-4">
                     {tablesToRender.map((table) => {
                       const isOccupied = table.status === 'OCCUPIED'
                       const isBillPrinted = table.status === 'BILL_PRINTED'
@@ -1107,94 +1232,211 @@ export default function ComanderaPage() {
                         !!table.currentWaiter &&
                         table.currentWaiter.id !== currentUser?.id
 
+                      const cardBg = isLight
+                        ? isTransferredToMe
+                          ? '#E0F2FE'
+                          : isMyAssignedTable
+                          ? '#FFFFFF'
+                          : isBillPrinted
+                          ? '#FAF5FF'
+                          : isOccupied
+                          ? '#FFFBEB'
+                          : '#FFFFFF'
+                        : isTransferredToMe
+                        ? '#08334440'
+                        : isMyAssignedTable
+                        ? `${themeSecondary}35`
+                        : isBillPrinted
+                        ? `${themeSecondary}30`
+                        : isOccupied
+                        ? `${themeSecondary}20`
+                        : `${themeBg}C0`
+
+                      const cardBorder = isLight
+                        ? isTransferredToMe
+                          ? '#06b6d4'
+                          : isMyAssignedTable
+                          ? themePrimary
+                          : isBillPrinted
+                          ? '#C084FC'
+                          : isOccupied
+                          ? '#FCD34D'
+                          : '#DECEBD'
+                        : isTransferredToMe
+                        ? '#06b6d4'
+                        : isMyAssignedTable
+                        ? themePrimary
+                        : isBillPrinted
+                        ? `${themePrimary}90`
+                        : isOccupied
+                        ? `${themeSecondary}80`
+                        : `${themeSecondary}45`
+
                       return (
                         <button
                           key={table.id}
                           type="button"
                           onClick={() => handleSelectTable(table)}
-                          className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[145px] sm:min-h-[160px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none ${
+                          style={{
+                            backgroundColor: cardBg,
+                            borderColor: cardBorder,
+                            ...(isMyAssignedTable
+                              ? { boxShadow: `0 8px 24px ${themePrimary}25` }
+                              : {}),
+                          }}
+                          className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[148px] sm:min-h-[165px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none shadow-sm ${
                             isTransferredToMe
-                              ? 'bg-cyan-950/25 border-cyan-500/70 shadow-lg shadow-cyan-500/15 ring-2 ring-cyan-500/40'
+                              ? 'shadow-lg shadow-cyan-500/15 ring-2 ring-cyan-500/40'
                               : isMyAssignedTable
-                              ? isAvailable
-                                ? 'bg-amber-950/20 border-amber-500/70 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/40'
-                                : isBillPrinted
-                                ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-2 ring-amber-500/60'
-                                : 'bg-amber-950/30 border-amber-500/70 shadow-md shadow-amber-500/15 ring-2 ring-amber-500/50'
-                              : isAvailable
-                              ? 'bg-[#1c1715]/75 border-[#382b25] hover:border-emerald-500/50 hover:bg-emerald-500/5'
+                              ? 'ring-2'
                               : isBillPrinted
-                              ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/30'
-                              : 'bg-amber-950/25 border-amber-500/50 shadow-md shadow-amber-500/10'
+                              ? 'ring-1'
+                              : isAvailable
+                              ? isLight
+                                ? 'hover:border-emerald-500/70 hover:bg-emerald-50/50'
+                                : 'hover:border-emerald-500/50 hover:bg-emerald-500/5'
+                              : ''
                           }`}
                         >
                           {/* Cabecera de la Mesa */}
                           <div className="flex items-start justify-between">
                             <div>
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-base sm:text-lg font-black text-white block leading-tight">
+                                <span className={`text-base sm:text-lg font-black block leading-tight ${
+                                  isLight ? 'text-[#2B1712]' : 'text-white'
+                                }`}>
                                   {table.name}
                                 </span>
                                 {isTransferredToMe && (
-                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
+                                    isLight
+                                      ? 'bg-cyan-100 text-cyan-950 border-cyan-300'
+                                      : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                                  }`}>
                                     🔄 Encargada
                                   </span>
                                 )}
                                 {isTransferredAway && (
-                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
+                                    isLight
+                                      ? 'bg-amber-100 text-amber-950 border-amber-300'
+                                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                  }`}>
                                     ⭐ En apoyo
                                   </span>
                                 )}
                                 {!isTransferredAway && isMyAssignedTable && (
-                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  <span
+                                    className={`text-[9px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 shadow-xs tracking-wide ${
+                                      isLight
+                                        ? 'bg-[#C08552]/15 text-[#5E3023] border-[#C08552]/40'
+                                        : ''
+                                    }`}
+                                    style={
+                                      isLight
+                                        ? {}
+                                        : {
+                                            backgroundColor: `${themePrimary}25`,
+                                            borderColor: `${themePrimary}60`,
+                                            color: themePrimary,
+                                          }
+                                    }
+                                  >
                                     ⭐ Mi Mesa
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                <Users className="w-3 h-3 text-slate-500" /> Cap: {table.capacity || 4}
-                              </span>
+                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className="text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 font-semibold"
+                                  style={{
+                                    backgroundColor: isLight ? '#F3E9DC' : `${themeSecondary}30`,
+                                    borderColor: isLight ? '#DECEBD' : `${themeSecondary}60`,
+                                    color: isLight ? '#5E3023' : '#DECEBD',
+                                  }}
+                                >
+                                  <Users className="w-3 h-3" style={{ color: themePrimary }} />
+                                  {table.capacity || 4} personas
+                                </span>
+                              </div>
                             </div>
 
                             {/* Status Badge */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5">
                               {isBillPrinted && (
-                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500 text-white flex items-center gap-0.5">
-                                  <Receipt className="w-2.5 h-2.5" /> Cobro
+                                <span
+                                  className={`text-[9px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 animate-pulse shadow-xs ${
+                                    isLight
+                                      ? 'bg-purple-100 text-purple-950 border-purple-300'
+                                      : ''
+                                  }`}
+                                  style={
+                                    isLight
+                                      ? {}
+                                      : {
+                                          backgroundColor: `${themePrimary}30`,
+                                          borderColor: `${themePrimary}80`,
+                                          color: '#F3E9DC',
+                                        }
+                                  }
+                                >
+                                  <Receipt className="w-2.5 h-2.5" style={{ color: themePrimary }} /> Pre-cuenta
                                 </span>
                               )}
                               <span
                                 className={`w-3 h-3 rounded-full ${
                                   isAvailable
-                                    ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                                    ? isLight ? 'bg-emerald-600 shadow-sm' : 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
                                     : isBillPrinted
-                                    ? 'bg-violet-400 animate-pulse'
-                                    : 'bg-amber-500 shadow-sm shadow-amber-500/50'
+                                    ? isLight ? 'bg-purple-600 animate-pulse' : 'animate-pulse'
+                                    : isLight ? 'bg-amber-600 shadow-sm' : 'bg-amber-500 shadow-sm shadow-amber-500/50'
                                 }`}
+                                style={
+                                  isBillPrinted
+                                    ? isLight
+                                      ? { backgroundColor: '#9333ea', boxShadow: '0 0 10px #c084fc' }
+                                      : {
+                                          backgroundColor: themePrimary,
+                                          boxShadow: `0 0 10px ${themePrimary}`,
+                                        }
+                                    : {}
+                                }
                               />
                             </div>
                           </div>
 
                           {/* Indicador de Atención según Modo */}
                           {tableServiceMode === 'FREE' ? (
-                            <div className="text-[10px] space-y-0.5 my-1.5 bg-[#14100e]/80 p-2 rounded-xl border border-[#382b25]">
+                            <div
+                              className="text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border"
+                              style={{
+                                backgroundColor: isLight ? '#FDFBF9' : `${themeSecondary}25`,
+                                borderColor: isLight ? '#DECEBD' : `${themeSecondary}50`,
+                              }}
+                            >
                               {table.activeOrder ? (
-                                <span className="text-slate-300 flex items-center gap-1 truncate font-medium">
+                                <span className={`flex items-center gap-1 truncate font-medium ${
+                                  isLight ? 'text-[#7A5A43]' : 'text-slate-300'
+                                }`}>
                                   <Users className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                                  Atiende: <strong className="text-white">{table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}</strong>
+                                  Atiende: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}</strong>
                                 </span>
                               ) : (
-                                <span className="text-emerald-400/90 flex items-center gap-1 truncate font-medium">
+                                <span className={`flex items-center gap-1 truncate font-medium ${
+                                  isLight ? 'text-emerald-900 font-bold' : 'text-emerald-400/90'
+                                }`}>
                                   <Sparkles className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
                                   Servicio Libre (Cualquiera)
                                 </span>
                               )}
                             </div>
                           ) : isTransferredToMe ? (
-                            <div className="text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border bg-cyan-950/40 border-cyan-500/30 text-cyan-200">
+                            <div className={`text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border ${
+                              isLight ? 'bg-cyan-50 border-cyan-200 text-cyan-950' : 'bg-cyan-950/40 border-cyan-500/30 text-cyan-200'
+                            }`}>
                               <span className="flex items-center gap-1 truncate font-semibold">
                                 <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
-                                Encargada por: <strong className="text-white">{table.assignedWaiter?.name || 'Compañero'}</strong>
+                                Encargada por: <strong className={isLight ? 'text-cyan-950 font-bold' : 'text-white'}>{table.assignedWaiter?.name || 'Compañero'}</strong>
                               </span>
                               <button
                                 type="button"
@@ -1210,10 +1452,12 @@ export default function ComanderaPage() {
                               </button>
                             </div>
                           ) : isTransferredAway ? (
-                            <div className="text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border bg-amber-950/40 border-amber-500/30 text-amber-200">
+                            <div className={`text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border ${
+                              isLight ? 'bg-amber-50 border-amber-200 text-amber-950' : 'bg-amber-950/40 border-amber-500/30 text-amber-200'
+                            }`}>
                               <span className="flex items-center gap-1 truncate font-semibold">
                                 <UserCheck className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                                En apoyo: <strong className="text-white">{table.currentWaiter?.name}</strong>
+                                En apoyo: <strong className={isLight ? 'text-amber-950 font-bold' : 'text-white'}>{table.currentWaiter?.name}</strong>
                               </span>
                               <button
                                 type="button"
@@ -1230,27 +1474,36 @@ export default function ComanderaPage() {
                             </div>
                           ) : (
                             <div
-                              className={`text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border ${
-                                isMyAssignedTable
-                                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-200'
-                                  : 'bg-[#14100e]/80 border-[#382b25] text-slate-400'
-                              }`}
+                              className="text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border"
+                              style={{
+                                backgroundColor: isLight
+                                  ? (isMyAssignedTable ? '#FFFBEB' : '#FDFBF9')
+                                  : (isMyAssignedTable ? `${themePrimary}20` : `${themeSecondary}25`),
+                                borderColor: isLight
+                                  ? (isMyAssignedTable ? '#FCD34D' : '#DECEBD')
+                                  : (isMyAssignedTable ? `${themePrimary}50` : `${themeSecondary}50`),
+                                color: isLight
+                                  ? '#5E3023'
+                                  : (isMyAssignedTable ? '#F3E9DC' : '#DECEBD'),
+                              }}
                             >
                               <span className="flex items-center gap-1 truncate">
-                                <Users className="w-2.5 h-2.5 text-[#C08552] shrink-0" />
+                                <Users className="w-2.5 h-2.5 shrink-0" style={{ color: themePrimary }} />
                                 {isMyAssignedTable ? (
-                                  <strong className="text-amber-300">⭐ Tu Mesa Asignada</strong>
+                                  <strong style={{ color: themePrimary }}>⭐ Tu Mesa Asignada</strong>
                                 ) : table.assignedWaiter ? (
                                   <span>
-                                    Titular: <strong className="text-slate-200">{table.assignedWaiter.name}</strong>
+                                    Titular: <strong className={isLight ? 'text-[#2B1712]' : 'text-slate-200'}>{table.assignedWaiter.name}</strong>
                                   </span>
                                 ) : (
-                                  <span className="text-slate-500 italic">⚡ Sin mesero titular</span>
+                                  <span className={`italic ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>⚡ Sin mesero titular</span>
                                 )}
                               </span>
 
                               {isTransferred && (
-                                <span className="text-cyan-300 flex items-center gap-1 truncate font-semibold">
+                                <span className={`flex items-center gap-1 truncate font-semibold ${
+                                  isLight ? 'text-cyan-950 font-bold' : 'text-cyan-300'
+                                }`}>
                                   <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
                                   Relevo: {table.currentWaiter?.name}
                                 </span>
@@ -1260,28 +1513,43 @@ export default function ComanderaPage() {
 
                           {/* Info de Comanda si está ocupada */}
                           {table.activeOrder ? (
-                            <div className="space-y-1">
+                            <div className="space-y-1.5 pt-1">
                               <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-400 font-mono text-[11px]">
-                                  {table.activeOrder.itemsCount} platillos
+                                <span
+                                  className="px-2 py-0.5 rounded-md border font-mono text-[10px] font-bold flex items-center gap-1"
+                                  style={{
+                                    backgroundColor: isLight ? '#F3E9DC' : `${themeSecondary}35`,
+                                    borderColor: isLight ? '#DECEBD' : `${themeSecondary}60`,
+                                    color: isLight ? '#5E3023' : '#F3E9DC',
+                                  }}
+                                >
+                                  <UtensilsCrossed className="w-2.5 h-2.5" style={{ color: themePrimary }} />
+                                  {table.activeOrder.itemsCount} {table.activeOrder.itemsCount === 1 ? 'artículo' : 'artículos'}
                                 </span>
-                                <strong className="text-[#C08552] font-black text-sm">
+                                <strong className="font-black text-sm tracking-tight font-mono" style={{ color: isLight ? '#5E3023' : themePrimary }}>
                                   ${table.activeOrder.total.toFixed(2)}
                                 </strong>
                               </div>
 
                               {table.activeOrder.customerName && (
-                                <span className="text-[10px] text-slate-400 block truncate italic font-medium">
+                                <span className={`text-[10px] block truncate italic font-medium ${
+                                  isLight ? 'text-[#7A5A43]' : 'text-slate-300'
+                                }`}>
                                   👤 {table.activeOrder.customerName}
                                 </span>
                               )}
                             </div>
                           ) : (
                             <div className="text-center py-1">
-                              <span className="text-xs font-bold text-emerald-400 block">
+                              <span className={`text-xs font-bold block flex items-center justify-center gap-1 ${
+                                isLight ? 'text-emerald-900 font-black' : 'text-emerald-400'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isLight ? 'bg-emerald-600' : 'bg-emerald-400'}`}></span>
                                 Libre
                               </span>
-                              <span className="text-[10px] text-slate-500">Toca para abrir</span>
+                              <span className={`text-[10px] ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                                Toca para abrir
+                              </span>
                             </div>
                           )}
                         </button>
@@ -1298,34 +1566,72 @@ export default function ComanderaPage() {
       {/* DRAWER / MODAL TÁCTIL DE COMANDA - FULLSCREEN EN MÓVIL Y TABLET */}
       {showOrderModal && activeTable && (
         <div className="fixed inset-0 z-50 bg-black/90 md:bg-black/85 md:backdrop-blur-sm flex items-center justify-center p-0 md:p-3 lg:p-5">
-          <div className="w-full h-full md:h-[94vh] md:max-w-6xl xl:max-w-7xl md:rounded-3xl bg-[#14100e] border-0 md:border md:border-[#382b25] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
+          <div
+            className="w-full h-full md:h-[94vh] md:max-w-6xl xl:max-w-7xl md:rounded-3xl border-0 md:border flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95"
+            style={{
+              backgroundColor: isLight ? '#FDFBF9' : themeBg,
+              borderColor: isLight ? '#DECEBD' : `${themeSecondary}60`,
+            }}
+          >
             {/* Header del Modal con estilo App Nativa */}
-            <div className="p-3 sm:px-5 border-b border-[#382b25] flex items-center justify-between bg-[#1c1715] shrink-0">
+            <div
+              className="p-3 sm:px-5 border-b flex items-center justify-between shrink-0"
+              style={{
+                backgroundColor: isLight ? '#FFFFFF' : `${themeSecondary}25`,
+                borderColor: isLight ? '#DECEBD' : `${themeSecondary}50`,
+              }}
+            >
               <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <button
                   type="button"
                   onClick={() => setShowOrderModal(false)}
-                  className="p-2 -ml-1 rounded-xl bg-[#251e1b] hover:bg-[#332924] text-slate-300 md:hidden cursor-pointer"
+                  className={`p-2 -ml-1 rounded-xl cursor-pointer md:hidden ${
+                    isLight
+                      ? 'bg-white hover:bg-[#F3E9DC] border border-[#DECEBD] text-[#5E3023]'
+                      : 'bg-[#251e1b] hover:bg-[#332924] text-slate-300'
+                  }`}
                   title="Volver al plano de mesas"
                 >
-                  <ArrowLeft className="w-5 h-5 text-[#C08552]" />
+                  <ArrowLeft className="w-5 h-5" style={{ color: themePrimary }} />
                 </button>
 
-                <div className="w-10 h-10 rounded-2xl bg-[#C08552]/20 border border-[#C08552]/30 text-[#C08552] flex items-center justify-center font-bold shrink-0">
+                <div
+                  className="w-10 h-10 rounded-2xl border flex items-center justify-center font-bold shrink-0"
+                  style={{
+                    backgroundColor: `${themePrimary}${isLight ? '15' : '20'}`,
+                    borderColor: `${themePrimary}${isLight ? '35' : '40'}`,
+                    color: isLight ? '#5E3023' : themePrimary,
+                  }}
+                >
                   <UtensilsCrossed className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base sm:text-lg font-black text-white truncate">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className={`text-base sm:text-lg font-black truncate ${
+                      isLight ? 'text-[#2B1712]' : 'text-white'
+                    }`}>
                       {activeTable.name}
                     </h3>
+                    {/* Badge Comanda Mesa • X cantidad */}
                     <span
-                      className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
+                      className="text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold border flex items-center gap-1.5 shadow-xs"
+                      style={{
+                        backgroundColor: isLight ? '#F3E9DC' : `${themeSecondary}40`,
+                        borderColor: isLight ? '#DECEBD' : `${themeSecondary}70`,
+                        color: isLight ? '#5E3023' : '#F3E9DC',
+                      }}
+                    >
+                      <UtensilsCrossed className="w-3 h-3" style={{ color: themePrimary }} />
+                      <span>{totalOrderCount} {totalOrderCount === 1 ? 'artículo' : 'artículos'}</span>
+                    </span>
+
+                    <span
+                      className={`text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
                         activeTable.status === 'AVAILABLE'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          ? getStatusBadgeStyles('AVAILABLE', isLight).className
                           : activeTable.status === 'BILL_PRINTED'
-                          ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          ? getStatusBadgeStyles('BILL_PRINTED', isLight).className
+                          : getStatusBadgeStyles('OCCUPIED', isLight).className
                       }`}
                     >
                       {activeTable.status === 'AVAILABLE'
@@ -1335,24 +1641,28 @@ export default function ComanderaPage() {
                         : `Ocupada (#${activeTable.activeOrder?.orderNumber || ''})`}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400 truncate">
+                  <div className={`flex flex-wrap items-center gap-x-2 text-[11px] truncate ${
+                    isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                  }`}>
                     {tableServiceMode === 'FREE' ? (
-                      <span className="text-emerald-400 font-medium flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-emerald-400" />
+                      <span className={`font-medium flex items-center gap-1 ${
+                        isLight ? 'text-emerald-900 font-bold' : 'text-emerald-400'
+                      }`}>
+                        <Sparkles className="w-3 h-3" />
                         Servicio Libre
                         {activeTable.activeOrder?.waiter && (
-                          <span className="text-slate-300 ml-1">
-                            • Abierta por: <strong className="text-white">{activeTable.activeOrder.waiter.name}</strong>
+                          <span className={`ml-1 ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
+                            • Abierta por: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{activeTable.activeOrder.waiter.name}</strong>
                           </span>
                         )}
                       </span>
                     ) : (
                       <>
                         <span>
-                          Titular: <strong className="text-slate-200">{activeTable.assignedWaiter?.name || 'Sin asignar'}</strong>
+                          Titular: <strong className={isLight ? 'text-[#2B1712]' : 'text-slate-200'}>{activeTable.assignedWaiter?.name || 'Sin asignar'}</strong>
                         </span>
                         {activeTable.currentWaiter && activeTable.currentWaiter.id !== activeTable.assignedWaiter?.id && (
-                          <span className="text-cyan-300 font-medium">
+                          <span className={`font-medium ${isLight ? 'text-cyan-950 font-bold' : 'text-cyan-300'}`}>
                             • Relevo: {activeTable.currentWaiter.name}
                           </span>
                         )}
@@ -1372,7 +1682,11 @@ export default function ComanderaPage() {
                       setTargetAssignWaiterId(activeTable.assignedWaiter?.id || '')
                       setShowAssignWaiterModal(true)
                     }}
-                    className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                    className={`px-2.5 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isLight
+                        ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
+                        : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+                    }`}
                     title="Asignar mesero titular permanente a la mesa"
                   >
                     <UserPlus className="w-3.5 h-3.5 text-[#C08552]" />
@@ -1385,14 +1699,18 @@ export default function ComanderaPage() {
                   <button
                     type="button"
                     onClick={() => handleReturnTableToTitular(activeTable)}
-                    className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-xs text-amber-300 border border-amber-500/40 flex items-center gap-1.5 transition-all cursor-pointer font-bold"
+                    className={`px-2.5 py-1.5 rounded-xl text-xs border flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
+                      isLight
+                        ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300'
+                        : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                    }`}
                     title={
                       activeTable.assignedWaiter?.id === currentUser?.id
                         ? 'Retomar la atención de tu mesa'
                         : `Devolver mesa a su titular (${activeTable.assignedWaiter?.name || 'Titular'})`
                     }
                   >
-                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    <RotateCcw className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">
                       {activeTable.assignedWaiter?.id === currentUser?.id
                         ? 'Retomar Mesa'
@@ -1414,7 +1732,11 @@ export default function ComanderaPage() {
                       setTargetTransferWaiterId('')
                       setShowTransferWaiterModal(true)
                     }}
-                    className="px-2.5 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-xs text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 transition-all cursor-pointer font-bold"
+                    className={`px-2.5 py-1.5 rounded-xl text-xs border flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
+                      isLight
+                        ? 'bg-cyan-100 hover:bg-cyan-200 text-cyan-950 border-cyan-300'
+                        : 'bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border-cyan-500/30'
+                    }`}
                     title="Encargar mesa temporalmente a otro compañero mesero"
                   >
                     <UserCheck className="w-3.5 h-3.5" />
@@ -1433,7 +1755,11 @@ export default function ComanderaPage() {
                       <button
                         type="button"
                         onClick={() => setShowTransferModal(true)}
-                        className="px-2.5 py-1.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-xs text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                        className={`px-2.5 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isLight
+                            ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
+                            : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+                        }`}
                         title="Mover comanda a otra mesa física"
                       >
                         <ArrowRightLeft className="w-3.5 h-3.5 text-cyan-400" />
@@ -1445,7 +1771,11 @@ export default function ComanderaPage() {
                     <button
                       type="button"
                       onClick={handleOpenPrintBill}
-                      className="px-2.5 py-1.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-xs text-violet-300 border border-violet-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                      className={`px-2.5 py-1.5 rounded-xl text-xs border flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
+                        isLight
+                          ? 'bg-purple-100 hover:bg-purple-200 text-purple-950 border-purple-300'
+                          : 'bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border-violet-500/30'
+                      }`}
                       title="Imprimir ticket de cobro / pre-cuenta"
                     >
                       <Printer className="w-3.5 h-3.5" />
@@ -1456,7 +1786,11 @@ export default function ComanderaPage() {
                     <button
                       type="button"
                       onClick={handleReleaseTable}
-                      className="px-2.5 py-1.5 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-xs text-red-400 border border-red-500/30 transition-all cursor-pointer"
+                      className={`px-2.5 py-1.5 rounded-xl text-xs border transition-all cursor-pointer ${
+                        isLight
+                          ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 font-bold'
+                          : 'bg-red-600/10 hover:bg-red-600/20 text-red-400 border-red-500/30'
+                      }`}
                       title="Liberar mesa"
                     >
                       Liberar
@@ -1467,7 +1801,11 @@ export default function ComanderaPage() {
                 <button
                   type="button"
                   onClick={() => setShowOrderModal(false)}
-                  className="hidden md:flex w-8 h-8 rounded-xl bg-[#251e1b] hover:bg-[#332924] text-slate-400 hover:text-white items-center justify-center font-bold cursor-pointer transition-colors"
+                  className={`hidden md:flex w-8 h-8 rounded-xl items-center justify-center font-bold cursor-pointer transition-colors ${
+                    isLight
+                      ? 'bg-[#F3E9DC] hover:bg-[#DECEBD] text-[#5E3023]'
+                      : 'bg-[#251e1b] hover:bg-[#332924] text-slate-400 hover:text-white'
+                  }`}
                 >
                   ✕
                 </button>
@@ -1477,9 +1815,13 @@ export default function ComanderaPage() {
             {/* Banner informativo de Relevo / Encargo si aplica */}
             {activeTable.currentWaiter?.id === currentUser?.id &&
               activeTable.assignedWaiter?.id !== currentUser?.id && (
-                <div className="px-4 py-2 bg-cyan-950/80 border-b border-cyan-500/30 flex items-center justify-between text-xs text-cyan-200">
+                <div className={`px-4 py-2 border-b flex items-center justify-between text-xs ${
+                  isLight
+                    ? 'bg-cyan-50 border-cyan-200 text-cyan-950 font-medium'
+                    : 'bg-cyan-950/80 border-cyan-500/30 text-cyan-200'
+                }`}>
                   <div className="flex items-center gap-2">
-                    <ArrowRightLeft className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <ArrowRightLeft className="w-4 h-4 text-cyan-500 shrink-0" />
                     <span>
                       Mesa encargada temporalmente por{' '}
                       <strong>{activeTable.assignedWaiter?.name || 'tu compañero'}</strong>.
@@ -1498,9 +1840,13 @@ export default function ComanderaPage() {
             {activeTable.assignedWaiter?.id === currentUser?.id &&
               activeTable.currentWaiter &&
               activeTable.currentWaiter.id !== currentUser?.id && (
-                <div className="px-4 py-2 bg-amber-950/80 border-b border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
+                <div className={`px-4 py-2 border-b flex items-center justify-between text-xs ${
+                  isLight
+                    ? 'bg-amber-50 border-amber-200 text-amber-950 font-medium'
+                    : 'bg-amber-950/80 border-amber-500/30 text-amber-200'
+                }`}>
                   <div className="flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                    <UserCheck className="w-4 h-4 text-amber-500 shrink-0" />
                     <span>
                       Esta mesa la está apoyando temporalmente{' '}
                       <strong>{activeTable.currentWaiter.name}</strong>.
@@ -1517,13 +1863,18 @@ export default function ComanderaPage() {
               )}
 
             {/* Pestañas de Navegación del Modal (Móvil, Tablet y Escritorio) */}
-            <div className="flex border-b border-[#382b25] bg-[#1a1412] p-1.5 sm:p-2 gap-1.5 shrink-0">
+            <div className={`flex border-b p-1.5 sm:p-2 gap-1.5 shrink-0 ${
+              isLight ? 'border-[#DECEBD] bg-[#F7F2ED]' : 'border-[#382b25] bg-[#1a1412]'
+            }`}>
               <button
                 type="button"
                 onClick={() => setOrderViewTab('catalog')}
+                style={orderViewTab === 'catalog' ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' } : {}}
                 className={`flex-1 basis-0 min-w-0 h-11 sm:h-12 px-2 sm:px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-colors cursor-pointer select-none active:scale-[0.99] ${
                   orderViewTab === 'catalog'
-                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                    ? 'shadow-md'
+                    : isLight
+                    ? 'bg-white text-[#5E3023] hover:text-[#2B1712] hover:bg-[#F3E9DC] border border-[#DECEBD]'
                     : 'bg-[#14100e] text-slate-400 hover:text-slate-200 hover:bg-[#201815]'
                 }`}
               >
@@ -1537,9 +1888,12 @@ export default function ComanderaPage() {
               <button
                 type="button"
                 onClick={() => setOrderViewTab('order')}
+                style={orderViewTab === 'order' ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' } : {}}
                 className={`flex-1 basis-0 min-w-0 h-11 sm:h-12 px-2 sm:px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-colors relative cursor-pointer select-none active:scale-[0.99] ${
                   orderViewTab === 'order'
-                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                    ? 'shadow-md'
+                    : isLight
+                    ? 'bg-white text-[#5E3023] hover:text-[#2B1712] hover:bg-[#F3E9DC] border border-[#DECEBD]'
                     : 'bg-[#14100e] text-slate-400 hover:text-slate-200 hover:bg-[#201815]'
                 }`}
               >
@@ -1552,7 +1906,9 @@ export default function ComanderaPage() {
                   <span
                     className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black leading-none shrink-0 tabular-nums ${
                       orderViewTab === 'order'
-                        ? 'bg-slate-950 text-[#F3E9DC]'
+                        ? 'bg-black/30 text-white'
+                        : isLight
+                        ? 'bg-amber-100 text-amber-950 border border-amber-300'
                         : 'bg-[#C08552] text-white shadow-sm'
                     }`}
                   >
@@ -1565,9 +1921,12 @@ export default function ComanderaPage() {
               <button
                 type="button"
                 onClick={() => setOrderViewTab('split')}
+                style={orderViewTab === 'split' ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' } : {}}
                 className={`hidden lg:flex flex-1 basis-0 min-w-0 h-11 sm:h-12 items-center justify-center gap-2 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors cursor-pointer select-none active:scale-[0.99] ${
                   orderViewTab === 'split'
-                    ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                    ? 'shadow-md shadow-[#C08552]/20'
+                    : isLight
+                    ? 'bg-white text-[#5E3023] hover:text-[#2B1712] hover:bg-[#F3E9DC] border border-[#DECEBD]'
                     : 'bg-[#14100e] text-slate-400 hover:text-slate-200 hover:bg-[#201815]'
                 }`}
                 title="Ver Catálogo y Artículos simultáneamente"
@@ -1583,7 +1942,7 @@ export default function ComanderaPage() {
               {(orderViewTab === 'catalog' || orderViewTab === 'split') && (
                 <div
                   className={`flex flex-col p-3 sm:p-4 space-y-3 overflow-y-auto flex-1 ${
-                    orderViewTab === 'split' ? 'border-r border-[#382b25]' : ''
+                    orderViewTab === 'split' ? (isLight ? 'border-r border-[#DECEBD]' : 'border-r border-[#382b25]') : ''
                   }`}
                 >
                   {/* Search & Categories Bar */}
@@ -1595,7 +1954,11 @@ export default function ComanderaPage() {
                         placeholder="Buscar platillo, postre o bebida..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-8 py-2.5 rounded-2xl bg-[#14100e] border border-[#382b25] text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                        className={`w-full pl-9 pr-8 py-2.5 rounded-2xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
+                          isLight
+                            ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
+                            : 'bg-[#14100e] border border-[#382b25] text-white placeholder-slate-500'
+                        }`}
                       />
                       {searchQuery && (
                         <button
@@ -1613,9 +1976,12 @@ export default function ComanderaPage() {
                       <button
                         type="button"
                         onClick={() => setSelectedCatId('ALL')}
+                        style={selectedCatId === 'ALL' ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' } : {}}
                         className={`px-3.5 py-2 rounded-xl font-bold shrink-0 cursor-pointer transition-all ${
                           selectedCatId === 'ALL'
-                            ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                            ? 'shadow-md'
+                            : isLight
+                            ? 'bg-white border border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
                             : 'bg-[#14100e] border border-[#382b25] text-slate-400 hover:text-white'
                         }`}
                       >
@@ -1626,9 +1992,12 @@ export default function ComanderaPage() {
                           key={c.id}
                           type="button"
                           onClick={() => setSelectedCatId(c.id)}
+                          style={selectedCatId === c.id ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' } : {}}
                           className={`px-3.5 py-2 rounded-xl font-bold shrink-0 cursor-pointer transition-all ${
                             selectedCatId === c.id
-                              ? 'bg-[#C08552] text-white shadow-md shadow-[#C08552]/20'
+                              ? 'shadow-md'
+                              : isLight
+                              ? 'bg-white border border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
                               : 'bg-[#14100e] border border-[#382b25] text-slate-400 hover:text-white'
                           }`}
                         >
@@ -1659,13 +2028,20 @@ export default function ComanderaPage() {
                           key={p.id}
                           className={`p-3 sm:p-3.5 rounded-2xl border transition-colors flex flex-col justify-between relative select-none ${
                             stagedCount > 0
-                              ? 'bg-[#251b15] border-[#C08552] shadow-md shadow-[#C08552]/15'
+                              ? isLight
+                                ? 'bg-amber-50 border-amber-400 shadow-md ring-1 ring-amber-300'
+                                : 'bg-[#251b15] border-[#C08552] shadow-md shadow-[#C08552]/15'
+                              : isLight
+                              ? 'bg-white border-[#DECEBD] hover:border-[#C08552] hover:bg-[#FDFBF9] shadow-xs'
                               : 'bg-[#1c1715] border-[#382b25] hover:border-[#C08552]/50 hover:bg-[#221c19]'
                           }`}
                         >
                           {/* Badge de cantidad */}
                           {stagedCount > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 px-2 py-0.5 rounded-full bg-[#C08552] text-white font-black text-xs shadow-md">
+                            <span
+                              style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                              className="absolute -top-1.5 -right-1.5 px-2 py-0.5 rounded-full font-black text-xs shadow-md"
+                            >
                               {stagedCount}
                             </span>
                           )}
@@ -1675,49 +2051,73 @@ export default function ComanderaPage() {
                             className="space-y-1 cursor-pointer flex-1"
                             onClick={() => handleAddProduct(p)}
                           >
-                            <span className="text-xs sm:text-sm font-bold text-white block line-clamp-2 leading-snug">
+                            <span className={`text-xs sm:text-sm font-bold block line-clamp-2 leading-snug ${
+                              isLight ? 'text-[#2B1712]' : 'text-white'
+                            }`}>
                               {p.name}
                             </span>
-                            <span className="text-[10px] sm:text-[11px] text-slate-400 block truncate">
+                            <span className={`text-[10px] sm:text-[11px] block truncate ${
+                              isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                            }`}>
                               {p.category?.name || 'General'}
                             </span>
                             <div className="pt-1">
-                              <strong className="text-xs sm:text-sm text-[#C08552] font-black">
+                              <strong className={`text-xs sm:text-sm font-black ${
+                                isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
+                              }`}>
                                 ${price.toFixed(2)}
                               </strong>
                             </div>
                           </div>
 
-                          {/* Stepper Directo en la Tarjeta: Aumentar / Disminuir (h-10 fija para evitar saltos) */}
-                          <div className="pt-2 mt-2 border-t border-[#382b25]/60 h-10 flex items-center">
+                          {/* Stepper Directo en la Tarjeta */}
+                          <div className={`pt-2 mt-2 border-t h-10 flex items-center ${
+                            isLight ? 'border-[#DECEBD]' : 'border-[#382b25]/60'
+                          }`}>
                             {stagedCount === 0 ? (
                               <button
                                 type="button"
                                 onClick={() => handleAddProduct(p)}
-                                className="w-full h-8 rounded-xl bg-[#2a211d] hover:bg-[#C08552] text-slate-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95"
+                                className={`w-full h-8 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95 ${
+                                  isLight
+                                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023] border border-[#DECEBD]'
+                                    : 'bg-[#2a211d] hover:bg-[#C08552] text-slate-300 hover:text-white'
+                                }`}
                               >
-                                <Plus className="w-3.5 h-3.5 text-[#C08552]" />
+                                <Plus className="w-3.5 h-3.5" style={{ color: themePrimary }} />
                                 <span>Agregar</span>
                               </button>
                             ) : (
-                              <div className="w-full h-8 flex items-center justify-between bg-[#14100e] px-1 rounded-xl border border-[#382b25]">
+                              <div className={`w-full h-8 flex items-center justify-between px-1 rounded-xl border ${
+                                isLight
+                                  ? 'bg-[#FDFBF9] border-[#DECEBD]'
+                                  : 'bg-[#14100e] border-[#382b25]'
+                              }`}>
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     if (variant) updateStagedQty(variant.id, -1)
                                   }}
-                                  className="w-7 h-6 flex items-center justify-center rounded-lg bg-[#251e1b] hover:bg-[#332924] active:scale-90 text-slate-200 hover:text-white font-black cursor-pointer transition-colors"
+                                  className={`w-7 h-6 flex items-center justify-center rounded-lg active:scale-90 font-black cursor-pointer transition-colors ${
+                                    isLight
+                                      ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
+                                      : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 hover:text-white'
+                                  }`}
                                   title="Disminuir"
                                 >
                                   <Minus className="w-3.5 h-3.5" />
                                 </button>
 
                                 <div className="flex flex-col items-center leading-none px-1">
-                                  <span className="font-black text-white text-xs sm:text-sm font-mono">
+                                  <span className={`font-black text-xs sm:text-sm font-mono ${
+                                    isLight ? 'text-[#2B1712]' : 'text-white'
+                                  }`}>
                                     {stagedCount}
                                   </span>
-                                  <span className="text-[9px] text-[#C08552] font-mono">
+                                  <span className={`text-[9px] font-mono font-bold ${
+                                    isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
+                                  }`}>
                                     ${(price * stagedCount).toFixed(2)}
                                   </span>
                                 </div>
@@ -1728,7 +2128,8 @@ export default function ComanderaPage() {
                                     e.stopPropagation()
                                     if (variant) updateStagedQty(variant.id, 1)
                                   }}
-                                  className="w-7 h-6 flex items-center justify-center rounded-lg bg-[#C08552] hover:bg-[#a87445] active:scale-90 text-white font-black cursor-pointer transition-colors shadow-sm"
+                                  style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                                  className="w-7 h-6 flex items-center justify-center rounded-lg active:scale-90 font-black cursor-pointer transition-colors shadow-sm"
                                   title="Aumentar"
                                 >
                                   <Plus className="w-3.5 h-3.5" />
@@ -1743,15 +2144,19 @@ export default function ComanderaPage() {
 
                   {/* Barra Flotante Inferior de Resumen cuando hay artículos registrados */}
                   {stagedItems.length > 0 && orderViewTab === 'catalog' && (
-                    <div className="sticky bottom-0 left-0 right-0 p-3 bg-[#1c1715]/95 border-t border-[#382b25] backdrop-blur-md flex items-center justify-between shadow-2xl z-30 rounded-2xl">
+                    <div className={`sticky bottom-0 left-0 right-0 p-3 border-t backdrop-blur-md flex items-center justify-between shadow-2xl z-30 rounded-2xl ${
+                      isLight
+                        ? 'bg-white/95 border-[#DECEBD] text-[#2B1712]'
+                        : 'bg-[#1c1715]/95 border-[#382b25] text-slate-100'
+                    }`}>
                       <div>
-                        <span className="text-xs text-slate-300 block font-medium">
+                        <span className={`text-xs block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
                           {stagedItems.reduce((acc, it) => acc + it.quantity, 0)}{' '}
                           {stagedItems.reduce((acc, it) => acc + it.quantity, 0) === 1
                             ? 'artículo registrado'
                             : 'artículos registrados'}
                         </span>
-                        <strong className="text-sm sm:text-base font-black text-[#C08552] font-mono">
+                        <strong className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
                           $
                           {stagedItems
                             .reduce((acc, it) => acc + it.unitPrice * it.quantity, 0)
@@ -1763,7 +2168,8 @@ export default function ComanderaPage() {
                       <button
                         type="button"
                         onClick={() => setOrderViewTab('order')}
-                        className="px-4 py-2.5 rounded-xl bg-[#C08552] hover:bg-[#a87445] text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-[#C08552]/30 active:scale-95 cursor-pointer transition-all"
+                        style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                        className="px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg active:scale-95 cursor-pointer transition-all"
                       >
                         <ShoppingBag className="w-4 h-4" />
                         <span>Ver Comanda ({stagedItems.reduce((acc, it) => acc + it.quantity, 0)}) →</span>
@@ -1776,15 +2182,17 @@ export default function ComanderaPage() {
               {/* VISTA ARTÍCULOS REGISTRADOS / COMANDA (visible si orderViewTab === 'order' o 'split') */}
               {(orderViewTab === 'order' || orderViewTab === 'split') && (
                 <div
-                  className={`flex flex-col bg-[#14100e] p-3 sm:p-4 space-y-4 overflow-y-auto ${
+                  className={`flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto ${
+                    isLight ? 'bg-[#FDFBF9]' : 'bg-[#14100e]'
+                  } ${
                     orderViewTab === 'split'
-                      ? 'w-full lg:w-[480px] xl:w-[560px] 2xl:w-[620px] shrink-0'
+                      ? 'w-full lg:w-[480px] xl:w-[560px] 2xl:w-[620px] shrink-0 border-l ' + (isLight ? 'border-[#DECEBD]' : 'border-[#382b25]')
                       : 'flex-1'
                   }`}
                 >
                   {/* Nombre de comensal opcional */}
                   <div className="shrink-0 space-y-1">
-                    <label className="text-[11px] text-slate-400 font-medium">
+                    <label className={`text-[11px] font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
                       Nombre de Comensal / Referencia:
                     </label>
                     <input
@@ -1792,15 +2200,23 @@ export default function ComanderaPage() {
                       placeholder="Ej. Familia López / Mesa 4"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#1c1715] border border-[#382b25] text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                      className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
+                        isLight
+                          ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
+                          : 'bg-[#1c1715] border border-[#382b25] text-white placeholder-slate-500'
+                      }`}
                     />
                   </div>
 
                   {/* Lista 1: Platillos ya en Cocina / KDS */}
                   {activeTable.activeOrder && activeTable.activeOrder.items.length > 0 && (
-                    <div className="space-y-2 shrink-0 bg-[#191412] p-3 rounded-2xl border border-[#382b25]">
-                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                    <div className={`space-y-2 shrink-0 p-3 rounded-2xl border ${
+                      isLight ? 'bg-white border-[#DECEBD] shadow-xs' : 'bg-[#191412] border-[#382b25]'
+                    }`}>
+                      <span className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                        isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                      }`}>
+                        <Clock className="w-3.5 h-3.5 text-cyan-500" />
                         Marchado en Cocina ({activeTable.activeOrder.items.length})
                       </span>
 
@@ -1814,14 +2230,18 @@ export default function ComanderaPage() {
                         {activeTable.activeOrder.items.map((it) => (
                           <div
                             key={it.id}
-                            className="p-2.5 rounded-xl bg-[#1c1715] border border-[#382b25] flex items-center justify-between text-xs"
+                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                              isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#1c1715] border-[#382b25]'
+                            }`}
                           >
                             <div className="min-w-0 pr-2">
-                              <span className="font-bold text-white block truncate">
+                              <span className={`font-bold block truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
                                 {it.quantity}x {it.productName}
                               </span>
                               {it.notes && (
-                                <span className="text-[10px] text-amber-300/90 block italic truncate mt-0.5">
+                                <span className={`text-[10px] block italic truncate mt-0.5 ${
+                                  isLight ? 'text-amber-800' : 'text-amber-300/90'
+                                }`}>
                                   Nota: {it.notes}
                                 </span>
                               )}
@@ -1831,9 +2251,15 @@ export default function ComanderaPage() {
                               <span
                                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                                   it.kitchenStatus === 'READY'
-                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    ? isLight
+                                      ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold'
+                                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                     : it.kitchenStatus === 'COOKING'
-                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    ? isLight
+                                      ? 'bg-amber-100 text-amber-950 border border-amber-300 font-bold'
+                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    : isLight
+                                    ? 'bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
                                     : 'bg-slate-800 text-slate-400'
                                 }`}
                               >
@@ -1843,7 +2269,7 @@ export default function ComanderaPage() {
                                   ? '🍳 Preparando'
                                   : '⏳ En espera'}
                               </span>
-                              <span className="text-[11px] text-slate-400 block mt-0.5 font-mono">
+                              <span className={`text-[11px] block mt-0.5 font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
                                 ${it.subtotal.toFixed(2)}
                               </span>
                             </div>
@@ -1856,7 +2282,9 @@ export default function ComanderaPage() {
                   {/* Lista 2: TARJETAS de Nuevos Platillos a Marchar */}
                   <div className="flex-1 flex flex-col space-y-3 overflow-y-auto">
                     <div className="flex items-center justify-between shrink-0">
-                      <span className="text-xs font-bold text-[#C08552] uppercase tracking-wider flex items-center gap-1.5">
+                      <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                        isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
+                      }`}>
                         <Sparkles className="w-3.5 h-3.5" />
                         Nuevos Artículos por Marchar ({stagedItems.length})
                       </span>
@@ -1865,9 +2293,13 @@ export default function ComanderaPage() {
                           <button
                             type="button"
                             onClick={() => setOrderViewTab('catalog')}
-                            className="text-xs font-bold text-slate-300 hover:text-white bg-[#251e1b] hover:bg-[#332924] px-2.5 py-1 rounded-lg border border-[#382b25] transition-all flex items-center gap-1 cursor-pointer"
+                            className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                              isLight
+                                ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
+                                : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300 hover:text-white'
+                            }`}
                           >
-                            <Plus className="w-3.5 h-3.5 text-[#C08552]" />
+                            <Plus className="w-3.5 h-3.5" style={{ color: themePrimary }} />
                             <span>Agregar Más</span>
                           </button>
                         )}
@@ -1876,7 +2308,7 @@ export default function ComanderaPage() {
                           <button
                             type="button"
                             onClick={() => setStagedItems([])}
-                            className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 cursor-pointer"
+                            className="text-xs text-red-500 hover:text-red-600 font-bold transition-colors px-2 py-1 cursor-pointer"
                           >
                             Vaciar ronda
                           </button>
@@ -1885,20 +2317,25 @@ export default function ComanderaPage() {
                     </div>
 
                     {stagedItems.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-[#382b25] rounded-3xl p-8 text-center space-y-3">
+                      <div className={`flex-1 flex flex-col items-center justify-center text-xs border border-dashed rounded-3xl p-8 text-center space-y-3 ${
+                        isLight
+                          ? 'border-[#DECEBD] bg-white/60 text-[#7A5A43]'
+                          : 'border-[#382b25] text-slate-500'
+                      }`}>
                         <ShoppingBag className="w-12 h-12 opacity-30 text-[#C08552]" />
                         <div>
-                          <p className="font-bold text-slate-300 text-sm">
+                          <p className={`font-bold text-sm ${isLight ? 'text-[#2B1712]' : 'text-slate-300'}`}>
                             Sin artículos registrados aún
                           </p>
-                          <p className="text-slate-500 text-xs mt-1">
+                          <p className={`text-xs mt-1 ${isLight ? 'text-[#7A5A43]' : 'text-slate-500'}`}>
                             Selecciona platillos o bebidas del menú para agregarlos a esta ronda.
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => setOrderViewTab('catalog')}
-                          className="px-4 py-2.5 rounded-xl bg-[#C08552] text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-[#C08552]/20 cursor-pointer active:scale-95"
+                          style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                          className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg cursor-pointer active:scale-95"
                         >
                           <UtensilsCrossed className="w-4 h-4" />
                           <span>Abrir Catálogo / Menú</span>
@@ -1915,19 +2352,23 @@ export default function ComanderaPage() {
                         {stagedItems.map((item) => (
                           <div
                             key={item.variantId}
-                            className="p-3.5 rounded-2xl bg-[#1c1715] border border-[#382b25] hover:border-[#C08552]/40 flex flex-col justify-between space-y-3 text-xs shadow-md transition-colors"
+                            className={`p-3.5 rounded-2xl border flex flex-col justify-between space-y-3 text-xs shadow-md transition-colors ${
+                              isLight
+                                ? 'bg-white border-[#DECEBD] hover:border-[#C08552]'
+                                : 'bg-[#1c1715] border-[#382b25] hover:border-[#C08552]/40'
+                            }`}
                           >
                             {/* Cabecera de la Tarjeta: Nombre y Subtotal */}
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0 flex-1">
-                                <strong className="text-white block text-sm font-bold truncate">
+                                <strong className={`block text-sm font-bold truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
                                   {item.productName}
                                 </strong>
                                 <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-slate-400 text-xs font-mono">
+                                  <span className={`text-xs font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
                                     ${item.unitPrice.toFixed(2)} c/u
                                   </span>
-                                  <span className="text-[#C08552] font-black text-xs font-mono">
+                                  <span className={`font-black text-xs font-mono ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
                                     • ${(item.unitPrice * item.quantity).toFixed(2)}
                                   </span>
                                 </div>
@@ -1936,7 +2377,11 @@ export default function ComanderaPage() {
                               <button
                                 type="button"
                                 onClick={() => removeItemFromStaged(item.variantId)}
-                                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 active:scale-90 transition-colors cursor-pointer shrink-0"
+                                className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-90 transition-colors cursor-pointer shrink-0 ${
+                                  isLight
+                                    ? 'text-rose-600 hover:bg-rose-50'
+                                    : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
+                                }`}
                                 title="Quitar platillo"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1944,28 +2389,37 @@ export default function ComanderaPage() {
                             </div>
 
                             {/* Stepper Táctil: Disminuir [-] y Aumentar [+] */}
-                            <div className="flex items-center justify-between bg-[#14100e] p-1.5 rounded-xl border border-[#382b25]">
-                              <span className="text-[11px] text-slate-400 font-medium px-2">
+                            <div className={`flex items-center justify-between p-1.5 rounded-xl border ${
+                              isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+                            }`}>
+                              <span className={`text-[11px] font-medium px-2 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
                                 Cantidad:
                               </span>
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => updateStagedQty(item.variantId, -1)}
-                                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-[#251e1b] hover:bg-[#332924] text-slate-200 hover:text-white active:scale-90 transition-colors cursor-pointer font-black text-sm"
+                                  className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm ${
+                                    isLight
+                                      ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
+                                      : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 hover:text-white'
+                                  }`}
                                   title="Disminuir"
                                 >
                                   <Minus className="w-4 h-4" />
                                 </button>
 
-                                <span className="font-black text-white text-sm sm:text-base px-2 min-w-[28px] text-center font-mono">
+                                <span className={`font-black text-sm sm:text-base px-2 min-w-[28px] text-center font-mono ${
+                                  isLight ? 'text-[#2B1712]' : 'text-white'
+                                }`}>
                                   {item.quantity}
                                 </span>
 
                                 <button
                                   type="button"
                                   onClick={() => updateStagedQty(item.variantId, 1)}
-                                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl bg-[#C08552] hover:bg-[#a87445] text-white active:scale-90 transition-colors cursor-pointer font-black text-sm shadow-md shadow-[#C08552]/20"
+                                  style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm shadow-md"
                                   title="Aumentar"
                                 >
                                   <Plus className="w-4 h-4" />
@@ -1974,20 +2428,24 @@ export default function ComanderaPage() {
                             </div>
 
                             {/* Notas Rápidas y Chips para Cocina */}
-                            <div className="space-y-1.5 pt-2 border-t border-[#251e1b]">
+                            <div className={`space-y-1.5 pt-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-[#251e1b]'}`}>
                               <div className="flex items-center gap-1">
                                 <input
                                   type="text"
                                   placeholder="Nota especial (ej. sin azúcar, para llevar)..."
                                   value={item.notes}
                                   onChange={(e) => updateItemNote(item.variantId, e.target.value)}
-                                  className="flex-1 px-2.5 py-1.5 rounded-xl bg-[#14100e] border border-[#382b25] text-xs text-amber-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#C08552]"
+                                  className={`flex-1 px-2.5 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
+                                    isLight
+                                      ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
+                                      : 'bg-[#14100e] border border-[#382b25] text-amber-200 placeholder-slate-500'
+                                  }`}
                                 />
                                 {item.notes && (
                                   <button
                                     type="button"
                                     onClick={() => updateItemNote(item.variantId, '')}
-                                    className="text-xs text-slate-400 hover:text-white px-1.5 py-1 cursor-pointer"
+                                    className={`text-xs px-1.5 py-1 cursor-pointer ${isLight ? 'text-slate-500 hover:text-black' : 'text-slate-400 hover:text-white'}`}
                                     title="Borrar nota"
                                   >
                                     ✕
@@ -2001,7 +2459,11 @@ export default function ComanderaPage() {
                                     key={note}
                                     type="button"
                                     onClick={() => appendNoteToItem(item.variantId, note)}
-                                    className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-lg bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-300 active:scale-95 transition-all cursor-pointer"
+                                    className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-lg border active:scale-95 transition-all cursor-pointer ${
+                                      isLight
+                                        ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023] font-medium'
+                                        : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+                                    }`}
                                   >
                                     +{note}
                                   </button>
@@ -2015,10 +2477,14 @@ export default function ComanderaPage() {
                   </div>
 
                   {/* Subtotal de la nueva ronda y Botón Marchar */}
-                  <div className="pt-3 border-t border-[#382b25] space-y-2.5 shrink-0 bg-[#14100e]">
+                  <div className={`pt-3 border-t space-y-2.5 shrink-0 ${
+                    isLight ? 'border-[#DECEBD] bg-[#FDFBF9]' : 'border-[#382b25] bg-[#14100e]'
+                  }`}>
                     <div className="flex justify-between items-center text-xs sm:text-sm">
-                      <span className="text-slate-400">Total ronda a marchar:</span>
-                      <strong className="text-[#C08552] text-base sm:text-lg font-black font-mono">
+                      <span className={isLight ? 'text-[#7A5A43] font-medium' : 'text-slate-400'}>Total ronda a marchar:</span>
+                      <strong className={`text-base sm:text-lg font-black font-mono ${
+                        isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
+                      }`}>
                         $
                         {stagedItems
                           .reduce((acc, curr) => acc + curr.unitPrice * curr.quantity, 0)
@@ -2032,9 +2498,13 @@ export default function ComanderaPage() {
                         <button
                           type="button"
                           onClick={() => setOrderViewTab('catalog')}
-                          className="flex-1 py-3 rounded-2xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-300 hover:text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer transition-all"
+                          className={`flex-1 py-3 rounded-2xl border font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer transition-all ${
+                            isLight
+                              ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
+                              : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300 hover:text-white'
+                          }`}
                         >
-                          <UtensilsCrossed className="w-4 h-4 text-[#C08552]" />
+                          <UtensilsCrossed className="w-4 h-4" style={{ color: themePrimary }} />
                           <span>+ Agregar Más</span>
                         </button>
                       )}
@@ -2043,7 +2513,8 @@ export default function ComanderaPage() {
                         type="button"
                         onClick={handleSendToKitchen}
                         disabled={submittingOrder || stagedItems.length === 0}
-                        className="flex-1 py-3.5 rounded-2xl bg-[#C08552] hover:bg-[#a87445] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#C08552]/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95 select-none"
+                        style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                        className="flex-1 py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95 select-none"
                       >
                         {submittingOrder ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -2066,21 +2537,23 @@ export default function ComanderaPage() {
       {/* MODAL PARA TRASPASAR MESA */}
       {showTransferModal && activeTable && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+          <div className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border ${
+            isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-slate-900 border-slate-800 text-white'
+          }`}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-500 flex items-center justify-center font-bold">
                 <ArrowRightLeft className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Traspasar Mesa</h3>
-                <p className="text-xs text-slate-400">Mover comanda de {activeTable.name}</p>
+                <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Traspasar Mesa</h3>
+                <p className={`text-xs ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>Mover comanda de {activeTable.name}</p>
               </div>
             </div>
 
             <div className="space-y-2 text-xs">
-              <label className="block text-slate-300 font-medium">Selecciona la mesa destino (Libre):</label>
+              <label className={`block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>Selecciona la mesa destino (Libre):</label>
               {availableTargetTables.length === 0 ? (
-                <p className="p-3 rounded-xl bg-red-500/10 text-red-400 text-center">
+                <p className="p-3 rounded-xl bg-red-500/10 text-red-500 text-center font-medium">
                   No hay mesas libres disponibles en este momento.
                 </p>
               ) : (
@@ -2090,9 +2563,11 @@ export default function ComanderaPage() {
                       key={t.id}
                       type="button"
                       onClick={() => setTargetTransferTableId(t.id)}
-                      className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                      className={`p-3 rounded-xl border text-center transition-all cursor-pointer font-bold ${
                         targetTransferTableId === t.id
                           ? 'bg-cyan-500 text-slate-950 font-bold border-cyan-400 shadow-md'
+                          : isLight
+                          ? 'bg-[#FDFBF9] border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
                           : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                       }`}
                     >
@@ -2103,11 +2578,13 @@ export default function ComanderaPage() {
               )}
             </div>
 
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+            <div className={`pt-2 flex justify-end gap-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-slate-800'}`}>
               <button
                 type="button"
                 onClick={() => setShowTransferModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium cursor-pointer"
+                className={`px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${
+                  isLight ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]' : 'bg-slate-800 text-slate-300'
+                }`}
               >
                 Cancelar
               </button>
@@ -2128,29 +2605,33 @@ export default function ComanderaPage() {
       {/* MODAL PARA ENCARGAR ATENCIÓN DE MESA TEMPORALMENTE A OTRO COMPAÑERO MESERO */}
       {showTransferWaiterModal && activeTable && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-cyan-500/40 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+          <div className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border ${
+            isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-slate-900 border-cyan-500/40 text-white'
+          }`}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-500 flex items-center justify-center font-bold">
                 <UserCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Encargar Mesa a Compañero</h3>
-                <p className="text-xs text-slate-400">Relevo temporal de atención en {activeTable.name}</p>
+                <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Encargar Mesa a Compañero</h3>
+                <p className={`text-xs ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>Relevo temporal de atención en {activeTable.name}</p>
               </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-cyan-950/30 border border-cyan-500/30 text-[11px] text-cyan-300 space-y-1">
+            <div className={`p-3 rounded-2xl text-[11px] space-y-1 border ${
+              isLight ? 'bg-cyan-50 border-cyan-200 text-cyan-950' : 'bg-cyan-950/30 border-cyan-500/30 text-cyan-300'
+            }`}>
               <p className="font-semibold">ℹ️ Encargo temporal de mesa:</p>
-              <p className="text-cyan-200/80">
+              <p className={isLight ? 'text-cyan-900' : 'text-cyan-200/80'}>
                 La mesa pasará a la lista de tu compañero para que pueda atender a los clientes (ej. si vas al sanitario).
                 <strong> El titular seguirá siendo el mismo y podrán devolver o retomar la mesa en cualquier momento con un solo toque.</strong>
               </p>
             </div>
 
             <div className="space-y-2 text-xs">
-              <label className="block text-slate-300 font-medium">Selecciona el compañero mesero:</label>
+              <label className={`block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>Selecciona el compañero mesero:</label>
               {waiters.filter((w) => w.id !== currentUser?.id).length === 0 ? (
-                <p className="p-3 rounded-xl bg-red-500/10 text-red-400 text-center">
+                <p className="p-3 rounded-xl bg-red-500/10 text-red-500 text-center font-medium">
                   No hay otros compañeros disponibles en esta sucursal.
                 </p>
               ) : (
@@ -2165,14 +2646,16 @@ export default function ComanderaPage() {
                         className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                           targetTransferWaiterId === w.id
                             ? 'bg-cyan-500 text-slate-950 font-bold border-cyan-400 shadow-md'
+                            : isLight
+                            ? 'bg-[#FDFBF9] border-[#DECEBD] text-[#2B1712] hover:bg-[#F3E9DC]'
                             : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <Users className="w-3.5 h-3.5 opacity-70" />
-                          <span>{w.name}</span>
+                          <span className="font-bold">{w.name}</span>
                         </div>
-                        <span className="text-[10px] opacity-75">
+                        <span className={`text-[10px] ${isLight ? 'text-[#7A5A43]' : 'opacity-75'}`}>
                           {w.roles.join(', ') || 'Colaborador'}
                         </span>
                       </button>
@@ -2181,11 +2664,13 @@ export default function ComanderaPage() {
               )}
             </div>
 
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+            <div className={`pt-2 flex justify-end gap-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-slate-800'}`}>
               <button
                 type="button"
                 onClick={() => setShowTransferWaiterModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium cursor-pointer"
+                className={`px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${
+                  isLight ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]' : 'bg-slate-800 text-slate-300'
+                }`}
               >
                 Cancelar
               </button>
@@ -2206,27 +2691,31 @@ export default function ComanderaPage() {
       {/* MODAL PARA ASIGNAR MESERO TITULAR PERMANENTE A LA MESA (SOLO ADMIN / GERENTE) */}
       {showAssignWaiterModal && activeTable && isOwnerOrAdmin && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+          <div className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border ${
+            isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-slate-900 border-slate-800 text-white'
+          }`}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
                 <UserPlus className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Mesero Titular</h3>
-                <p className="text-xs text-slate-400">Asignar responsable de {activeTable.name}</p>
+                <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Mesero Titular</h3>
+                <p className={`text-xs ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>Asignar responsable de {activeTable.name}</p>
               </div>
             </div>
 
             <div className="space-y-2 text-xs">
-              <label className="block text-slate-300 font-medium">Selecciona el mesero titular:</label>
+              <label className={`block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>Selecciona el mesero titular:</label>
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {/* Opción para dejar sin asignar */}
                 <button
                   type="button"
                   onClick={() => setTargetAssignWaiterId('')}
-                  className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer font-bold ${
                     targetAssignWaiterId === ''
                       ? 'bg-amber-500 text-slate-950 font-bold border-amber-400 shadow-md'
+                      : isLight
+                      ? 'bg-[#FDFBF9] border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
                       : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                   }`}
                 >
@@ -2241,14 +2730,16 @@ export default function ComanderaPage() {
                     className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                       targetAssignWaiterId === w.id
                         ? 'bg-amber-500 text-slate-950 font-bold border-amber-400 shadow-md'
+                        : isLight
+                        ? 'bg-[#FDFBF9] border-[#DECEBD] text-[#2B1712] hover:bg-[#F3E9DC]'
                         : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       <Users className="w-3.5 h-3.5 opacity-70" />
-                      <span>{w.name}</span>
+                      <span className="font-bold">{w.name}</span>
                     </div>
-                    <span className="text-[10px] opacity-75">
+                    <span className={`text-[10px] ${isLight ? 'text-[#7A5A43]' : 'opacity-75'}`}>
                       {w.roles.join(', ') || 'Colaborador'}
                     </span>
                   </button>
@@ -2256,11 +2747,13 @@ export default function ComanderaPage() {
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+            <div className={`pt-2 flex justify-end gap-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-slate-800'}`}>
               <button
                 type="button"
                 onClick={() => setShowAssignWaiterModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium cursor-pointer"
+                className={`px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${
+                  isLight ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]' : 'bg-slate-800 text-slate-300'
+                }`}
               >
                 Cancelar
               </button>
@@ -2280,23 +2773,47 @@ export default function ComanderaPage() {
 
       {/* MODAL DE TICKET DE COBRO / PRE-CUENTA IMPRIMIBLE */}
       {showBillReceiptModal && activeTable && activeTable.activeOrder && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-violet-500/50 p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div
+            className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-[#17120F] border-[#382B25] text-white'
+            }`}
+          >
             {/* Header del modal */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div
+              className={`flex items-center justify-between pb-3 border-b ${
+                isLight ? 'border-[#DECEBD]' : 'border-white/10'
+              }`}
+            >
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-violet-500/20 text-violet-400 flex items-center justify-center font-bold">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
+                  style={{
+                    backgroundColor: `${themePrimary}20`,
+                    color: isLight ? '#5E3023' : themePrimary,
+                  }}
+                >
                   <Printer className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Ticket de Pre-cuenta</h3>
-                  <p className="text-[11px] text-slate-400">Previsualización e Impresión</p>
+                  <h3 className={`text-sm font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Ticket de Pre-cuenta
+                  </h3>
+                  <p className={`text-[11px] ${isLight ? 'text-[#895737]' : 'text-slate-400'}`}>
+                    Previsualización e Impresión
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowBillReceiptModal(false)}
-                className="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+                className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                  isLight
+                    ? 'bg-[#F3E9DC] text-[#5E3023] hover:bg-[#E6D5C3]'
+                    : 'bg-[#2B1712] text-slate-400 hover:text-white'
+                }`}
               >
                 ✕
               </button>
@@ -2389,7 +2906,11 @@ export default function ComanderaPage() {
               <button
                 type="button"
                 onClick={() => setShowBillReceiptModal(false)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium cursor-pointer"
+                className={`px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border ${
+                  isLight
+                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                }`}
               >
                 Cerrar
               </button>
@@ -2400,7 +2921,8 @@ export default function ComanderaPage() {
                   window.print()
                   notify.success('Ticket enviado a impresión', `Pre-cuenta de ${activeTable.name}`)
                 }}
-                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-violet-600/30 cursor-pointer"
+                style={{ backgroundColor: themeButton }}
+                className="px-5 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 shadow-lg cursor-pointer hover:opacity-90 transition-opacity"
               >
                 <Printer className="w-4 h-4" />
                 <span>Imprimir Ticket</span>
@@ -2412,82 +2934,179 @@ export default function ComanderaPage() {
 
       {/* MODAL FULLSCREEN DE BLOQUEO DE TERMINAL Y RELEVO RÁPIDO */}
       {isTerminalLocked && (
-        <div className="fixed inset-0 z-50 bg-[#0e0c0b]/95 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-[#14100e] border border-[#382b25] p-6 space-y-5 shadow-2xl text-center animate-in zoom-in-95">
-            <div className="w-14 h-14 rounded-2xl bg-[#C08552]/10 border border-[#C08552]/30 text-[#C08552] flex items-center justify-center mx-auto shadow-lg shadow-[#C08552]/10">
-              <Lock className="w-7 h-7" />
-            </div>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white overflow-y-auto"
+          style={{ backgroundColor: themeBg }}
+        >
+          {/* Ambient Warm Glows con colores de la BD */}
+          <div className="fixed inset-0 overflow-hidden pointer-events-none">
+            <div
+              className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] rounded-full blur-[130px]"
+              style={{ backgroundColor: themePrimary, opacity: 0.18 }}
+            />
+            <div
+              className="absolute bottom-10 right-1/4 w-[400px] h-[400px] rounded-full blur-[110px]"
+              style={{ backgroundColor: themeSecondary, opacity: 0.15 }}
+            />
+          </div>
+
+          <div
+            className={`w-full max-w-sm rounded-3xl p-7 sm:p-8 space-y-4 shadow-2xl text-center backdrop-blur-xl relative animate-in zoom-in-95 border ${
+              themeBg.toLowerCase().startsWith('#f') || themeBg.toLowerCase().startsWith('#fff')
+                ? 'bg-white/95 border-[#E6D5C3] text-[#5E3023] shadow-[#5E3023]/15'
+                : 'bg-[#19110E]/95 border-[#3E221A] text-[#F3E9DC] shadow-black/60'
+            }`}
+          >
+            {/* Logo o Icono de Marca */}
+            {activeBranch?.logoUrl || activeBranch?.isotypeUrl ? (
+              <div className="flex justify-center mb-1">
+                <img
+                  src={activeBranch?.logoUrl || activeBranch?.isotypeUrl || ''}
+                  alt={activeBranch?.name || 'Logo'}
+                  className="max-h-16 max-w-[170px] w-auto h-auto object-contain drop-shadow-md py-1"
+                />
+              </div>
+            ) : (
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-lg mb-2 transform hover:scale-105 transition-transform duration-300 text-white"
+                style={{
+                  background: `linear-gradient(135deg, ${themeSecondary}, ${themePrimary})`,
+                }}
+              >
+                <Lock className="w-7 h-7" />
+              </div>
+            )}
 
             <div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#1c1715] border border-[#382b25] text-[11px] text-[#C08552] mb-2 font-bold">
-                <Store className="w-3 h-3" />
-                <span>{activeBranch?.name || 'Comandera'}</span>
+              <div
+                className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold mb-1.5 border"
+                style={{
+                  backgroundColor: `${themePrimary}20`,
+                  borderColor: `${themePrimary}40`,
+                  color: themePrimary,
+                }}
+              >
+                <Coffee className="w-3.5 h-3.5" />
+                <span>
+                  {currentUser?.branches && currentUser.branches.length > 1
+                    ? activeBranch?.name || 'Comandera'
+                    : 'Comandera de Mesas'}
+                </span>
               </div>
-              <h2 className="text-xl font-black text-white tracking-tight">Comandera Bloqueada</h2>
-              <p className="text-xs text-slate-400 mt-1">
+              <h2
+                className={`text-2xl font-extrabold tracking-tight ${
+                  themeBg.toLowerCase().startsWith('#f') ? 'text-[#5E3023]' : 'text-[#F3E9DC]'
+                }`}
+              >
+                Comandera Bloqueada
+              </h2>
+              <p
+                className={`text-xs font-medium mt-1 ${
+                  themeBg.toLowerCase().startsWith('#f') ? 'text-[#895737]' : 'text-[#A88C7D]'
+                }`}
+              >
                 Ingresa tu PIN de 4 dígitos para relevar o continuar turno
               </p>
               {currentUser && (
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Último mesero: <span className="text-slate-300 font-semibold">{currentUser.name}</span>
+                <p
+                  className={`text-[11px] mt-1 font-medium ${
+                    themeBg.toLowerCase().startsWith('#f') ? 'text-[#A88C7D]' : 'text-[#DECEBD]/70'
+                  }`}
+                >
+                  Último mesero:{' '}
+                  <strong
+                    className={
+                      themeBg.toLowerCase().startsWith('#f') ? 'text-[#5E3023]' : 'text-[#F3E9DC]'
+                    }
+                  >
+                    {currentUser.name}
+                  </strong>
                 </p>
               )}
             </div>
 
             {/* Error */}
             {unlockError && (
-              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium animate-in fade-in">
+              <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium text-center animate-in fade-in">
                 {unlockError}
               </div>
             )}
 
             {/* PIN indicators */}
             <div className="flex justify-center gap-3 my-2">
-              {[0, 1, 2, 3].map((idx) => (
-                <div
-                  key={idx}
-                  className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all ${
-                    unlockPin.length > idx
-                      ? 'border-[#C08552] bg-[#C08552]/15 text-[#C08552] shadow-md shadow-[#C08552]/20'
-                      : 'border-[#382b25] bg-[#1c1715] text-slate-600'
-                  }`}
-                >
-                  {unlockPin.length > idx ? '•' : ''}
-                </div>
-              ))}
+              {[0, 1, 2, 3].map((idx) => {
+                const filled = unlockPin.length > idx
+                const isLight = themeBg.toLowerCase().startsWith('#f')
+                return (
+                  <div
+                    key={idx}
+                    className="w-12 h-12 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all"
+                    style={
+                      filled
+                        ? {
+                            borderColor: themePrimary,
+                            backgroundColor: `${themePrimary}25`,
+                            color: isLight ? '#5E3023' : '#FFFFFF',
+                            boxShadow: `0 0 12px ${themePrimary}35`,
+                          }
+                        : isLight
+                        ? { borderColor: '#DECEBD', backgroundColor: '#FDFBF9', color: '#A88C7D' }
+                        : { borderColor: '#3E221A', backgroundColor: '#120B09', color: '#6A564C' }
+                    }
+                  >
+                    {filled ? '•' : ''}
+                  </div>
+                )
+              })}
             </div>
 
-            {/* Teclado numérico táctil optimizado para Touch (botones amplios h-14) */}
+            {/* Teclado numérico táctil optimizado para Touch */}
             <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => handleKeypadPressUnlock(val)}
-                  disabled={unlocking}
-                  className="h-14 rounded-2xl bg-[#1c1715] hover:bg-[#251e1b] border border-[#382b25] text-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none"
-                >
-                  {val === 'DEL' ? '⌫' : val}
-                </button>
-              ))}
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => {
+                const isLight = themeBg.toLowerCase().startsWith('#f')
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => handleKeypadPressUnlock(val)}
+                    disabled={unlocking}
+                    className={`h-14 rounded-2xl text-lg font-bold transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none border ${
+                      isLight
+                        ? 'bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                        : 'bg-[#231511] hover:bg-[#341C16] active:bg-[#43231B] border-[#3E221A] text-[#F3E9DC]'
+                    }`}
+                  >
+                    {val === 'DEL' ? '⌫' : val}
+                  </button>
+                )
+              })}
             </div>
 
             <button
               type="button"
               onClick={() => handleUnlockTerminal()}
               disabled={unlocking || unlockPin.length < 4}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#C08552] hover:bg-[#a87445] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-[#C08552]/20 transition-all disabled:opacity-40 cursor-pointer active:scale-95"
+              style={{ backgroundColor: themeButton }}
+              className="w-full py-3.5 px-4 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50 cursor-pointer active:scale-95"
             >
               {unlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               <span>Desbloquear Comandera</span>
             </button>
 
             {/* Opción de cerrar sesión general */}
-            <div className="pt-2 border-t border-slate-800/80">
+            <div
+              className={`pt-2 border-t ${
+                themeBg.toLowerCase().startsWith('#f') ? 'border-[#E6D5C3]' : 'border-[#3E221A]'
+              }`}
+            >
               <form action="/api/auth/logout" method="POST">
                 <button
                   type="submit"
-                  className="w-full text-[11px] text-slate-500 hover:text-red-400 flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer"
+                  className={`w-full text-xs flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer font-medium ${
+                    themeBg.toLowerCase().startsWith('#f')
+                      ? 'text-[#895737] hover:text-[#5E3023]'
+                      : 'text-[#A88C7D] hover:text-[#F3E9DC]'
+                  }`}
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Salir al Login Principal (Cerrar Sesión)</span>
@@ -2500,19 +3119,33 @@ export default function ComanderaPage() {
 
       {/* MODAL ADVERTENCIA AL TOMAR MESA ASIGNADA A OTRO MESERO */}
       {takeoverWarningTable && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-[#14100e] border border-[#382b25] p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            className={`w-full max-w-sm rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 text-center border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-[#14100e] border-[#382b25] text-white'
+            }`}
+          >
+            <div
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto border ${
+                isLight
+                  ? 'bg-amber-100 text-amber-950 border-amber-300'
+                  : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+              }`}
+            >
               <UserCheck className="w-6 h-6" />
             </div>
 
             <div className="space-y-1.5">
-              <h3 className="text-base font-bold text-white">Mesa con mesero titular</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                La <strong className="text-white">{takeoverWarningTable.name}</strong> está asignada
-                a <strong className="text-amber-300">{takeoverWarningTable.assignedWaiter?.name}</strong>.
+              <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                Mesa con mesero titular
+              </h3>
+              <p className={`text-xs leading-relaxed ${isLight ? 'text-[#5E3023]' : 'text-slate-300'}`}>
+                La <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{takeoverWarningTable.name}</strong> está asignada
+                a <strong className={isLight ? 'text-amber-800' : 'text-amber-300'}>{takeoverWarningTable.assignedWaiter?.name}</strong>.
               </p>
-              <p className="text-[11px] text-slate-400">
+              <p className={`text-[11px] ${isLight ? 'text-[#895737]' : 'text-slate-400'}`}>
                 ¿Deseas abrir la comanda para atenderla como apoyo o relevo?
               </p>
             </div>
@@ -2521,14 +3154,18 @@ export default function ComanderaPage() {
               <button
                 type="button"
                 onClick={() => setTakeoverWarningTable(null)}
-                className="flex-1 py-2.5 rounded-xl bg-[#251e1b] hover:bg-[#332924] border border-[#382b25] text-slate-300 text-xs font-bold cursor-pointer transition-all"
+                className={`flex-1 py-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                  isLight
+                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                    : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+                }`}
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={() => openTableOrder(takeoverWarningTable)}
-                style={{ backgroundColor: activeBranch?.primaryColor || '#C08552' }}
+                style={{ backgroundColor: themeButton }}
                 className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-95 cursor-pointer transition-all flex items-center justify-center gap-1"
               >
                 <span>Atender como Apoyo</span>

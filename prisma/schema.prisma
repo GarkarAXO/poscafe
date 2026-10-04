@@ -125,13 +125,15 @@ model BusinessSetting {
 
   // Identidad visual
   logoUrl        String?
+  isotypeUrl     String?
   faviconUrl     String?
   ticketLogoUrl  String?
-  primaryColor   String?  @default("#7c3aed")
-  secondaryColor String?  @default("#4f46e5")
-  accentColor    String?  @default("#f59e0b")
+  primaryColor   String?  @default("#C08552")
+  secondaryColor String?  @default("#5E3023")
+  accentColor    String?  @default("#C08552")
   fontFamily     String?  @default("Inter")
   darkMode       Boolean  @default(false)
+  sidebarTheme   String?  @default("DARK")
 
   // Módulos activables (Arquitectura Modular SaaS)
   multiBranchEnabled   Boolean  @default(true)
@@ -182,10 +184,12 @@ model Branch {
 
   // Personalización visual por sucursal
   logoUrl        String?
-  primaryColor   String?   @default("#7c3aed")
-  secondaryColor String?   @default("#4f46e5")
-  buttonColor    String?   @default("#f59e0b")
-  bgColor        String?   @default("#020617")
+  isotypeUrl     String?
+  sidebarTheme   String?   @default("DARK")
+  primaryColor   String?   @default("#C08552")
+  secondaryColor String?   @default("#5E3023")
+  buttonColor    String?   @default("#C08552")
+  bgColor        String?   @default("#14100E")
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

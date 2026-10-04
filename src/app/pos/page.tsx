@@ -44,6 +44,7 @@ import {
   clearTerminalDeviceConfig,
   TerminalDeviceConfig,
 } from '@/lib/terminal-device'
+import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
 
 interface Table {
   id: string
@@ -447,10 +448,51 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     loadPosData()
-    // Sondeo de mesas cada 8 segundos para detectar pre-cuentas de meseros
-    const interval = setInterval(refreshTablesData, 8000)
-    return () => clearInterval(interval)
+    // Sondeo de mesas cada 6 segundos para detectar pre-cuentas de meseros
+    const interval = setInterval(refreshTablesData, 6000)
+
+    // Sincronización instantánea al volver a la pantalla/pestaña
+    const handleFocus = () => refreshTablesData()
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshTablesData()
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
+
+  // Sincronización en caliente del tema y colores
+  useEffect(() => {
+    const handleThemeUpdate = (e: any) => {
+      const detail = e.detail
+      if (!detail) return
+      if (!detail.branchId || detail.branchId === activeBranch?.id) {
+        setActiveBranch((prev: any) => (prev ? { ...prev, ...detail } : prev))
+      }
+    }
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === 'poscafe_theme_event' && e.newValue) {
+        try {
+          const detail = JSON.parse(e.newValue)
+          if (!detail.branchId || detail.branchId === activeBranch?.id) {
+            setActiveBranch((prev: any) => (prev ? { ...prev, ...detail } : prev))
+          }
+        } catch {}
+      }
+    }
+    window.addEventListener('poscafe:theme-updated', handleThemeUpdate)
+    window.addEventListener('storage', handleStorageUpdate)
+    return () => {
+      window.removeEventListener('poscafe:theme-updated', handleThemeUpdate)
+      window.removeEventListener('storage', handleStorageUpdate)
+    }
+  }, [activeBranch?.id])
 
   // Cargar comanda marchada de mesa en el carrito de cobro
   const handleLoadTableOrder = (table: Table) => {
@@ -790,47 +832,87 @@ export default function PosTerminalPage() {
     )
   }
 
+  const themeBg = activeBranch?.bgColor || '#14100E'
+  const themePrimary = activeBranch?.primaryColor || '#C08552'
+  const themeSecondary = activeBranch?.secondaryColor || '#5E3023'
+  const themeButton = activeBranch?.buttonColor || '#C08552'
+  const isLight = isLightColor(themeBg)
+  const isLightButton = isLightColor(themeButton)
+
   return (
     <div
-      className="h-screen text-slate-100 flex flex-col overflow-hidden selection:bg-amber-500 selection:text-black"
-      style={{ backgroundColor: activeBranch?.bgColor || '#020617' }}
+      className={`h-screen flex flex-col overflow-hidden selection:bg-[#C08552] selection:text-white relative ${
+        isLight ? 'text-[#2B1712]' : 'text-slate-100'
+      }`}
+      style={{ backgroundColor: themeBg }}
     >
+      {/* Resplandores cálidos de ambiente con colores de la BD */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div
+          className="absolute -top-32 left-1/4 w-[600px] h-[600px] rounded-full blur-[140px]"
+          style={{ backgroundColor: themePrimary, opacity: isLight ? 0.08 : 0.12 }}
+        />
+        <div
+          className="absolute -bottom-32 right-1/4 w-[500px] h-[500px] rounded-full blur-[130px]"
+          style={{ backgroundColor: themeSecondary, opacity: isLight ? 0.06 : 0.1 }}
+        />
+      </div>
+
       {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-900/90 px-4 py-2.5 flex items-center justify-between shrink-0 z-20">
+      <header
+        className="border-b px-4 py-2.5 flex items-center justify-between shrink-0 z-20 backdrop-blur-md shadow-sm"
+        style={{
+          backgroundColor: isLight ? '#FFFFFFE6' : `${themeBg}F2`,
+          borderColor: isLight ? '#DECEBD' : `${themeSecondary}60`,
+        }}
+      >
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard"
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-xs flex items-center gap-1"
+            className="p-1.5 rounded-lg border transition-all text-xs flex items-center gap-1 cursor-pointer"
+            style={
+              isLight
+                ? {
+                    backgroundColor: '#FFFFFF',
+                    borderColor: '#DECEBD',
+                    color: '#5E3023',
+                  }
+                : {
+                    backgroundColor: `${themeSecondary}40`,
+                    borderColor: `${themeSecondary}70`,
+                    color: '#DECEBD',
+                  }
+            }
             title="Volver al Dashboard"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4" style={{ color: themePrimary }} />
           </Link>
 
-          {activeBranch?.logoUrl ? (
+          {/* Isologo / Isotipo de la Sucursal (libre y sin encerrar) */}
+          {activeBranch?.isotypeUrl || activeBranch?.logoUrl ? (
             <img
-              src={activeBranch.logoUrl}
-              alt="Logo Sucursal"
-              className="w-8 h-8 rounded-lg object-contain bg-white/10 p-0.5 border border-white/20"
+              src={activeBranch.isotypeUrl || activeBranch.logoUrl}
+              alt={activeBranch.name || 'Isologo'}
+              className="h-8 sm:h-9 w-auto max-w-[44px] object-contain drop-shadow-md select-none transition-transform hover:scale-105"
               onError={(e) => {
                 ;(e.target as any).style.display = 'none'
               }}
             />
           ) : (
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
-              style={{
-                backgroundColor: `${activeBranch?.primaryColor || '#f59e0b'}25`,
-                color: activeBranch?.primaryColor || '#f59e0b',
-              }}
-            >
-              <Coffee className="w-4 h-4" />
-            </div>
+            <Coffee className="w-6 h-6 shrink-0" style={{ color: themePrimary }} />
           )}
           <div>
-            <h1 className="text-sm font-bold text-white flex items-center gap-2">
-              Terminal POS
-              {activeBranch && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+            <h1 className={`text-sm font-bold flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <span>Terminal POS</span>
+              {activeBranch && sessionUser?.branches && sessionUser.branches.length > 1 && (
+                <span
+                  className="text-[11px] font-bold px-2 py-0.5 rounded-full border hidden sm:inline-block"
+                  style={{
+                    backgroundColor: `${themePrimary}${isLight ? '15' : '20'}`,
+                    borderColor: `${themePrimary}${isLight ? '35' : '40'}`,
+                    color: isLight ? '#5E3023' : themePrimary,
+                  }}
+                >
                   {activeBranch.name} ({activeBranch.code})
                 </span>
               )}
@@ -843,7 +925,11 @@ export default function PosTerminalPage() {
             onClick={() => setShowDeviceConfigModal(true)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               terminalDevice
-                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                ? isLight
+                  ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                  : 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                : isLight
+                ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700'
             }`}
             title="Configurar este equipo como terminal fija de la sucursal"
@@ -858,8 +944,18 @@ export default function PosTerminalPage() {
         {/* User Info & Logout */}
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
-            <span className="text-xs font-semibold text-slate-200 block">{sessionUser?.name}</span>
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span
+              className={`text-xs font-semibold block ${
+                isLight ? 'text-[#2B1712]' : 'text-slate-200'
+              }`}
+            >
+              {sessionUser?.name}
+            </span>
+            <span
+              className={`text-[10px] font-mono ${
+                isLight ? 'text-[#895737]' : 'text-slate-400'
+              }`}
+            >
               Rol: {sessionUser?.roleCodes?.join(', ')}
             </span>
           </div>
@@ -867,7 +963,11 @@ export default function PosTerminalPage() {
           {/* Enlace Comandera */}
           <Link
             href="/comandera"
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600/15 hover:bg-violet-600/25 border border-violet-500/30 text-xs text-violet-300 font-medium transition-all"
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+              isLight
+                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                : 'bg-violet-600/15 hover:bg-violet-600/25 border-violet-500/30 text-violet-300'
+            }`}
             title="Abrir Comandera de Meseros"
           >
             <UtensilsCrossed className="w-3.5 h-3.5" />
@@ -877,7 +977,11 @@ export default function PosTerminalPage() {
           {/* Enlace KDS Cocina */}
           <Link
             href="/kds"
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-xs text-cyan-300 font-medium transition-all"
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+              isLight
+                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                : 'bg-cyan-500/15 hover:bg-cyan-500/25 border-cyan-500/30 text-cyan-300'
+            }`}
             title="Abrir Monitor KDS Cocina"
           >
             <MonitorPlay className="w-3.5 h-3.5" />
@@ -888,7 +992,11 @@ export default function PosTerminalPage() {
           <button
             type="button"
             onClick={openCashCutModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs text-amber-300 font-medium transition-all cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+              isLight
+                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-300'
+            }`}
           >
             <Banknote className="w-3.5 h-3.5" />
             <span>Arqueo / Corte</span>
@@ -901,10 +1009,14 @@ export default function PosTerminalPage() {
               setUnlockError(null)
               setIsTerminalLocked(true)
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/30 text-xs text-slate-300 hover:text-amber-300 transition-all cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer font-semibold ${
+              isLight
+                ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
+                : 'bg-[#2B1712] hover:bg-[#C08552]/20 border-[#42221A] hover:border-[#C08552]/40 text-[#DECEBD] hover:text-[#F3E9DC]'
+            }`}
             title="Bloquear terminal o cambiar operador de turno"
           >
-            <Lock className="w-3.5 h-3.5" />
+            <Lock className="w-3.5 h-3.5 text-[#C08552]" />
             <span>Bloquear / Relevo</span>
           </button>
         </div>
@@ -915,20 +1027,32 @@ export default function PosTerminalPage() {
         {/* LEFT COLUMN: Categories & Products Grid */}
         <div className="flex-1 flex flex-col p-4 overflow-y-auto space-y-4">
           {/* Order Type & Table Selector */}
-          <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div
+            className={`p-3 rounded-2xl border flex flex-wrap items-center justify-between gap-3 ${
+              isLight
+                ? 'bg-white border-[#DECEBD] shadow-xs'
+                : 'bg-slate-900/60 border-slate-800'
+            }`}
+          >
             {/* Toggle DINE_IN vs TAKEAWAY */}
-            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+            <div
+              className={`flex p-1 rounded-xl border text-xs ${
+                isLight ? 'bg-[#F3E9DC] border-[#DECEBD]' : 'bg-slate-950 border-slate-800'
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => setOrderType('DINE_IN')}
                 style={
                   orderType === 'DINE_IN'
-                    ? { backgroundColor: activeBranch?.primaryColor || '#7c3aed', color: '#ffffff' }
+                    ? { backgroundColor: themePrimary, color: '#ffffff' }
                     : undefined
                 }
-                className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                   orderType === 'DINE_IN'
-                    ? 'shadow-sm font-bold'
+                    ? 'shadow-xs font-bold'
+                    : isLight
+                    ? 'text-[#7A5A43] hover:text-[#2B1712]'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -939,12 +1063,14 @@ export default function PosTerminalPage() {
                 onClick={() => setOrderType('TAKEAWAY')}
                 style={
                   orderType === 'TAKEAWAY'
-                    ? { backgroundColor: activeBranch?.secondaryColor || '#4f46e5', color: '#ffffff' }
+                    ? { backgroundColor: themeSecondary, color: '#ffffff' }
                     : undefined
                 }
-                className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                   orderType === 'TAKEAWAY'
-                    ? 'shadow-sm font-bold'
+                    ? 'shadow-xs font-bold'
+                    : isLight
+                    ? 'text-[#7A5A43] hover:text-[#2B1712]'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -958,13 +1084,20 @@ export default function PosTerminalPage() {
                   refreshTablesData()
                   setShowPendingTablesModal(true)
                 }}
-                className="px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0"
+                className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0 ${
+                  isLight
+                    ? 'bg-amber-100 hover:bg-amber-200/80 border-amber-300 text-amber-950'
+                    : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40'
+                }`}
                 title="Cargar consumos y comandas marchadas por meseros"
               >
-                <ReceiptText className="w-3.5 h-3.5" />
+                <ReceiptText className="w-3.5 h-3.5" style={{ color: isLight ? '#5E3023' : themePrimary }} />
                 <span>Comandas por Cobrar</span>
                 {tables.filter((t) => !!t.activeOrder).length > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-violet-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
+                  <span
+                    className="w-5 h-5 rounded-full text-white text-[10px] font-black flex items-center justify-center animate-pulse"
+                    style={{ backgroundColor: themePrimary }}
+                  >
                     {tables.filter((t) => !!t.activeOrder).length}
                   </span>
                 )}
@@ -974,7 +1107,13 @@ export default function PosTerminalPage() {
             {/* Mesas selector if DINE_IN */}
             {orderType === 'DINE_IN' && tables.length > 0 && (
               <div className="flex items-center gap-1.5 overflow-x-auto max-w-full">
-                <span className="text-[11px] text-slate-400 shrink-0">Mesa:</span>
+                <span
+                  className={`text-[11px] font-semibold shrink-0 ${
+                    isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                  }`}
+                >
+                  Mesa:
+                </span>
                 {tables.map((t) => {
                   const hasBill = t.status === 'BILL_PRINTED'
                   const hasOrder = !!t.activeOrder
@@ -985,17 +1124,23 @@ export default function PosTerminalPage() {
                       onClick={() => setSelectedTableId(t.id)}
                       style={
                         selectedTableId === t.id
-                          ? { backgroundColor: activeBranch?.primaryColor || '#7c3aed', color: '#ffffff' }
+                          ? { backgroundColor: themePrimary, color: '#ffffff' }
                           : undefined
                       }
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-all flex items-center gap-1 cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-all flex items-center gap-1 cursor-pointer border ${
                         selectedTableId === t.id
-                          ? 'shadow-sm font-bold'
+                          ? 'border-transparent shadow-xs font-bold'
                           : hasBill
-                          ? 'bg-violet-950/40 border border-violet-500/50 text-violet-300'
+                          ? isLight
+                            ? 'bg-amber-100 border-amber-300 text-amber-950 font-bold'
+                            : 'bg-amber-500/20 border-amber-500/50 text-amber-200'
                           : hasOrder
-                          ? 'bg-amber-950/30 border border-amber-500/40 text-amber-300'
-                          : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
+                          ? isLight
+                            ? 'bg-amber-50 border-amber-200 text-amber-900 font-semibold'
+                            : 'bg-amber-950/30 border-amber-500/40 text-amber-300'
+                          : isLight
+                          ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                          : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-700'
                       }`}
                       title={
                         hasBill
@@ -1005,7 +1150,9 @@ export default function PosTerminalPage() {
                           : `${t.name}: Mesa libre`
                       }
                     >
-                      {hasBill && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />}
+                      {hasBill && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      )}
                       <span>{t.name}</span>
                     </button>
                   )
@@ -1019,10 +1166,14 @@ export default function PosTerminalPage() {
             <button
               type="button"
               onClick={() => setSelectedCategory('ALL')}
-              className={`px-3.5 py-1.5 rounded-xl font-medium shrink-0 transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl font-semibold shrink-0 transition-all cursor-pointer border ${
                 selectedCategory === 'ALL'
-                  ? 'bg-white text-slate-950 font-bold shadow-sm'
-                  : 'bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800'
+                  ? isLight
+                    ? 'bg-[#5E3023] border-[#5E3023] text-white font-bold shadow-xs'
+                    : 'bg-white border-white text-slate-950 font-bold shadow-sm'
+                  : isLight
+                  ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
               }`}
             >
               Todos los productos
@@ -1034,13 +1185,15 @@ export default function PosTerminalPage() {
                 onClick={() => setSelectedCategory(c.id)}
                 style={
                   selectedCategory === c.id
-                    ? { backgroundColor: activeBranch?.primaryColor || '#7c3aed', color: '#ffffff' }
+                    ? { backgroundColor: themePrimary, color: '#ffffff', borderColor: themePrimary }
                     : undefined
                 }
-                className={`px-3.5 py-1.5 rounded-xl font-medium shrink-0 transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl font-semibold shrink-0 transition-all cursor-pointer border ${
                   selectedCategory === c.id
                     ? 'font-bold shadow-md'
-                    : 'bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800'
+                    : isLight
+                    ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
                 }`}
               >
                 {c.name}
@@ -1059,22 +1212,52 @@ export default function PosTerminalPage() {
                   key={p.id}
                   type="button"
                   onClick={() => addToCart(p)}
-                  className="p-3.5 rounded-2xl bg-slate-900/80 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/50 text-left transition-all active:scale-95 cursor-pointer flex flex-col justify-between h-32 shadow-sm group"
+                  className={`p-3.5 rounded-2xl border text-left transition-all active:scale-95 cursor-pointer flex flex-col justify-between h-32 shadow-xs group ${
+                    isLight
+                      ? 'bg-white hover:bg-[#FDFBF9] border-[#DECEBD] hover:border-[#C08552]'
+                      : 'bg-slate-900/80 hover:bg-slate-850 border-slate-800 hover:border-amber-500/50'
+                  }`}
                 >
                   <div>
                     <div className="flex items-center justify-between text-[10px]">
-                      <span className="font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                      <span
+                        className={`font-mono px-1.5 py-0.5 rounded font-semibold ${
+                          isLight
+                            ? 'bg-[#F3E9DC] text-[#7A5A43]'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
                         {p.inventoryPolicy === 'RECIPE' ? 'RECETA' : p.inventoryPolicy}
                       </span>
                     </div>
-                    <h4 className="text-sm font-semibold text-white mt-1.5 line-clamp-2 leading-tight">
+                    <h4
+                      className={`text-sm font-bold mt-1.5 line-clamp-2 leading-tight ${
+                        isLight ? 'text-[#2B1712]' : 'text-white'
+                      }`}
+                    >
                       {p.name}
                     </h4>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                    <span className="text-sm font-bold text-amber-400">${price.toFixed(2)}</span>
-                    <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs group-hover:bg-amber-500 group-hover:text-black font-bold transition-all">
+                  <div
+                    className={`flex items-center justify-between pt-2 border-t ${
+                      isLight ? 'border-[#DECEBD]' : 'border-slate-800/80'
+                    }`}
+                  >
+                    <span
+                      className={`text-sm font-extrabold ${
+                        isLight ? 'text-[#5E3023]' : 'text-amber-400'
+                      }`}
+                    >
+                      ${price.toFixed(2)}
+                    </span>
+                    <span
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
+                        isLight
+                          ? 'bg-[#F3E9DC] text-[#5E3023] group-hover:bg-[#5E3023] group-hover:text-white'
+                          : 'bg-amber-500/20 text-amber-400 group-hover:bg-amber-500 group-hover:text-black'
+                      }`}
+                    >
                       +
                     </span>
                   </div>
@@ -1085,18 +1268,30 @@ export default function PosTerminalPage() {
         </div>
 
         {/* RIGHT COLUMN: Ticket Sidebar */}
-        <div className="w-80 sm:w-96 border-l border-slate-800 bg-slate-900/90 flex flex-col h-full shrink-0">
+        <div
+          className={`w-80 sm:w-96 border-l flex flex-col h-full shrink-0 ${
+            isLight ? 'border-[#DECEBD] bg-white' : 'border-slate-800 bg-slate-900/90'
+          }`}
+        >
           {/* Ticket Header */}
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+          <div
+            className={`p-4 border-b flex items-center justify-between ${
+              isLight ? 'border-[#DECEBD]' : 'border-slate-800'
+            }`}
+          >
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-amber-400" />
-              <span className="font-bold text-sm text-white">Ticket de Venta</span>
+              <ShoppingCart className="w-4 h-4" style={{ color: themePrimary }} />
+              <span className={`font-bold text-sm ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                Ticket de Venta
+              </span>
             </div>
             {cart.length > 0 && (
               <button
                 type="button"
                 onClick={() => clearCart(true)}
-                className="text-[11px] text-red-400 hover:text-red-300 cursor-pointer"
+                className={`text-[11px] font-semibold cursor-pointer ${
+                  isLight ? 'text-red-600 hover:text-red-700' : 'text-red-400 hover:text-red-300'
+                }`}
               >
                 Vaciar
               </button>
@@ -1104,34 +1299,60 @@ export default function PosTerminalPage() {
           </div>
 
           {/* Customer / Note input */}
-          <div className="p-3 border-b border-slate-800/80 bg-slate-950/40">
+          <div
+            className={`p-3 border-b ${
+              isLight ? 'border-[#DECEBD] bg-[#FAF6F0]' : 'border-slate-800/80 bg-slate-950/40'
+            }`}
+          >
             <input
               type="text"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="Nombre del cliente o nota..."
-              className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className={`w-full px-3 py-1.5 rounded-lg border text-xs focus:outline-none focus:ring-1 ${
+                isLight
+                  ? 'bg-white border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D] focus:ring-[#C08552]'
+                  : 'bg-slate-900 border-slate-800 text-white placeholder-slate-500 focus:ring-amber-500'
+              }`}
             />
           </div>
 
           {/* Cart Items List */}
           <div className="flex-1 p-3 overflow-y-auto space-y-2">
             {cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs text-center space-y-2 p-4">
-                <UtensilsCrossed className="w-8 h-8 text-slate-600" />
+              <div
+                className={`h-full flex flex-col items-center justify-center text-xs text-center space-y-2 p-4 ${
+                  isLight ? 'text-[#895737]' : 'text-slate-500'
+                }`}
+              >
+                <UtensilsCrossed
+                  className={`w-8 h-8 ${isLight ? 'text-[#DECEBD]' : 'text-slate-600'}`}
+                />
                 <p>Toca los productos de la izquierda para agregarlos a la comanda.</p>
               </div>
             ) : (
               cart.map((item) => (
                 <div
                   key={item.variantId}
-                  className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between text-xs"
+                  className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                    isLight
+                      ? 'bg-[#FDFBF9] border-[#DECEBD]'
+                      : 'bg-slate-950/60 border-slate-800'
+                  }`}
                 >
                   <div className="flex-1 pr-2">
-                    <span className="font-semibold text-white block line-clamp-1">
+                    <span
+                      className={`font-bold block line-clamp-1 ${
+                        isLight ? 'text-[#2B1712]' : 'text-white'
+                      }`}
+                    >
                       {item.productName}
                     </span>
-                    <span className="text-[10px] text-slate-400">
+                    <span
+                      className={`text-[10px] font-medium ${
+                        isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                      }`}
+                    >
                       ${item.unitPrice.toFixed(2)} c/u
                     </span>
                   </div>
@@ -1141,23 +1362,39 @@ export default function PosTerminalPage() {
                     <button
                       type="button"
                       onClick={() => updateQuantity(item.variantId, -1)}
-                      className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                        isLight
+                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                      }`}
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-6 text-center font-bold text-white text-xs">
+                    <span
+                      className={`w-6 text-center font-bold text-xs ${
+                        isLight ? 'text-[#2B1712]' : 'text-white'
+                      }`}
+                    >
                       {item.quantity}
                     </span>
                     <button
                       type="button"
                       onClick={() => updateQuantity(item.variantId, 1)}
-                      className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center font-bold"
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                        isLight
+                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                      }`}
                     >
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
 
-                  <div className="w-16 text-right font-bold text-amber-400">
+                  <div
+                    className={`w-16 text-right font-extrabold ${
+                      isLight ? 'text-[#5E3023]' : 'text-amber-400'
+                    }`}
+                  >
                     ${(item.unitPrice * item.quantity).toFixed(2)}
                   </div>
                 </div>
@@ -1166,7 +1403,11 @@ export default function PosTerminalPage() {
           </div>
 
           {/* Ticket Footer / Checkout Action */}
-          <div className="p-4 border-t border-slate-800 bg-slate-950 space-y-3 shrink-0">
+          <div
+            className={`p-4 border-t space-y-3 shrink-0 ${
+              isLight ? 'border-[#DECEBD] bg-[#FAF6F0]' : 'border-slate-800 bg-slate-950'
+            }`}
+          >
             {/* Botones de Descuento y Cortesía */}
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -1175,11 +1416,15 @@ export default function PosTerminalPage() {
                 disabled={cart.length === 0}
                 className={`py-1.5 px-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                   discount
-                    ? 'border-amber-500 bg-amber-500/10 text-amber-300'
+                    ? isLight
+                      ? 'border-amber-400 bg-amber-100 text-amber-950 font-bold'
+                      : 'border-amber-500 bg-amber-500/10 text-amber-300'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-white hover:bg-[#F3E9DC] text-[#5E3023]'
                     : 'border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300'
                 }`}
               >
-                <BadgePercent className="w-3.5 h-3.5 text-amber-400" />
+                <BadgePercent className="w-3.5 h-3.5 text-amber-500" />
                 <span>{discount ? 'Editar Desc.' : 'Descuento'}</span>
               </button>
 
@@ -1189,30 +1434,44 @@ export default function PosTerminalPage() {
                 disabled={cart.length === 0}
                 className={`py-1.5 px-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                   courtesy
-                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
+                    ? isLight
+                      ? 'border-emerald-400 bg-emerald-100 text-emerald-950 font-bold'
+                      : 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-white hover:bg-[#F3E9DC] text-[#5E3023]'
                     : 'border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300'
                 }`}
               >
-                <Gift className="w-3.5 h-3.5 text-emerald-400" />
+                <Gift className="w-3.5 h-3.5 text-emerald-500" />
                 <span>{courtesy ? 'Editar Cort.' : 'Sin Cobro'}</span>
               </button>
             </div>
 
             {/* Desglose de totales */}
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-slate-400">
+              <div
+                className={`flex justify-between ${
+                  isLight ? 'text-[#7A5A43] font-medium' : 'text-slate-400'
+                }`}
+              >
                 <span>Subtotal</span>
                 <span>${subtotal.toFixed(2)}</span>
               </div>
 
               {discount && (
-                <div className="flex items-center justify-between text-amber-400 text-xs">
+                <div
+                  className={`flex items-center justify-between text-xs font-semibold ${
+                    isLight ? 'text-amber-950' : 'text-amber-400'
+                  }`}
+                >
                   <div className="flex items-center gap-1">
                     <span>Descuento {discount.percentage ? `(${discount.percentage}%)` : ''}</span>
                     <button
                       type="button"
                       onClick={() => setDiscount(null)}
-                      className="text-slate-500 hover:text-rose-400 text-[10px] p-0.5 cursor-pointer"
+                      className={`text-[10px] p-0.5 cursor-pointer ${
+                        isLight ? 'text-[#895737] hover:text-rose-600' : 'text-slate-500 hover:text-rose-400'
+                      }`}
                       title="Quitar descuento"
                     >
                       ✕
@@ -1223,13 +1482,19 @@ export default function PosTerminalPage() {
               )}
 
               {courtesy && (
-                <div className="flex items-center justify-between text-emerald-400 text-xs">
+                <div
+                  className={`flex items-center justify-between text-xs font-semibold ${
+                    isLight ? 'text-emerald-950' : 'text-emerald-400'
+                  }`}
+                >
                   <div className="flex items-center gap-1">
                     <span>Cortesía {courtesy.isFull ? '(100%)' : ''}</span>
                     <button
                       type="button"
                       onClick={() => setCourtesy(null)}
-                      className="text-slate-500 hover:text-rose-400 text-[10px] p-0.5 cursor-pointer"
+                      className={`text-[10px] p-0.5 cursor-pointer ${
+                        isLight ? 'text-[#895737] hover:text-rose-600' : 'text-slate-500 hover:text-rose-400'
+                      }`}
                       title="Quitar cortesía"
                     >
                       ✕
@@ -1239,11 +1504,17 @@ export default function PosTerminalPage() {
                 </div>
               )}
 
-              <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800">
+              <div
+                className={`flex justify-between text-base font-bold pt-2 border-t ${
+                  isLight ? 'border-[#DECEBD] text-[#2B1712]' : 'border-slate-800 text-white'
+                }`}
+              >
                 <span>Total a Cobrar</span>
                 <span
                   className="font-extrabold"
-                  style={{ color: total === 0 ? '#10b981' : activeBranch?.buttonColor || '#f59e0b' }}
+                  style={{
+                    color: total === 0 ? (isLight ? '#065F46' : '#10b981') : (isLight ? '#5E3023' : themePrimary),
+                  }}
                 >
                   ${total.toFixed(2)} MXN
                 </span>
@@ -1258,8 +1529,9 @@ export default function PosTerminalPage() {
               }}
               disabled={cart.length === 0}
               style={{
-                backgroundColor: total === 0 ? '#059669' : activeBranch?.buttonColor || '#f59e0b',
-                color: '#ffffff',
+                backgroundColor: total === 0 ? '#059669' : themeButton,
+                color: total === 0 ? '#ffffff' : (isLightButton ? '#2B1712' : '#ffffff'),
+                ...(total > 0 ? { boxShadow: `0 4px 14px ${themeButton}40` } : {}),
               }}
               className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
@@ -1282,24 +1554,54 @@ export default function PosTerminalPage() {
       {/* MODAL DE COBRO / PAGO */}
       {showCheckoutModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-amber-400" /> Confirmar Cobro
+          <div
+            className={`w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-slate-900 border-slate-800 text-white'
+            }`}
+          >
+            <div
+              className={`flex items-center justify-between pb-3 border-b ${
+                isLight ? 'border-[#DECEBD]' : 'border-slate-800'
+              }`}
+            >
+              <h3
+                className={`text-base font-bold flex items-center gap-2 ${
+                  isLight ? 'text-[#2B1712]' : 'text-white'
+                }`}
+              >
+                <Receipt className="w-5 h-5 text-amber-500" /> Confirmar Cobro
               </h3>
               <button
                 type="button"
                 onClick={() => setShowCheckoutModal(false)}
-                className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer"
+                className={`text-lg cursor-pointer ${
+                  isLight ? 'text-[#895737] hover:text-[#5E3023]' : 'text-slate-400 hover:text-slate-200'
+                }`}
               >
                 ✕
               </button>
             </div>
 
             {/* Total Display */}
-            <div className="text-center py-2 bg-slate-950 rounded-2xl border border-slate-850">
-              <span className="text-xs text-slate-400">Monto Total</span>
-              <p className="text-3xl font-extrabold text-amber-400">${total.toFixed(2)} MXN</p>
+            <div
+              className={`text-center py-2.5 rounded-2xl border ${
+                isLight
+                  ? 'bg-[#FAF6F0] border-[#DECEBD]'
+                  : 'bg-slate-950 border-slate-850'
+              }`}
+            >
+              <span className={`text-xs ${isLight ? 'text-[#7A5A43] font-medium' : 'text-slate-400'}`}>
+                Monto Total
+              </span>
+              <p
+                className={`text-3xl font-black ${
+                  isLight ? 'text-[#5E3023]' : 'text-amber-400'
+                }`}
+              >
+                ${total.toFixed(2)} MXN
+              </p>
             </div>
 
             {/* Payment Method Selector */}
@@ -1307,9 +1609,13 @@ export default function PosTerminalPage() {
               <button
                 type="button"
                 onClick={() => setPaymentMethod('CASH')}
-                className={`p-3 rounded-xl border flex items-center gap-2 font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex items-center gap-2 font-bold transition-all cursor-pointer ${
                   paymentMethod === 'CASH'
-                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                    ? isLight
+                      ? 'border-emerald-500 bg-emerald-100 text-emerald-950 shadow-xs'
+                      : 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-[#FDFBF9] hover:bg-[#F3E9DC] text-[#5E3023]'
                     : 'border-slate-800 bg-slate-950 text-slate-400'
                 }`}
               >
@@ -1319,9 +1625,13 @@ export default function PosTerminalPage() {
               <button
                 type="button"
                 onClick={() => setPaymentMethod('CARD_DEBIT')}
-                className={`p-3 rounded-xl border flex items-center gap-2 font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex items-center gap-2 font-bold transition-all cursor-pointer ${
                   paymentMethod === 'CARD_DEBIT'
-                    ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400'
+                    ? isLight
+                      ? 'border-cyan-500 bg-cyan-100 text-cyan-950 shadow-xs'
+                      : 'border-cyan-500 bg-cyan-500/10 text-cyan-400'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-[#FDFBF9] hover:bg-[#F3E9DC] text-[#5E3023]'
                     : 'border-slate-800 bg-slate-950 text-slate-400'
                 }`}
               >
@@ -1331,9 +1641,13 @@ export default function PosTerminalPage() {
               <button
                 type="button"
                 onClick={() => setPaymentMethod('CARD_CREDIT')}
-                className={`p-3 rounded-xl border flex items-center gap-2 font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex items-center gap-2 font-bold transition-all cursor-pointer ${
                   paymentMethod === 'CARD_CREDIT'
-                    ? 'border-violet-500 bg-violet-500/10 text-violet-400'
+                    ? isLight
+                      ? 'border-violet-500 bg-violet-100 text-violet-950 shadow-xs'
+                      : 'border-violet-500 bg-violet-500/10 text-violet-400'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-[#FDFBF9] hover:bg-[#F3E9DC] text-[#5E3023]'
                     : 'border-slate-800 bg-slate-950 text-slate-400'
                 }`}
               >
@@ -1343,9 +1657,13 @@ export default function PosTerminalPage() {
               <button
                 type="button"
                 onClick={() => setPaymentMethod('TRANSFER')}
-                className={`p-3 rounded-xl border flex items-center gap-2 font-semibold transition-all ${
+                className={`p-3 rounded-xl border flex items-center gap-2 font-bold transition-all cursor-pointer ${
                   paymentMethod === 'TRANSFER'
-                    ? 'border-amber-500 bg-amber-500/10 text-amber-400'
+                    ? isLight
+                      ? 'border-amber-500 bg-amber-100 text-amber-950 shadow-xs'
+                      : 'border-amber-500 bg-amber-500/10 text-amber-400'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-[#FDFBF9] hover:bg-[#F3E9DC] text-[#5E3023]'
                     : 'border-slate-800 bg-slate-950 text-slate-400'
                 }`}
               >
@@ -1355,14 +1673,26 @@ export default function PosTerminalPage() {
 
             {/* Cash Shortcuts and Change Calculator */}
             {paymentMethod === 'CASH' && (
-              <div className="space-y-3 bg-slate-950 p-3 rounded-2xl border border-slate-850">
+              <div
+                className={`space-y-3 p-3 rounded-2xl border ${
+                  isLight
+                    ? 'bg-[#FAF6F0] border-[#DECEBD]'
+                    : 'bg-slate-950 border-slate-850'
+                }`}
+              >
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Efectivo Recibido:</span>
+                  <span className={`font-semibold ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    Efectivo Recibido:
+                  </span>
                   <input
                     type="number"
                     value={amountReceived}
                     onChange={(e) => setAmountReceived(e.target.value)}
-                    className="w-28 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-white text-right font-bold focus:ring-1 focus:ring-amber-500"
+                    className={`w-28 px-2 py-1 rounded-lg border text-right font-bold focus:ring-1 ${
+                      isLight
+                        ? 'bg-white border-[#DECEBD] text-[#2B1712] focus:ring-[#C08552]'
+                        : 'bg-slate-900 border-slate-800 text-white focus:ring-amber-500'
+                    }`}
                   />
                 </div>
 
@@ -1373,7 +1703,11 @@ export default function PosTerminalPage() {
                       key={amt}
                       type="button"
                       onClick={() => setAmountReceived(amt.toString())}
-                      className="flex-1 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold"
+                      className={`flex-1 py-1.5 rounded-lg border font-bold cursor-pointer transition-colors ${
+                        isLight
+                          ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
+                          : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                      }`}
                     >
                       ${amt}
                     </button>
@@ -1381,15 +1715,29 @@ export default function PosTerminalPage() {
                   <button
                     type="button"
                     onClick={() => setAmountReceived(total.toString())}
-                    className="flex-1 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 font-semibold"
+                    className={`flex-1 py-1.5 rounded-lg border font-bold cursor-pointer transition-colors ${
+                      isLight
+                        ? 'bg-emerald-100 hover:bg-emerald-200 border-emerald-300 text-emerald-950'
+                        : 'bg-emerald-950/40 border border-emerald-500/30 text-emerald-300'
+                    }`}
                   >
                     Exacto
                   </button>
                 </div>
 
-                <div className="flex justify-between items-center pt-2 border-t border-slate-850 text-xs">
-                  <span className="text-slate-400 font-medium">Cambio a entregar:</span>
-                  <strong className="text-sm font-bold text-emerald-400">
+                <div
+                  className={`flex justify-between items-center pt-2 border-t text-xs ${
+                    isLight ? 'border-[#DECEBD]' : 'border-slate-850'
+                  }`}
+                >
+                  <span className={`font-semibold ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    Cambio a entregar:
+                  </span>
+                  <strong
+                    className={`text-sm font-black ${
+                      isLight ? 'text-emerald-800' : 'text-emerald-400'
+                    }`}
+                  >
                     ${changeDue.toFixed(2)} MXN
                   </strong>
                 </div>
@@ -1397,7 +1745,7 @@ export default function PosTerminalPage() {
             )}
 
             {/* Error in modal */}
-            {error && <div className="text-red-400 text-xs text-center">{error}</div>}
+            {error && <div className="text-red-500 text-xs text-center font-medium">{error}</div>}
 
             {/* Final Action Button */}
             <button
@@ -1405,10 +1753,10 @@ export default function PosTerminalPage() {
               onClick={handleConfirmPayment}
               disabled={processingSale || (paymentMethod === 'CASH' && receivedNum < total)}
               style={{
-                backgroundColor: activeBranch?.buttonColor || '#059669',
-                color: '#ffffff',
+                backgroundColor: themeButton,
+                color: isLightButton ? '#2B1712' : '#ffffff',
               }}
-              className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50 cursor-pointer"
+              className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50 cursor-pointer hover:opacity-90"
             >
               {processingSale ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               <span>Registrar Venta y Cobro</span>
@@ -1875,22 +2223,46 @@ export default function PosTerminalPage() {
       {/* MODAL DE AUTORIZACIÓN CON PIN */}
       {/* MODAL DE COMANDAS DE MESAS PENDIENTES DE COBRO */}
       {showPendingTablesModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl max-h-[85vh] rounded-3xl bg-slate-900 border border-violet-500/40 p-6 flex flex-col shadow-2xl animate-in zoom-in-95 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            className={`w-full max-w-2xl max-h-[85vh] rounded-3xl p-6 flex flex-col shadow-2xl animate-in zoom-in-95 space-y-4 border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-slate-900 border-violet-500/40 text-white'
+            }`}
+          >
+            <div
+              className={`flex items-center justify-between pb-3 shrink-0 border-b ${
+                isLight ? 'border-[#DECEBD]' : 'border-slate-800'
+              }`}
+            >
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-violet-500/20 text-violet-400 flex items-center justify-center font-bold">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
+                  style={{
+                    backgroundColor: `${themePrimary}20`,
+                    color: isLight ? '#5E3023' : themePrimary,
+                  }}
+                >
                   <ReceiptText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Comandas de Mesas por Cobrar</h3>
-                  <p className="text-xs text-slate-400">Selecciona una mesa para registrar su cobro y consumo en caja</p>
+                  <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Comandas de Mesas por Cobrar
+                  </h3>
+                  <p className={`text-xs ${isLight ? 'text-[#895737]' : 'text-slate-400'}`}>
+                    Selecciona una mesa para registrar su cobro y consumo en caja
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPendingTablesModal(false)}
-                className="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold cursor-pointer"
+                className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                  isLight
+                    ? 'bg-[#F3E9DC] text-[#5E3023] hover:bg-[#E6D5C3]'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
               >
                 ✕
               </button>
@@ -1899,10 +2271,18 @@ export default function PosTerminalPage() {
             {/* Lista de Mesas con Comanda */}
             <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
               {tables.filter((t) => !!t.activeOrder).length === 0 ? (
-                <div className="py-12 flex flex-col items-center justify-center text-slate-500 text-xs text-center space-y-2">
-                  <UtensilsCrossed className="w-10 h-10 opacity-40 mb-1" />
-                  <p className="font-semibold text-slate-400">No hay comandas pendientes de cobro</p>
-                  <p className="max-w-xs text-slate-500">
+                <div
+                  className={`py-12 flex flex-col items-center justify-center text-xs text-center space-y-2 ${
+                    isLight ? 'text-[#895737]' : 'text-slate-500'
+                  }`}
+                >
+                  <UtensilsCrossed
+                    className={`w-10 h-10 mb-1 ${isLight ? 'text-[#DECEBD]' : 'opacity-40'}`}
+                  />
+                  <p className={`font-semibold ${isLight ? 'text-[#2B1712]' : 'text-slate-400'}`}>
+                    No hay comandas pendientes de cobro
+                  </p>
+                  <p className={`max-w-xs ${isLight ? 'text-[#895737]' : 'text-slate-500'}`}>
                     Cuando un mesero marche platillos o imprima una pre-cuenta desde la Comandera, aparecerá aquí lista para cobrar.
                   </p>
                 </div>
@@ -1920,54 +2300,95 @@ export default function PosTerminalPage() {
                         key={table.id}
                         className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
                           isBillPrinted
-                            ? 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/30'
+                            ? isLight
+                              ? 'bg-amber-50/90 border-amber-300 shadow-md ring-1 ring-amber-300'
+                              : 'bg-violet-950/30 border-violet-500/60 shadow-lg shadow-violet-500/10 ring-1 ring-violet-500/30'
+                            : isLight
+                            ? 'bg-[#FDFBF9] border-[#DECEBD] hover:border-[#C08552]'
                             : 'bg-slate-950 border-slate-800 hover:border-slate-700'
                         }`}
                       >
                         <div className="space-y-1.5 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-base font-extrabold text-white">{table.name}</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-slate-800 text-slate-300">
+                            <span
+                              className={`text-base font-extrabold ${
+                                isLight ? 'text-[#2B1712]' : 'text-white'
+                              }`}
+                            >
+                              {table.name}
+                            </span>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full font-mono font-bold ${
+                                isLight
+                                  ? 'bg-[#F3E9DC] text-[#5E3023]'
+                                  : 'bg-slate-800 text-slate-300'
+                              }`}
+                            >
                               {order.orderNumber}
                             </span>
                             {isBillPrinted && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500 text-white flex items-center gap-1 animate-pulse">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse ${
+                                  isLight
+                                    ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                                    : 'bg-violet-500 text-white'
+                                }`}
+                              >
                                 <Receipt className="w-3 h-3" /> Pre-cuenta solicitada
                               </span>
                             )}
                           </div>
 
-                          <div className="text-[11px] text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <div
+                            className={`text-[11px] flex flex-wrap items-center gap-x-3 gap-y-1 ${
+                              isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                            }`}
+                          >
                             <span>
-                              Atiende: <strong className="text-slate-200">{table.currentWaiter?.name || order.waiter?.name || 'Mesero'}</strong>
+                              Atiende:{' '}
+                              <strong className={isLight ? 'text-[#2B1712]' : 'text-slate-200'}>
+                                {table.currentWaiter?.name || order.waiter?.name || 'Mesero'}
+                              </strong>
                             </span>
                             {isTransferred && table.assignedWaiter && (
-                              <span className="text-cyan-300">
+                              <span className={isLight ? 'text-cyan-800 font-semibold' : 'text-cyan-300'}>
                                 (Titular original: {table.assignedWaiter.name})
                               </span>
                             )}
                             {order.customerName && (
-                              <span className="italic text-slate-400">
+                              <span className={`italic ${isLight ? 'text-[#895737]' : 'text-slate-400'}`}>
                                 Comensal: {order.customerName}
                               </span>
                             )}
                           </div>
 
                           {/* Lista resumida de platillos */}
-                          <p className="text-[11px] text-slate-400 line-clamp-1">
+                          <p className={`text-[11px] line-clamp-1 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
                             {order.items.map((it) => `${it.quantity}x ${it.productName}`).join(', ')}
                           </p>
                         </div>
 
                         {/* Total y Botón Cargar */}
-                        <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
-                          <span className="text-base font-extrabold text-amber-400">
+                        <div
+                          className={`flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 ${
+                            isLight ? 'border-[#DECEBD]' : 'border-slate-800'
+                          }`}
+                        >
+                          <span
+                            className={`text-base font-extrabold ${
+                              isLight ? 'text-[#5E3023]' : 'text-amber-400'
+                            }`}
+                          >
                             ${order.total.toFixed(2)} MXN
                           </span>
                           <button
                             type="button"
                             onClick={() => handleLoadTableOrder(table)}
-                            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-violet-600/30 transition-all cursor-pointer"
+                            style={{
+                              backgroundColor: themeButton,
+                              color: isLightButton ? '#2B1712' : '#ffffff',
+                            }}
+                            className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:opacity-90"
                           >
                             <ShoppingCart className="w-3.5 h-3.5" />
                             <span>Cargar en Caja</span>
@@ -1979,12 +2400,20 @@ export default function PosTerminalPage() {
               )}
             </div>
 
-            <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-xs text-slate-400 shrink-0">
+            <div
+              className={`flex justify-between items-center pt-2 border-t text-xs shrink-0 ${
+                isLight ? 'border-[#DECEBD] text-[#7A5A43]' : 'border-slate-800 text-slate-400'
+              }`}
+            >
               <span>Al cobrar la mesa en caja, regresará automáticamente a su mesero titular.</span>
               <button
                 type="button"
                 onClick={() => setShowPendingTablesModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium cursor-pointer"
+                className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer border ${
+                  isLight
+                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                    : 'bg-slate-800 text-slate-300'
+                }`}
               >
                 Cerrar
               </button>
@@ -2046,35 +2475,45 @@ export default function PosTerminalPage() {
 
       {/* MODAL FULLSCREEN DE BLOQUEO DE TERMINAL Y RELEVO RÁPIDO */}
       {isTerminalLocked && (
-        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-slate-800 p-6 space-y-5 shadow-2xl text-center animate-in zoom-in-95">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+        <div className="fixed inset-0 z-50 bg-[#F3E9DC] flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white overflow-y-auto">
+          {/* Ambient Warm Coffee Glows */}
+          <div className="fixed inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-[#C08552]/15 rounded-full blur-[130px]" />
+            <div className="absolute bottom-10 right-1/4 w-[400px] h-[400px] bg-[#5E3023]/10 rounded-full blur-[110px]" />
+          </div>
+
+          <div className="w-full max-w-sm rounded-3xl bg-white/95 border border-[#E6D5C3] p-7 sm:p-8 space-y-4 shadow-2xl shadow-[#5E3023]/15 text-center backdrop-blur-xl relative animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#7A3E2D] text-[#F3E9DC] flex items-center justify-center mx-auto shadow-lg shadow-[#5E3023]/25 mb-2 transform hover:scale-105 transition-transform duration-300">
               <Lock className="w-7 h-7" />
             </div>
 
             <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs text-amber-300 mb-2 font-medium">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#C08552]/15 border border-[#C08552]/30 text-xs font-semibold text-[#C08552] mb-1.5">
                 <Laptop className="w-3.5 h-3.5" />
                 <span>
                   {terminalDevice?.terminalName
-                    ? `${terminalDevice.terminalName} • ${activeBranch?.name}`
-                    : (activeBranch?.name || 'Terminal POS')}
+                    ? sessionUser?.branches && sessionUser.branches.length > 1
+                      ? `${terminalDevice.terminalName} • ${activeBranch?.name}`
+                      : terminalDevice.terminalName
+                    : sessionUser?.branches && sessionUser.branches.length > 1
+                    ? activeBranch?.name || 'Terminal POS'
+                    : 'Terminal de Cobro POS'}
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-white tracking-tight">Terminal Bloqueada</h2>
-              <p className="text-xs text-slate-400 mt-1">
+              <h2 className="text-2xl font-extrabold text-[#5E3023] tracking-tight">Terminal Bloqueada</h2>
+              <p className="text-xs text-[#895737] font-medium mt-1">
                 Ingresa tu PIN de 4 dígitos (pantalla táctil o teclado físico)
               </p>
               {sessionUser && (
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Último operador: <span className="text-slate-300 font-medium">{sessionUser.name}</span>
+                <p className="text-[11px] text-[#A88C7D] mt-1 font-medium">
+                  Último operador: <strong className="text-[#5E3023]">{sessionUser.name}</strong>
                 </p>
               )}
             </div>
 
             {/* Error */}
             {unlockError && (
-              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium animate-in fade-in">
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium text-center animate-in fade-in">
                 {unlockError}
               </div>
             )}
@@ -2086,8 +2525,8 @@ export default function PosTerminalPage() {
                   key={idx}
                   className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all ${
                     unlockPin.length > idx
-                      ? 'border-amber-500 bg-amber-500/10 text-amber-400 shadow-md shadow-amber-500/20'
-                      : 'border-slate-800 bg-slate-950/60 text-slate-600'
+                      ? 'border-[#C08552] bg-[#C08552]/15 text-[#5E3023] shadow-md shadow-[#C08552]/20'
+                      : 'border-[#DECEBD] bg-[#FDFBF9] text-[#A88C7D]'
                   }`}
                 >
                   {unlockPin.length > idx ? '•' : ''}
@@ -2103,7 +2542,7 @@ export default function PosTerminalPage() {
                   type="button"
                   onClick={() => handleKeypadPressUnlock(val)}
                   disabled={unlocking}
-                  className="h-14 rounded-2xl bg-slate-950/90 hover:bg-slate-800 border border-slate-800/80 text-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none"
+                  className="h-14 rounded-2xl bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border border-[#DECEBD] text-lg font-bold text-[#5E3023] transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none"
                 >
                   {val === 'DEL' ? '⌫' : val}
                 </button>
@@ -2114,18 +2553,18 @@ export default function PosTerminalPage() {
               type="button"
               onClick={() => handleUnlockTerminal()}
               disabled={unlocking || unlockPin.length < 4}
-              className="w-full py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-40 cursor-pointer"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#C08552] hover:bg-[#A96F3F] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#C08552]/30 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
             >
               {unlocking ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               <span>Desbloquear Terminal</span>
             </button>
 
             {/* Acciones secundarias en bloqueo */}
-            <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-1.5">
+            <div className="pt-2 border-t border-[#E6D5C3] flex flex-col gap-1.5">
               <button
                 type="button"
                 onClick={() => setShowDeviceConfigModal(true)}
-                className="w-full text-[11px] text-slate-400 hover:text-amber-300 flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer"
+                className="w-full text-xs text-[#895737] hover:text-[#5E3023] flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer font-medium"
               >
                 <Settings className="w-3.5 h-3.5" />
                 <span>Configurar / Vincular este Dispositivo</span>
@@ -2134,7 +2573,7 @@ export default function PosTerminalPage() {
               <form action="/api/auth/logout" method="POST">
                 <button
                   type="submit"
-                  className="w-full text-[11px] text-slate-500 hover:text-red-400 flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer"
+                  className="w-full text-xs text-[#895737] hover:text-rose-600 flex items-center justify-center gap-1.5 py-1 transition-colors cursor-pointer font-medium"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Salir al Login Principal (Cerrar Sesión)</span>

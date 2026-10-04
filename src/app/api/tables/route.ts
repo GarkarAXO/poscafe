@@ -21,20 +21,29 @@ export async function GET() {
         id: true,
         name: true,
         code: true,
+        logoUrl: true,
+        bgColor: true,
+        primaryColor: true,
+        secondaryColor: true,
+        buttonColor: true,
       },
     })
 
     let tableServiceMode = 'FREE'
+    let isotypeUrl: string | null = null
+    let sidebarTheme = 'DARK'
     try {
-      const modeRows = await prisma.$queryRawUnsafe<Array<{ tableServiceMode: string }>>(
-        `SELECT "tableServiceMode" FROM "branches" WHERE id = $1 LIMIT 1`,
+      const modeRows = await prisma.$queryRawUnsafe<Array<{ tableServiceMode?: string; isotypeUrl?: string; sidebarTheme?: string }>>(
+        `SELECT "tableServiceMode", "isotypeUrl", "sidebarTheme" FROM "branches" WHERE id = $1 LIMIT 1`,
         branchId
       )
-      if (modeRows && modeRows[0]?.tableServiceMode) {
-        tableServiceMode = modeRows[0].tableServiceMode
+      if (modeRows && modeRows[0]) {
+        if (modeRows[0].tableServiceMode) tableServiceMode = modeRows[0].tableServiceMode
+        if (modeRows[0].isotypeUrl) isotypeUrl = modeRows[0].isotypeUrl
+        if (modeRows[0].sidebarTheme) sidebarTheme = modeRows[0].sidebarTheme
       }
     } catch (e) {
-      console.warn('Advertencia al consultar tableServiceMode:', e)
+      console.warn('Advertencia al consultar atributos de branches:', e)
     }
 
     // 2. Áreas de la sucursal
@@ -91,6 +100,13 @@ export async function GET() {
           id: branch?.id,
           name: branch?.name,
           code: branch?.code,
+          logoUrl: branch?.logoUrl,
+          bgColor: branch?.bgColor,
+          primaryColor: branch?.primaryColor,
+          secondaryColor: branch?.secondaryColor,
+          buttonColor: branch?.buttonColor,
+          isotypeUrl: isotypeUrl ?? (branch as any)?.isotypeUrl ?? null,
+          sidebarTheme: sidebarTheme ?? (branch as any)?.sidebarTheme ?? 'DARK',
           tableServiceMode,
         },
         areas,
