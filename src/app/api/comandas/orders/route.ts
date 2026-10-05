@@ -56,7 +56,7 @@ export async function POST(request: Request) {
           const itemSubtotal = Number(it.unitPrice) * Number(it.quantity)
           addedSubtotal += itemSubtotal
 
-          await tx.orderItem.create({
+          const createdItem = await tx.orderItem.create({
             data: {
               orderId: existingOrder.id,
               productVariantId: it.variantId,
@@ -67,6 +67,23 @@ export async function POST(request: Request) {
               kitchenStatus: 'PENDING', // Nuevo ítem enviado a cocina
             },
           })
+
+          if (Array.isArray(it.modifiers) && it.modifiers.length > 0) {
+            for (const mod of it.modifiers) {
+              const modId = typeof mod === 'string' ? mod : mod.modifierId || mod.id
+              if (!modId) continue
+              const dbMod = await tx.modifier.findUnique({ where: { id: modId } })
+              if (!dbMod) continue
+
+              await tx.orderItemModifier.create({
+                data: {
+                  orderItemId: createdItem.id,
+                  modifierId: dbMod.id,
+                  unitPrice: mod.unitPrice !== undefined ? Number(mod.unitPrice) : Number(dbMod.extraPrice),
+                },
+              })
+            }
+          }
         }
 
         const newSubtotal = Number(existingOrder.subtotal) + addedSubtotal
@@ -89,6 +106,7 @@ export async function POST(request: Request) {
                 productVariant: {
                   include: { product: { select: { id: true, name: true } } },
                 },
+                modifiers: { include: { modifier: true } },
               },
             },
           },
@@ -129,7 +147,7 @@ export async function POST(request: Request) {
         // Crear los ítems de la orden
         for (const it of items) {
           const itemSubtotal = Number(it.unitPrice) * Number(it.quantity)
-          await tx.orderItem.create({
+          const createdItem = await tx.orderItem.create({
             data: {
               orderId: order.id,
               productVariantId: it.variantId,
@@ -140,6 +158,23 @@ export async function POST(request: Request) {
               kitchenStatus: 'PENDING',
             },
           })
+
+          if (Array.isArray(it.modifiers) && it.modifiers.length > 0) {
+            for (const mod of it.modifiers) {
+              const modId = typeof mod === 'string' ? mod : mod.modifierId || mod.id
+              if (!modId) continue
+              const dbMod = await tx.modifier.findUnique({ where: { id: modId } })
+              if (!dbMod) continue
+
+              await tx.orderItemModifier.create({
+                data: {
+                  orderItemId: createdItem.id,
+                  modifierId: dbMod.id,
+                  unitPrice: mod.unitPrice !== undefined ? Number(mod.unitPrice) : Number(dbMod.extraPrice),
+                },
+              })
+            }
+          }
         }
 
         // Marcar la mesa como ocupada si es DINE_IN

@@ -88,6 +88,7 @@ export async function GET() {
           name: user.name,
           email: user.email,
           username: user.username,
+          gender: user.gender || 'MALE',
           businessId: user.businessId,
           business: {
             id: user.business.id,

@@ -351,6 +351,15 @@ export default function InventoryDashboardPage() {
             <span>Recetarios</span>
           </Link>
 
+          <Link
+            href="/dashboard/catalog?tab=cupSizes"
+            className={`px-3.5 py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+            title="Configurar tamaños de vasos y empaques para llevar"
+          >
+            <Package className="w-4 h-4 text-amber-500" />
+            <span>Vasos y Empaques</span>
+          </Link>
+
           <button
             type="button"
             onClick={() => setShowModal(true)}
@@ -727,7 +736,7 @@ export default function InventoryDashboardPage() {
                       required
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="Ej: Café de Grano Mezcla Espresso, Leche Entera"
+                      placeholder="Ej: Café Mezcla Espresso, Leche Entera, Vaso Térmico 12oz, Tapa Domo..."
                       className={`w-full px-3.5 py-2.5 rounded-xl border font-medium text-xs focus:outline-none ${classes.input}`}
                     />
                   </div>
@@ -778,7 +787,7 @@ export default function InventoryDashboardPage() {
                   </select>
                   <p className={`text-[11px] flex items-center gap-1.5 pt-0.5 ${classes.textSub}`}>
                     <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ color: buttonColor }} />
-                    <span>Es la unidad indivisible con la que se descuenta en recetas (ej: gramos para café, mililitros para leche, piezas para panes).</span>
+                    <span>Es la unidad con la que se descuenta en recetas (ej: gramos para café, ml para leche, piezas para vasos, tapas, charolas o bolsas).</span>
                   </p>
                 </div>
 
@@ -847,7 +856,7 @@ export default function InventoryDashboardPage() {
                 </div>
 
                 <p className={`text-[11px] ${classes.textMuted}`}>
-                  Si compras este insumo en cajas, bidones o bultos, configúralo aquí para que al recibir compras se convierta automáticamente a tu unidad base.
+                  Si compras este insumo en cajas, paquetes o bultos, configúralo aquí para que al recibir compras se convierta automáticamente a piezas, gramos o mililitros.
                 </p>
 
                 <div className="space-y-1.5">
@@ -856,7 +865,7 @@ export default function InventoryDashboardPage() {
                     type="text"
                     value={form.presentationName}
                     onChange={(e) => setForm({ ...form, presentationName: e.target.value })}
-                    placeholder="Ej: Caja x 12 Litros, Costal de 25 kg, Garrafa de 5L"
+                    placeholder="Ej: Caja x 1,000 Vasos, Manga x 50 Tapas, Costal de 25 kg, Caja x 12 L"
                     className={`w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                   />
                 </div>

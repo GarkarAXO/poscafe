@@ -28,6 +28,7 @@ export interface AuthSession {
   name: string
   email?: string | null
   username?: string | null
+  gender?: string | null
   isPlatformAdmin: boolean
   businessId?: string
   activeBranchId?: string

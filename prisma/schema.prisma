@@ -107,6 +107,7 @@ model Business {
   categories         Category[]
   products           Product[]
   modifierGroups     ModifierGroup[]
+  cupSizes           CupSize[]
   inventoryItems     InventoryItem[]
   suppliers          Supplier[]
   measurementUnits   MeasurementUnit[]
@@ -135,6 +136,15 @@ model BusinessSetting {
   darkMode       Boolean  @default(false)
   sidebarTheme   String?  @default("DARK")
 
+  // Personalización Carta Menú Digital (Estilo Libro Flipbook)
+  businessHours     String?  @default("Lunes a Domingo: 8:00 AM - 10:00 PM")
+  menuCoverColor    String?  @default("#18120F")
+  menuPaperColor    String?  @default("#FDFBF7")
+  menuTextColor     String?  @default("#2C1810")
+  menuAccentColor   String?  @default("#D4AF37")
+  menuCoverTitle    String?  @default("CARTA DE ESPECIALIDADES")
+  menuCoverSubtitle String?  @default("Café de especialidad y gastronomía artesanal")
+
   // Módulos activables (Arquitectura Modular SaaS)
   multiBranchEnabled   Boolean  @default(true)
   canCustomizeColors   Boolean  @default(true)
@@ -151,6 +161,11 @@ model BusinessSetting {
   discountsEnabled     Boolean  @default(true)
   courtesiesEnabled    Boolean  @default(true)
   negativeStockEnabled Boolean  @default(false)
+
+  // Insumos predeterminados de empaque para llevar (Bolsas, Charolas, Cubiertos)
+  takeawayBagItemId     String?
+  takeawayTrayItemId    String?
+  takeawayCutleryItemId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -191,6 +206,15 @@ model Branch {
   buttonColor    String?   @default("#C08552")
   bgColor        String?   @default("#14100E")
 
+  // Personalización Carta Menú Digital (Estilo Libro Flipbook)
+  businessHours     String?  @default("Lunes a Domingo: 8:00 AM - 10:00 PM")
+  menuCoverColor    String?  @default("#18120F")
+  menuPaperColor    String?  @default("#FDFBF7")
+  menuTextColor     String?  @default("#2C1810")
+  menuAccentColor   String?  @default("#D4AF37")
+  menuCoverTitle    String?  @default("CARTA DE ESPECIALIDADES")
+  menuCoverSubtitle String?  @default("Café de especialidad y gastronomía artesanal")
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
@@ -222,6 +246,7 @@ model User {
   username     String?
   passwordHash String
   pinHash      String?
+  gender       String?   @default("MALE") // 'MALE' | 'FEMALE'
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -561,12 +586,32 @@ model RecipeItem {
   inventoryItemId String
   quantityBase    Decimal  @db.Decimal(18, 6)
   notes           String?
+  onlyTakeaway    Boolean  @default(false) // Si es true, solo se descuenta cuando la orden es para llevar (TAKEAWAY / DELIVERY)
   createdAt       DateTime @default(now())
 
   recipe        Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
 
   @@map("recipe_items")
+}
+
+model CupSize {
+  id           String   @id @default(uuid())
+  businessId   String
+  name         String   // Ej: Chico 8oz, Mediano 12oz, Grande 16oz
+  capacityOz   Decimal? @db.Decimal(6, 2)
+  cupItemId    String?  // Insumo del vaso en inventario
+  lidItemId    String?  // Insumo de la tapa en inventario
+  sleeveItemId String?  // Insumo de la manga en inventario
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, active])
+  @@map("cup_sizes")
 }
 
 model ModifierGroup {

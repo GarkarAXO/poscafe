@@ -37,6 +37,7 @@ export default async function DashboardPage() {
   return (
     <DashboardHomeClient
       sessionName={session.name}
+      sessionGender={session.gender}
       business={serializedBusiness}
       activeBranch={activeBranch}
       tableCount={tableCount}

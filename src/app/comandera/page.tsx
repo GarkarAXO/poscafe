@@ -36,6 +36,10 @@ import {
 import { notify } from '@/lib/notify'
 import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
+import ProductCustomizerModal, {
+  CustomizedItemResult,
+  CustomizerProduct,
+} from '@/components/product-customizer-modal'
 
 interface TableItem {
   id: string
@@ -64,6 +68,10 @@ interface TableItem {
       subtotal: number
       notes: string | null
       kitchenStatus: string
+      modifiers?: Array<{
+        id: string
+        modifier: { id: string; name: string; extraPrice: number }
+      }>
     }>
   } | null
 }
@@ -91,15 +99,37 @@ interface Product {
   name: string
   category: { id: string; name: string }
   variants: ProductVariant[]
+  modifierGroups?: Array<{
+    modifierGroup: {
+      id: string
+      name: string
+      minSelect: number
+      maxSelect: number
+      isRequired: boolean
+      modifiers: Array<{
+        id: string
+        name: string
+        extraPrice: number
+        inventoryItemId?: string | null
+        quantityBase?: number | null
+      }>
+    }
+  }>
 }
 
 interface StagedItem {
+  stagedId?: string
   variantId: string
   productName: string
   variantName: string
   unitPrice: number
   quantity: number
   notes: string
+  modifiers?: Array<{
+    modifierId: string
+    name: string
+    unitPrice: number
+  }>
 }
 
 const PRESET_NOTES = [
@@ -140,6 +170,8 @@ export default function ComanderaPage() {
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [orderViewTab, setOrderViewTab] = useState<'catalog' | 'order' | 'split'>('catalog')
   const [stagedItems, setStagedItems] = useState<StagedItem[]>([])
+  const [customizingProduct, setCustomizingProduct] = useState<CustomizerProduct | null>(null)
+  const [showCustomizerModal, setShowCustomizerModal] = useState(false)
   const [customerName, setCustomerName] = useState('')
   const [orderNotes, setOrderNotes] = useState('')
   const [submittingOrder, setSubmittingOrder] = useState(false)
@@ -170,6 +202,7 @@ export default function ComanderaPage() {
   const [unlockPin, setUnlockPin] = useState('')
   const [unlockError, setUnlockError] = useState<string | null>(null)
   const [unlocking, setUnlocking] = useState(false)
+  const [welcomeOverlayUser, setWelcomeOverlayUser] = useState<any>(null)
   const [terminalDevice, setTerminalDevice] = useState<TerminalDeviceConfig | null>(null)
 
   useEffect(() => {
@@ -264,7 +297,15 @@ export default function ComanderaPage() {
       }))
       setIsTerminalLocked(false)
       setUnlockPin('')
-      notify.success('Relevo Exitoso', `Operando como: ${newUser.name}`)
+      setWelcomeOverlayUser(newUser)
+      setTimeout(() => {
+        setWelcomeOverlayUser(null)
+      }, 2000)
+      const isFemale = newUser.gender === 'FEMALE'
+      notify.success(
+        isFemale ? '¡Bienvenida!' : '¡Bienvenido!',
+        `Operando como: ${newUser.name} (${newUser.role?.name || newUser.roleName || 'Colaborador'})`
+      )
     } catch {
       setUnlockError('Error de conexión al validar PIN')
     } finally {
@@ -432,38 +473,70 @@ export default function ComanderaPage() {
     openTableOrder(table)
   }
 
-  // Agregar platillo al pedido nuevo
+  // Agregar platillo al pedido nuevo (abre modal de personalización si tiene variantes o modificadores)
   const handleAddProduct = (prod: Product) => {
+    const hasMultipleVariants = prod.variants && prod.variants.length > 1
+    const hasModifierGroups = prod.modifierGroups && prod.modifierGroups.length > 0
+
+    if (hasMultipleVariants || hasModifierGroups) {
+      setCustomizingProduct(prod as any)
+      setShowCustomizerModal(true)
+      return
+    }
+
     const variant = prod.variants[0]
     if (!variant) return
 
     setStagedItems((prev) => {
-      const existing = prev.find((it) => it.variantId === variant.id)
+      const existing = prev.find(
+        (it) => it.variantId === variant.id && (!it.modifiers || it.modifiers.length === 0) && !it.notes
+      )
       if (existing) {
         return prev.map((it) =>
-          it.variantId === variant.id ? { ...it, quantity: it.quantity + 1 } : it
+          it === existing ? { ...it, quantity: it.quantity + 1 } : it
         )
       }
       return [
         ...prev,
         {
+          stagedId: `${variant.id}_${Date.now()}`,
           variantId: variant.id,
           productName: prod.name,
           variantName: variant.name,
           unitPrice: Number(variant.price),
           quantity: 1,
           notes: '',
+          modifiers: [],
         },
       ]
     })
   }
 
-  // Modificar cantidad en preparación
-  const updateStagedQty = (variantId: string, delta: number) => {
+  // Callback al confirmar personalización en el modal
+  const handleConfirmCustomization = (result: CustomizedItemResult) => {
+    if (!customizingProduct) return
+
+    setStagedItems((prev) => [
+      ...prev,
+      {
+        stagedId: `${result.variantId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        variantId: result.variantId,
+        productName: customizingProduct.name,
+        variantName: result.variantName,
+        unitPrice: result.unitPrice,
+        quantity: result.quantity,
+        notes: result.notes,
+        modifiers: result.modifiers,
+      },
+    ])
+  }
+
+  // Modificar cantidad en preparación (soporta stagedId o variantId)
+  const updateStagedQty = (id: string, delta: number) => {
     setStagedItems((prev) =>
       prev
         .map((it) => {
-          if (it.variantId === variantId) {
+          if (it.stagedId === id || it.variantId === id) {
             const newQty = it.quantity + delta
             return newQty > 0 ? { ...it, quantity: newQty } : null
           }
@@ -473,23 +546,25 @@ export default function ComanderaPage() {
     )
   }
 
-  // Eliminar un platillo de la ronda
-  const removeItemFromStaged = (variantId: string) => {
-    setStagedItems((prev) => prev.filter((it) => it.variantId !== variantId))
+  // Eliminar un platillo de la ronda (soporta stagedId o variantId)
+  const removeItemFromStaged = (id: string) => {
+    setStagedItems((prev) =>
+      prev.filter((it) => (it.stagedId ? it.stagedId !== id : it.variantId !== id))
+    )
   }
 
   // Actualizar nota completa
-  const updateItemNote = (variantId: string, noteText: string) => {
+  const updateItemNote = (id: string, noteText: string) => {
     setStagedItems((prev) =>
-      prev.map((it) => (it.variantId === variantId ? { ...it, notes: noteText } : it))
+      prev.map((it) => ((it.stagedId === id || it.variantId === id) ? { ...it, notes: noteText } : it))
     )
   }
 
   // Agregar nota rápida al ítem
-  const appendNoteToItem = (variantId: string, note: string) => {
+  const appendNoteToItem = (id: string, note: string) => {
     setStagedItems((prev) =>
       prev.map((it) => {
-        if (it.variantId === variantId) {
+        if (it.stagedId === id || it.variantId === id) {
           const current = it.notes ? it.notes.split(', ').filter(Boolean) : []
           if (!current.includes(note)) {
             current.push(note)
@@ -526,6 +601,10 @@ export default function ComanderaPage() {
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           notes: it.notes,
+          modifiers: it.modifiers?.map((m) => ({
+            modifierId: m.modifierId,
+            unitPrice: m.unitPrice,
+          })) || [],
         })),
       }
 
@@ -2349,129 +2428,174 @@ export default function ComanderaPage() {
                             : 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
                         }`}
                       >
-                        {stagedItems.map((item) => (
-                          <div
-                            key={item.variantId}
-                            className={`p-3.5 rounded-2xl border flex flex-col justify-between space-y-3 text-xs shadow-md transition-colors ${
-                              isLight
-                                ? 'bg-white border-[#DECEBD] hover:border-[#C08552]'
-                                : 'bg-[#1c1715] border-[#382b25] hover:border-[#C08552]/40'
-                            }`}
-                          >
-                            {/* Cabecera de la Tarjeta: Nombre y Subtotal */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0 flex-1">
-                                <strong className={`block text-sm font-bold truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-                                  {item.productName}
-                                </strong>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className={`text-xs font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                                    ${item.unitPrice.toFixed(2)} c/u
+                        {stagedItems.map((item) => {
+                          const itemKey = item.stagedId || item.variantId
+                          const isAllergy = item.notes && (item.notes.includes('ALERGIA') || item.notes.includes('ALÉRGICO'))
+
+                          return (
+                            <div
+                              key={itemKey}
+                              className={`p-3.5 rounded-2xl border flex flex-col justify-between space-y-3 text-xs shadow-md transition-colors ${
+                                isAllergy
+                                  ? 'bg-rose-500/10 border-rose-500 shadow-rose-500/10'
+                                  : isLight
+                                  ? 'bg-white border-[#DECEBD] hover:border-[#C08552]'
+                                  : 'bg-[#1c1715] border-[#382b25] hover:border-[#C08552]/40'
+                              }`}
+                            >
+                              {/* Cabecera de la Tarjeta: Nombre, Tamaño, Modificadores y Subtotal */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <strong className={`block text-sm font-bold truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                                      {item.productName}
+                                    </strong>
+                                    {item.variantName && item.variantName !== 'Regular' && (
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                        isLight
+                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                      }`}>
+                                        {item.variantName}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className={`text-xs font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                                      ${item.unitPrice.toFixed(2)} c/u
+                                    </span>
+                                    <span className={`font-black text-xs font-mono ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
+                                      • ${(item.unitPrice * item.quantity).toFixed(2)}
+                                    </span>
+                                  </div>
+
+                                  {/* Modificadores / Extras Seleccionados */}
+                                  {item.modifiers && item.modifiers.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 pt-0.5">
+                                      {item.modifiers.map((m, idx) => (
+                                        <span
+                                          key={idx}
+                                          className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                            isLight
+                                              ? 'bg-amber-100 text-amber-950 border border-amber-200'
+                                              : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
+                                          }`}
+                                        >
+                                          + {m.name} {m.unitPrice > 0 ? `($${m.unitPrice.toFixed(2)})` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => removeItemFromStaged(itemKey)}
+                                  className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-90 transition-colors cursor-pointer shrink-0 ${
+                                    isLight
+                                      ? 'text-rose-600 hover:bg-rose-50'
+                                      : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
+                                  }`}
+                                  title="Quitar platillo"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              {/* Stepper Táctil: Disminuir [-] y Aumentar [+] */}
+                              <div className={`flex items-center justify-between p-1.5 rounded-xl border ${
+                                isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+                              }`}>
+                                <span className={`text-[11px] font-medium px-2 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                                  Cantidad:
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateStagedQty(itemKey, -1)}
+                                    className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm ${
+                                      isLight
+                                        ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
+                                        : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 hover:text-white'
+                                    }`}
+                                    title="Disminuir"
+                                  >
+                                    <Minus className="w-4 h-4" />
+                                  </button>
+
+                                  <span className={`font-black text-sm sm:text-base px-2 min-w-[28px] text-center font-mono ${
+                                    isLight ? 'text-[#2B1712]' : 'text-white'
+                                  }`}>
+                                    {item.quantity}
                                   </span>
-                                  <span className={`font-black text-xs font-mono ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
-                                    • ${(item.unitPrice * item.quantity).toFixed(2)}
-                                  </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => updateStagedQty(itemKey, 1)}
+                                    style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                                    className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm shadow-md"
+                                    title="Aumentar"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
                                 </div>
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => removeItemFromStaged(item.variantId)}
-                                className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-90 transition-colors cursor-pointer shrink-0 ${
-                                  isLight
-                                    ? 'text-rose-600 hover:bg-rose-50'
-                                    : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
-                                }`}
-                                title="Quitar platillo"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                              {/* Alerta de Alergia destacada si existe */}
+                              {isAllergy && (
+                                <div className="p-2 rounded-xl bg-rose-500/20 border border-rose-500 text-rose-600 dark:text-rose-300 font-bold text-[11px] flex items-center gap-1.5 animate-pulse">
+                                  <span>⚠️ ALERTA COCINA:</span>
+                                  <span>{item.notes}</span>
+                                </div>
+                              )}
 
-                            {/* Stepper Táctil: Disminuir [-] y Aumentar [+] */}
-                            <div className={`flex items-center justify-between p-1.5 rounded-xl border ${
-                              isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
-                            }`}>
-                              <span className={`text-[11px] font-medium px-2 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                                Cantidad:
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => updateStagedQty(item.variantId, -1)}
-                                  className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm ${
-                                    isLight
-                                      ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
-                                      : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 hover:text-white'
-                                  }`}
-                                  title="Disminuir"
-                                >
-                                  <Minus className="w-4 h-4" />
-                                </button>
-
-                                <span className={`font-black text-sm sm:text-base px-2 min-w-[28px] text-center font-mono ${
-                                  isLight ? 'text-[#2B1712]' : 'text-white'
-                                }`}>
-                                  {item.quantity}
-                                </span>
-
-                                <button
-                                  type="button"
-                                  onClick={() => updateStagedQty(item.variantId, 1)}
-                                  style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
-                                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm shadow-md"
-                                  title="Aumentar"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Notas Rápidas y Chips para Cocina */}
-                            <div className={`space-y-1.5 pt-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-[#251e1b]'}`}>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  placeholder="Nota especial (ej. sin azúcar, para llevar)..."
-                                  value={item.notes}
-                                  onChange={(e) => updateItemNote(item.variantId, e.target.value)}
-                                  className={`flex-1 px-2.5 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
-                                    isLight
-                                      ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
-                                      : 'bg-[#14100e] border border-[#382b25] text-amber-200 placeholder-slate-500'
-                                  }`}
-                                />
-                                {item.notes && (
-                                  <button
-                                    type="button"
-                                    onClick={() => updateItemNote(item.variantId, '')}
-                                    className={`text-xs px-1.5 py-1 cursor-pointer ${isLight ? 'text-slate-500 hover:text-black' : 'text-slate-400 hover:text-white'}`}
-                                    title="Borrar nota"
-                                  >
-                                    ✕
-                                  </button>
-                                )}
-                              </div>
-
-                              <div className="flex flex-wrap gap-1">
-                                {PRESET_NOTES.slice(0, 5).map((note) => (
-                                  <button
-                                    key={note}
-                                    type="button"
-                                    onClick={() => appendNoteToItem(item.variantId, note)}
-                                    className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-lg border active:scale-95 transition-all cursor-pointer ${
+                              {/* Notas Rápidas y Chips para Cocina */}
+                              <div className={`space-y-1.5 pt-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-[#251e1b]'}`}>
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    placeholder="Nota especial (ej. sin azúcar, para llevar)..."
+                                    value={item.notes}
+                                    onChange={(e) => updateItemNote(itemKey, e.target.value)}
+                                    className={`flex-1 px-2.5 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
                                       isLight
-                                        ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023] font-medium'
-                                        : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+                                        ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
+                                        : 'bg-[#14100e] border border-[#382b25] text-amber-200 placeholder-slate-500'
                                     }`}
-                                  >
-                                    +{note}
-                                  </button>
-                                ))}
+                                  />
+                                  {item.notes && (
+                                    <button
+                                      type="button"
+                                      onClick={() => updateItemNote(itemKey, '')}
+                                      className={`text-xs px-1.5 py-1 cursor-pointer ${isLight ? 'text-slate-500 hover:text-black' : 'text-slate-400 hover:text-white'}`}
+                                      title="Borrar nota"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-wrap gap-1">
+                                  {PRESET_NOTES.slice(0, 5).map((note) => (
+                                    <button
+                                      key={note}
+                                      type="button"
+                                      onClick={() => appendNoteToItem(itemKey, note)}
+                                      className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-lg border active:scale-95 transition-all cursor-pointer ${
+                                        isLight
+                                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023] font-medium'
+                                          : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+                                      }`}
+                                    >
+                                      +{note}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -2932,6 +3056,29 @@ export default function ComanderaPage() {
         </div>
       )}
 
+      {/* PANTALLA / OVERLAY DE BIENVENIDA AL ENTRAR O DESBLOQUEAR TERMINAL */}
+      {welcomeOverlayUser && (
+        <div className="fixed inset-0 z-50 bg-[#14100E]/85 backdrop-blur-md flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-[#251E1B] border border-[#3E2723] rounded-3xl p-8 text-center space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-bounce duration-1000">
+              <UtensilsCrossed className="w-8 h-8" />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#C08552]/20 border border-[#C08552]/40 text-[#DECEBD] mb-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#C08552]" />
+                <span>{welcomeOverlayUser.role?.name || welcomeOverlayUser.roleName || 'Comandera de Mesas'}</span>
+              </div>
+              <h2 className="text-2xl font-black text-white">
+                {welcomeOverlayUser.gender === 'FEMALE' ? '¡Bienvenida,' : '¡Bienvenido,'} {welcomeOverlayUser.name}!
+              </h2>
+              <p className="text-xs text-[#A88C7D] mt-1 font-medium">
+                Turno activado. ¡Excelente jornada con las mesas!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL FULLSCREEN DE BLOQUEO DE TERMINAL Y RELEVO RÁPIDO */}
       {isTerminalLocked && (
         <div
@@ -3174,6 +3321,20 @@ export default function ComanderaPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL PERSONALIZADOR DE PRODUCTO (TAMAÑOS, SABORES, EXTRAS, ALERGIAS) */}
+      <ProductCustomizerModal
+        isOpen={showCustomizerModal}
+        onClose={() => {
+          setShowCustomizerModal(false)
+          setCustomizingProduct(null)
+        }}
+        product={customizingProduct}
+        isLight={isLight}
+        primaryColor={themePrimary}
+        buttonColor={themeButton}
+        onConfirm={handleConfirmCustomization}
+      />
     </div>
   )
 }

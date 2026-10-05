@@ -64,6 +64,7 @@ interface UserItem {
   name: string
   email: string | null
   username: string | null
+  gender?: string
   active: boolean
   hasPin: boolean
   lastLoginAt: string | null
@@ -121,6 +122,7 @@ export default function UsersAndRolesPage() {
   const [userUsername, setUserUsername] = useState('')
   const [userPassword, setUserPassword] = useState('')
   const [userPin, setUserPin] = useState('')
+  const [userGender, setUserGender] = useState<'MALE' | 'FEMALE'>('MALE')
   const [userRoleId, setUserRoleId] = useState('')
   const [userBranchIds, setUserBranchIds] = useState<string[]>([])
   const [userDefaultBranchId, setUserDefaultBranchId] = useState('')
@@ -196,6 +198,7 @@ export default function UsersAndRolesPage() {
       setUserName(user.name)
       setUserEmail(user.email || '')
       setUserUsername(user.username || '')
+      setUserGender(user.gender === 'FEMALE' ? 'FEMALE' : 'MALE')
       setUserPassword('')
       setUserPin('')
       setUserRoleId(user.roles[0]?.id || '')
@@ -214,6 +217,7 @@ export default function UsersAndRolesPage() {
       setUserName('')
       setUserEmail('')
       setUserUsername('')
+      setUserGender('MALE')
       setUserPassword('')
       setUserPin('')
       setUserRoleId(roles[0]?.id || '')
@@ -254,6 +258,7 @@ export default function UsersAndRolesPage() {
         name: userName.trim(),
         email: userEmail.trim() || null,
         username: userUsername.trim() || null,
+        gender: userGender,
         ...(userPassword.trim() ? { password: userPassword.trim() } : {}),
         ...(userPin.trim() ? { pin: userPin.trim() } : {}),
         roleId: userRoleId,
@@ -661,7 +666,7 @@ export default function UsersAndRolesPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h3 className={`text-sm font-bold ${classes.textMain}`}>{user.name}</h3>
                           {!user.active && (
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
@@ -995,6 +1000,39 @@ export default function UsersAndRolesPage() {
                   onChange={(e) => setUserName(e.target.value)}
                   className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none ${classes.input}`}
                 />
+              </div>
+
+              {/* Sexo / Tratamiento de Bienvenida */}
+              <div>
+                <label className={`block text-xs font-semibold mb-1.5 ${classes.textMuted}`}>
+                  Sexo / Tratamiento de Bienvenida *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setUserGender('MALE')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      userGender === 'MALE'
+                        ? 'bg-[#C08552] text-white border-[#C08552] shadow-sm ring-1 ring-[#C08552]'
+                        : `${classes.subCard} ${classes.textMuted} hover:${classes.textMain}`
+                    }`}
+                  >
+                    <span>👨 Masculino</span>
+                    <span className="text-[10px] opacity-80">(Bienvenido)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUserGender('FEMALE')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      userGender === 'FEMALE'
+                        ? 'bg-[#C08552] text-white border-[#C08552] shadow-sm ring-1 ring-[#C08552]'
+                        : `${classes.subCard} ${classes.textMuted} hover:${classes.textMain}`
+                    }`}
+                  >
+                    <span>👩 Femenino</span>
+                    <span className="text-[10px] opacity-80">(Bienvenida)</span>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

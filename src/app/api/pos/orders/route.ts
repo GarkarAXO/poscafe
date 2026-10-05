@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       idempotencyKey,
       discount, // { amount: number, reason: string, approvedBy?: string }
       courtesy, // { amount: number, reason: string, beneficiary?: string, approvedBy?: string }
+      takeawayPackaging, // { bags?: number, cupTrays?: number, cutlerySets?: number }
     } = body
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -159,19 +160,92 @@ export async function POST(request: Request) {
       const inventoryMovementsSummary: Array<{ item: string; deducted: number; unit: string }> = []
 
       for (const item of items) {
-        const orderItemSubtotal = Number(item.unitPrice) * Number(item.quantity)
-
-        await tx.orderItem.create({
+        const itemSubtotal = Number(item.unitPrice) * Number(item.quantity)
+        const createdOrderItem = await tx.orderItem.create({
           data: {
             orderId: order.id,
             productVariantId: item.variantId,
             quantity: Number(item.quantity),
             unitPrice: Number(item.unitPrice),
-            subtotal: orderItemSubtotal,
+            subtotal: itemSubtotal,
             notes: item.notes || null,
             kitchenStatus: 'READY',
           },
         })
+
+        // Procesar modificadores / sabores / extras asociados al ítem
+        if (Array.isArray(item.modifiers) && item.modifiers.length > 0) {
+          for (const mod of item.modifiers) {
+            const modId = typeof mod === 'string' ? mod : mod.modifierId || mod.id
+            if (!modId) continue
+
+            const dbMod = await tx.modifier.findUnique({
+              where: { id: modId },
+            })
+            if (!dbMod) continue
+
+            const modUnitPrice =
+              mod.unitPrice !== undefined ? Number(mod.unitPrice) : Number(dbMod.extraPrice)
+
+            await tx.orderItemModifier.create({
+              data: {
+                orderItemId: createdOrderItem.id,
+                modifierId: dbMod.id,
+                unitPrice: modUnitPrice,
+              },
+            })
+
+            // Descuento de inventario automático si el sabor/extra tiene insumo asignado
+            if (dbMod.inventoryItemId && dbMod.quantityBase) {
+              const modDeduction = Number(dbMod.quantityBase) * Number(item.quantity)
+              const invItem = await tx.inventoryItem.findUnique({
+                where: { id: dbMod.inventoryItemId },
+              })
+              const unitCost = Number(invItem?.costPerUnit || 0)
+              const totalCost = modDeduction * unitCost
+
+              await tx.warehouseStock.upsert({
+                where: {
+                  warehouseId_inventoryItemId: {
+                    warehouseId: defaultWarehouse.id,
+                    inventoryItemId: dbMod.inventoryItemId,
+                  },
+                },
+                update: {
+                  quantity: { decrement: modDeduction },
+                },
+                create: {
+                  warehouseId: defaultWarehouse.id,
+                  inventoryItemId: dbMod.inventoryItemId,
+                  quantity: -modDeduction,
+                },
+              })
+
+              await tx.stockMovement.create({
+                data: {
+                  inventoryItemId: dbMod.inventoryItemId,
+                  sourceWarehouseId: defaultWarehouse.id,
+                  type: StockMovementType.RECIPE_CONSUME,
+                  quantityBase: modDeduction,
+                  unitCost,
+                  totalCost,
+                  referenceType: 'ORDER',
+                  referenceId: order.id,
+                  notes: `Consumo extra/sabor: ${dbMod.name} (+${modDeduction}) (${order.orderNumber})`,
+                  idempotencyKey: `${order.id}-mod-${createdOrderItem.id}-${dbMod.id}`,
+                },
+              })
+
+              if (invItem) {
+                inventoryMovementsSummary.push({
+                  item: `${invItem.name} (${dbMod.name})`,
+                  deducted: modDeduction,
+                  unit: invItem.baseUnit.toLowerCase(),
+                })
+              }
+            }
+          }
+        }
 
         // Consultar variante con su receta e insumos
         const variant = await tx.productVariant.findUnique({
@@ -192,6 +266,11 @@ export async function POST(request: Request) {
         // POLÍTICA 1: RECETA (Descuenta cada ingrediente proporcional a la cantidad vendida)
         if (variant.inventoryPolicy === 'RECIPE' && variant.recipe) {
           for (const recipeItem of variant.recipe.items) {
+            // Si el insumo está marcado como solo para llevar (vaso desechable, tapa, manga) y el cliente come en salón/mesa (DINE_IN), NO se descuenta stock
+            if (recipeItem.onlyTakeaway && orderType === 'DINE_IN') {
+              continue
+            }
+
             const totalDeduction = Number(recipeItem.quantityBase) * Number(item.quantity)
             const unitCost = Number(recipeItem.inventoryItem.costPerUnit)
             const totalCost = totalDeduction * unitCost
@@ -287,6 +366,86 @@ export async function POST(request: Request) {
               unit: invItem.baseUnit.toLowerCase(),
             })
           }
+        }
+      }
+
+      // Descontar empaques generales para llevar (Bolsas, Charolas portavasos, Cubiertos)
+      if (orderType !== 'DINE_IN') {
+        const settings = await tx.businessSetting.findUnique({
+          where: { businessId: session.businessId! },
+        })
+
+        const deductPackaging = async (itemId: string, qty: number, label: string) => {
+          if (qty <= 0) return
+          const invItem = await tx.inventoryItem.findUnique({ where: { id: itemId } })
+          if (!invItem) return
+
+          const unitCost = Number(invItem.costPerUnit || 0)
+          const totalCost = qty * unitCost
+
+          await tx.warehouseStock.upsert({
+            where: {
+              warehouseId_inventoryItemId: {
+                warehouseId: defaultWarehouse.id,
+                inventoryItemId: itemId,
+              },
+            },
+            update: {
+              quantity: { decrement: qty },
+            },
+            create: {
+              warehouseId: defaultWarehouse.id,
+              inventoryItemId: itemId,
+              quantity: -qty,
+            },
+          })
+
+          await tx.stockMovement.create({
+            data: {
+              inventoryItemId: itemId,
+              sourceWarehouseId: defaultWarehouse.id,
+              type: StockMovementType.RECIPE_CONSUME,
+              quantityBase: qty,
+              unitCost,
+              totalCost,
+              referenceType: 'ORDER',
+              referenceId: order.id,
+              notes: `Empaque para llevar: ${label} (${order.orderNumber})`,
+              idempotencyKey: `${order.id}-pkg-${itemId}`,
+            },
+          })
+
+          inventoryMovementsSummary.push({
+            item: `${invItem.name} (${label})`,
+            deducted: qty,
+            unit: invItem.baseUnit.toLowerCase(),
+          })
+        }
+
+        // 1. Bolsas
+        const bagQty = takeawayPackaging?.bags !== undefined
+          ? Number(takeawayPackaging.bags)
+          : (settings?.takeawayBagItemId ? 1 : 0)
+        if (settings?.takeawayBagItemId && bagQty > 0) {
+          await deductPackaging(settings.takeawayBagItemId, bagQty, 'Bolsa')
+        }
+
+        // 2. Charolas portavasos (por defecto 1 cada 2 bebidas si no se especifica)
+        const totalItemsCount = items.reduce((acc, it) => acc + (Number(it.quantity) || 1), 0)
+        const defaultTrays = totalItemsCount >= 2 ? 1 : 0
+        const trayQty = takeawayPackaging?.cupTrays !== undefined
+          ? Number(takeawayPackaging.cupTrays)
+          : defaultTrays
+        if (settings?.takeawayTrayItemId && trayQty > 0) {
+          await deductPackaging(settings.takeawayTrayItemId, trayQty, 'Charola portavasos')
+        }
+
+        // 3. Cubiertos desechables
+        const cutleryQty = takeawayPackaging?.cutlerySets !== undefined
+          ? Number(takeawayPackaging.cutlerySets)
+          : 0
+        if (settings?.takeawayCutleryItemId && cutleryQty > 0) {
+          await deductPackaging(settings.takeawayCutleryItemId, cutleryQty, 'Cubiertos')
         }
       }
 

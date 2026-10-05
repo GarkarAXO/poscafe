@@ -43,7 +43,9 @@ import {
   Layers,
   ShoppingBag,
   Bell,
+  BookOpen,
 } from 'lucide-react'
+import BookMenu from '@/components/book-menu'
 import { notify } from '@/lib/notify'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
@@ -59,7 +61,68 @@ interface Branch {
   primaryColor: string | null
   secondaryColor: string | null
   buttonColor: string | null
+  businessHours?: string | null
+  menuCoverColor?: string | null
+  menuPaperColor?: string | null
+  menuTextColor?: string | null
+  menuAccentColor?: string | null
+  menuCoverTitle?: string | null
+  menuCoverSubtitle?: string | null
 }
+
+interface MenuThemePreset {
+  id: string
+  name: string
+  description: string
+  menuCoverColor: string
+  menuPaperColor: string
+  menuTextColor: string
+  menuAccentColor: string
+  tag: string
+}
+
+const MENU_THEME_PRESETS: MenuThemePreset[] = [
+  {
+    id: 'cuero-oro',
+    name: 'Cuero Imperial & Oro',
+    description: 'Tapa negra espresso, hojas pergamino marfil y filigranas doradas de alta cocina.',
+    menuCoverColor: '#18120F',
+    menuPaperColor: '#FDFBF7',
+    menuTextColor: '#2C1810',
+    menuAccentColor: '#D4AF37',
+    tag: 'Recomendado',
+  },
+  {
+    id: 'pergamino-vintage',
+    name: 'Pergamino & Cobre Tostado',
+    description: 'Tapa café tostado con hojas cálidas envejecidas y detalles en cobre y canela.',
+    menuCoverColor: '#2C1E17',
+    menuPaperColor: '#F6EFE3',
+    menuTextColor: '#3E2415',
+    menuAccentColor: '#C08552',
+    tag: 'Artesanal',
+  },
+  {
+    id: 'marfil-minimalista',
+    name: 'Marfil & Bronce Sofisticado',
+    description: 'Tapa carbón moderno con páginas blanco hueso y acentos bronce contemporáneos.',
+    menuCoverColor: '#201E1C',
+    menuPaperColor: '#FAF8F5',
+    menuTextColor: '#1C1917',
+    menuAccentColor: '#B8860B',
+    tag: 'Elegante',
+  },
+  {
+    id: 'nocturno-ambar',
+    name: 'Edición Nocturna & Ámbar',
+    description: 'Atmósfera tenue con páginas oscuras, contraste suave y acentos ámbar radiante.',
+    menuCoverColor: '#0E0C0B',
+    menuPaperColor: '#1A1513',
+    menuTextColor: '#EFE5DA',
+    menuAccentColor: '#F59E0B',
+    tag: 'Alto Contraste',
+  },
+]
 
 interface ThemePreset {
   id: string
@@ -179,7 +242,7 @@ export default function ThemeCustomizerPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [previewTab, setPreviewTab] = useState<
-    'comandera' | 'pos' | 'kds' | 'dashboard' | 'tables' | 'catalog' | 'sidebar'
+    'comandera' | 'pos' | 'kds' | 'dashboard' | 'tables' | 'catalog' | 'menu' | 'sidebar'
   >('comandera')
 
   // Colores y ajustes visuales para la sucursal seleccionada
@@ -191,6 +254,14 @@ export default function ThemeCustomizerPage() {
     logoUrl: '',
     isotypeUrl: '',
     sidebarTheme: 'DARK',
+    // Personalización Carta Menú Digital (Estilo Libro Flipbook)
+    businessHours: 'Lunes a Domingo: 8:00 AM - 10:00 PM',
+    menuCoverColor: '#18120F',
+    menuPaperColor: '#FDFBF7',
+    menuTextColor: '#2C1810',
+    menuAccentColor: '#D4AF37',
+    menuCoverTitle: 'CARTA DE ESPECIALIDADES',
+    menuCoverSubtitle: 'Café de especialidad y gastronomía artesanal',
   })
 
   // Cargar sucursales
@@ -211,6 +282,13 @@ export default function ThemeCustomizerPage() {
           logoUrl: initialBranch.logoUrl || '',
           isotypeUrl: initialBranch.isotypeUrl || '',
           sidebarTheme: (initialBranch.sidebarTheme as any) || 'DARK',
+          businessHours: initialBranch.businessHours || 'Lunes a Domingo: 8:00 AM - 10:00 PM',
+          menuCoverColor: initialBranch.menuCoverColor || '#18120F',
+          menuPaperColor: initialBranch.menuPaperColor || '#FDFBF7',
+          menuTextColor: initialBranch.menuTextColor || '#2C1810',
+          menuAccentColor: initialBranch.menuAccentColor || '#D4AF37',
+          menuCoverTitle: initialBranch.menuCoverTitle || 'CARTA DE ESPECIALIDADES',
+          menuCoverSubtitle: initialBranch.menuCoverSubtitle || 'Café de especialidad y gastronomía artesanal',
         })
       }
     } catch {
@@ -237,11 +315,18 @@ export default function ThemeCustomizerPage() {
         logoUrl: branch.logoUrl || '',
         isotypeUrl: branch.isotypeUrl || '',
         sidebarTheme: (branch.sidebarTheme as any) || 'DARK',
+        businessHours: branch.businessHours || 'Lunes a Domingo: 8:00 AM - 10:00 PM',
+        menuCoverColor: branch.menuCoverColor || '#18120F',
+        menuPaperColor: branch.menuPaperColor || '#FDFBF7',
+        menuTextColor: branch.menuTextColor || '#2C1810',
+        menuAccentColor: branch.menuAccentColor || '#D4AF37',
+        menuCoverTitle: branch.menuCoverTitle || 'CARTA DE ESPECIALIDADES',
+        menuCoverSubtitle: branch.menuCoverSubtitle || 'Café de especialidad y gastronomía artesanal',
       })
     }
   }
 
-  // Aplicar un Preset preconfigurado
+  // Aplicar un Preset preconfigurado del Sistema
   const handleApplyPreset = (preset: ThemePreset) => {
     setThemeData((prev) => ({
       ...prev,
@@ -251,7 +336,20 @@ export default function ThemeCustomizerPage() {
       buttonColor: preset.buttonColor,
       sidebarTheme: preset.sidebarTheme || prev.sidebarTheme,
     }))
-    notify.info('Preset seleccionado', `Se cargó la paleta "${preset.name}". Haz clic en "Guardar Tema" para aplicarlo a la base de datos.`)
+    notify.info('Preset seleccionado', `Se cargó la paleta "${preset.name}". Haz clic en "Guardar" para aplicarlo a la base de datos.`)
+  }
+
+  // Aplicar un Preset exclusivo de la Carta Menú
+  const handleApplyMenuPreset = (preset: MenuThemePreset) => {
+    setThemeData((prev) => ({
+      ...prev,
+      menuCoverColor: preset.menuCoverColor,
+      menuPaperColor: preset.menuPaperColor,
+      menuTextColor: preset.menuTextColor,
+      menuAccentColor: preset.menuAccentColor,
+    }))
+    setPreviewTab('menu')
+    notify.info('Estilo de Carta aplicado', `Se configuró "${preset.name}". Puedes ver la previsualización a la derecha.`)
   }
 
   // Guardar en la Base de Datos
@@ -271,14 +369,21 @@ export default function ThemeCustomizerPage() {
           logoUrl: themeData.logoUrl || null,
           isotypeUrl: themeData.isotypeUrl || null,
           sidebarTheme: themeData.sidebarTheme,
+          businessHours: themeData.businessHours,
+          menuCoverColor: themeData.menuCoverColor,
+          menuPaperColor: themeData.menuPaperColor,
+          menuTextColor: themeData.menuTextColor,
+          menuAccentColor: themeData.menuAccentColor,
+          menuCoverTitle: themeData.menuCoverTitle,
+          menuCoverSubtitle: themeData.menuCoverSubtitle,
         }),
       })
 
       const json = await res.json()
       if (json.success) {
         notify.success(
-          'Tema guardado en la base de datos',
-          'Los nuevos colores y fondo se aplicarán de inmediato en la Comandera y Terminales.'
+          'Guardado',
+          'Guardado y aplicando en lo que se recarga el sistema...'
         )
         // Actualizar lista local
         setBranches((prev) =>
@@ -362,8 +467,7 @@ export default function ThemeCustomizerPage() {
             className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50 hover:opacity-95"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span className="hidden sm:inline">Guardar Tema</span>
-            <span className="sm:hidden">Guardar</span>
+            <span>Guardar</span>
           </button>
         </div>
       </header>
@@ -734,6 +838,263 @@ export default function ThemeCustomizerPage() {
               )}
             </div>
 
+            {/* SECCIÓN DEDICADA: PERSONALIZACIÓN DE LA CARTA MENÚ DIGITAL (ESTILO LIBRO FLIPBOOK) */}
+            <div className={`p-4 sm:p-5 rounded-2xl border space-y-4 ${classes.subCard}`}>
+              <div className={`flex items-center justify-between pb-2 border-b ${classes.divider}`}>
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-amber-500" />
+                  <h4 className={`text-xs font-black uppercase tracking-wider ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Personalización de la Carta Menú (Libro)
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab('menu')}
+                  className="text-[11px] font-bold text-amber-500 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span>Ver Carta</span>
+                </button>
+              </div>
+
+              {/* Estilos rápidos de carta preconfigurados (1 Clic) */}
+              <div className="space-y-1.5">
+                <span className={`text-[11px] font-bold ${classes.textMain}`}>
+                  Estilos de Carta Prediseñados (1 Clic)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {MENU_THEME_PRESETS.map((mp) => {
+                    const isCurrent =
+                      themeData.menuCoverColor === mp.menuCoverColor &&
+                      themeData.menuPaperColor === mp.menuPaperColor &&
+                      themeData.menuAccentColor === mp.menuAccentColor
+
+                    return (
+                      <button
+                        key={mp.id}
+                        type="button"
+                        onClick={() => handleApplyMenuPreset(mp)}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 select-none ${
+                          isCurrent
+                            ? 'ring-2 ring-amber-500 border-amber-500 shadow-sm'
+                            : 'border-slate-300/40 opacity-85 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: mp.menuCoverColor,
+                          color: '#FFFFFF',
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black">{mp.name}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/20 font-bold">
+                            {mp.tag}
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-white/70 line-clamp-1 leading-tight">
+                          {mp.description}
+                        </p>
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <div
+                            className="w-3.5 h-3.5 rounded-full border border-white/30"
+                            style={{ backgroundColor: mp.menuCoverColor }}
+                            title="Tapa / Portada"
+                          />
+                          <div
+                            className="w-3.5 h-3.5 rounded-full border border-black/20"
+                            style={{ backgroundColor: mp.menuPaperColor }}
+                            title="Hojas / Papel"
+                          />
+                          <div
+                            className="w-3.5 h-3.5 rounded-full border border-black/20"
+                            style={{ backgroundColor: mp.menuAccentColor }}
+                            title="Acento / Oro"
+                          />
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Colores individuales de la carta */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {/* Color de Portada (Tapa) */}
+                <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${classes.card}`}>
+                  <div>
+                    <label className={`block text-[11px] font-bold ${classes.textMain}`}>
+                      Color de Portada (Tapa)
+                    </label>
+                    <p className={`text-[9px] ${classes.textMuted}`}>Fondo exterior</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={themeData.menuCoverColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuCoverColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
+                    />
+                    <input
+                      type="text"
+                      value={themeData.menuCoverColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuCoverColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className={`w-18 px-1.5 py-1 rounded border font-mono text-[10px] uppercase text-center font-bold ${classes.input}`}
+                    />
+                  </div>
+                </div>
+
+                {/* Color de Hojas Interiores (Papel) */}
+                <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${classes.card}`}>
+                  <div>
+                    <label className={`block text-[11px] font-bold ${classes.textMain}`}>
+                      Hojas Interiores (Papel)
+                    </label>
+                    <p className={`text-[9px] ${classes.textMuted}`}>Pergamino o marfil</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={themeData.menuPaperColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuPaperColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
+                    />
+                    <input
+                      type="text"
+                      value={themeData.menuPaperColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuPaperColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className={`w-18 px-1.5 py-1 rounded border font-mono text-[10px] uppercase text-center font-bold ${classes.input}`}
+                    />
+                  </div>
+                </div>
+
+                {/* Color de Tipografía de Platillos */}
+                <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${classes.card}`}>
+                  <div>
+                    <label className={`block text-[11px] font-bold ${classes.textMain}`}>
+                      Texto de Platillos
+                    </label>
+                    <p className={`text-[9px] ${classes.textMuted}`}>Nombres y notas</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={themeData.menuTextColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuTextColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
+                    />
+                    <input
+                      type="text"
+                      value={themeData.menuTextColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuTextColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className={`w-18 px-1.5 py-1 rounded border font-mono text-[10px] uppercase text-center font-bold ${classes.input}`}
+                    />
+                  </div>
+                </div>
+
+                {/* Color de Acento (Precios y Filigranas) */}
+                <div className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${classes.card}`}>
+                  <div>
+                    <label className={`block text-[11px] font-bold ${classes.textMain}`}>
+                      Acento de Precios
+                    </label>
+                    <p className={`text-[9px] ${classes.textMuted}`}>Dorado o bronce</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={themeData.menuAccentColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuAccentColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0"
+                    />
+                    <input
+                      type="text"
+                      value={themeData.menuAccentColor}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, menuAccentColor: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      className={`w-18 px-1.5 py-1 rounded border font-mono text-[10px] uppercase text-center font-bold ${classes.input}`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Título de Portada */}
+              <div className="space-y-1">
+                <label className={`block text-[11px] font-bold ${classes.textMain}`}>
+                  Título de la Portada
+                </label>
+                <input
+                  type="text"
+                  value={themeData.menuCoverTitle}
+                  onChange={(e) => {
+                    setThemeData({ ...themeData, menuCoverTitle: e.target.value })
+                    setPreviewTab('menu')
+                  }}
+                  placeholder="Ej: CARTA DE ESPECIALIDADES"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                />
+              </div>
+
+              {/* Subtítulo de Portada */}
+              <div className="space-y-1">
+                <label className={`block text-[11px] font-bold ${classes.textMain}`}>
+                  Lema o Subtítulo de Portada
+                </label>
+                <input
+                  type="text"
+                  value={themeData.menuCoverSubtitle}
+                  onChange={(e) => {
+                    setThemeData({ ...themeData, menuCoverSubtitle: e.target.value })
+                    setPreviewTab('menu')
+                  }}
+                  placeholder="Ej: Café de especialidad y gastronomía artesanal"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                />
+              </div>
+
+              {/* Horario de Servicio del Negocio */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className={`block text-[11px] font-bold flex items-center gap-1.5 ${classes.textMain}`}>
+                    <Clock className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Horario de Servicio del Negocio</span>
+                  </label>
+                  <span className={`text-[10px] ${classes.textMuted}`}>Visible en portada y contraportada</span>
+                </div>
+                <input
+                  type="text"
+                  value={themeData.businessHours}
+                  onChange={(e) => {
+                    setThemeData({ ...themeData, businessHours: e.target.value })
+                    setPreviewTab('menu')
+                  }}
+                  placeholder="Ej: Lunes a Domingo: 8:00 AM - 10:00 PM"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                />
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={handleSaveTheme}
@@ -742,7 +1103,7 @@ export default function ThemeCustomizerPage() {
               className="w-full py-3.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-95 disabled:opacity-50 mt-4 hover:opacity-95"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              <span>Guardar en Base de Datos</span>
+              <span>Guardar</span>
             </button>
           </div>
         </div>
@@ -764,6 +1125,7 @@ export default function ThemeCustomizerPage() {
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                 { id: 'tables', label: 'Mesas', icon: LayoutGrid },
                 { id: 'catalog', label: 'Catálogo', icon: Package },
+                { id: 'menu', label: 'Carta Menú (Libro)', icon: BookOpen },
                 { id: 'sidebar', label: 'Sidebar & Logos', icon: Layers },
               ].map((tab) => {
                 const TabIcon = tab.icon
@@ -1710,7 +2072,179 @@ export default function ThemeCustomizerPage() {
               )
             }
 
-            // VISTA 7: BARRA LATERAL & LOGOS (CON LOS 8 TEMAS)
+            // VISTA: CARTA DE MENÚ TIPO LIBRO INTERACTIVA
+            if (previewTab === 'menu') {
+              const previewCategories = [
+                {
+                  id: 'cat-1',
+                  name: 'Cafetería de Especialidad',
+                  slug: 'cafeteria',
+                  imageUrl: null,
+                  products: [
+                    {
+                      id: 'p1',
+                      name: 'Café Espresso Doble',
+                      code: 'ESP-01',
+                      description: 'Extracción balanceada con notas de chocolate amargo y avellana tostada.',
+                      imageUrl: null,
+                      hasVariants: false,
+                      minPrice: 42,
+                      variants: [{ id: 'v1', name: 'Doble (60ml)', price: 42 }],
+                      isAvailable: true,
+                    },
+                    {
+                      id: 'p2',
+                      name: 'Café Latte Caliente',
+                      code: 'LAT-02',
+                      description: 'Espresso aterciopelado con microespuma de leche entera o vegetal al punto.',
+                      imageUrl: null,
+                      hasVariants: true,
+                      minPrice: 55,
+                      variants: [
+                        { id: 'v2-1', name: 'Chico (8oz)', price: 55 },
+                        { id: 'v2-2', name: 'Mediano (12oz)', price: 65 },
+                        { id: 'v2-3', name: 'Grande (16oz)', price: 75 },
+                      ],
+                      isAvailable: true,
+                    },
+                    {
+                      id: 'p3',
+                      name: 'Cappuccino Italiano',
+                      code: 'CAP-03',
+                      description: 'Capas definidas de espresso, leche sedosa y densa crema con toque de canela.',
+                      imageUrl: null,
+                      hasVariants: false,
+                      minPrice: 60,
+                      variants: [{ id: 'v3', name: 'Estándar', price: 60 }],
+                      isAvailable: true,
+                    },
+                  ],
+                },
+                {
+                  id: 'cat-2',
+                  name: 'Bebidas Frías & Frappés',
+                  slug: 'frias',
+                  imageUrl: null,
+                  products: [
+                    {
+                      id: 'p4',
+                      name: 'Cold Brew Moka Artesanal',
+                      code: 'CB-01',
+                      description: 'Café macerado en frío durante 18 horas con infusión de cacao puro.',
+                      imageUrl: null,
+                      hasVariants: false,
+                      minPrice: 68,
+                      variants: [{ id: 'v4', name: '16oz', price: 68 }],
+                      isAvailable: true,
+                    },
+                    {
+                      id: 'p5',
+                      name: 'Frappé Caramelo Tostado',
+                      code: 'FRP-02',
+                      description: 'Base de espresso batida con hielo, caramelo y corona de crema batida.',
+                      imageUrl: null,
+                      hasVariants: true,
+                      minPrice: 72,
+                      variants: [
+                        { id: 'v5-1', name: 'Mediano (16oz)', price: 72 },
+                        { id: 'v5-2', name: 'Grande (20oz)', price: 85 },
+                      ],
+                      isAvailable: true,
+                    },
+                  ],
+                },
+                {
+                  id: 'cat-3',
+                  name: 'Repostería & Horno',
+                  slug: 'reposteria',
+                  imageUrl: null,
+                  products: [
+                    {
+                      id: 'p6',
+                      name: 'Croissant Mantequilla Almendrado',
+                      code: 'CRO-01',
+                      description: 'Masa hojaldrada horneada a diario rellena de crema de almendras tostadas.',
+                      imageUrl: null,
+                      hasVariants: false,
+                      minPrice: 48,
+                      variants: [{ id: 'v6', name: 'Pieza', price: 48 }],
+                      isAvailable: true,
+                    },
+                    {
+                      id: 'p7',
+                      name: 'Cheesecake Frutos Rojos',
+                      code: 'CHK-02',
+                      description: 'Textura cremosa estilo Nueva York con compota casera de zarzamora y fresa.',
+                      imageUrl: null,
+                      hasVariants: false,
+                      minPrice: 65,
+                      variants: [{ id: 'v7', name: 'Rebanada', price: 65 }],
+                      isAvailable: true,
+                    },
+                  ],
+                },
+              ]
+
+              return (
+                <div
+                  className="rounded-3xl border p-4 sm:p-6 shadow-xl space-y-4 relative overflow-hidden transition-all duration-300"
+                  style={{
+                    backgroundColor: themeData.bgColor,
+                    borderColor: `${themeData.primaryColor}40`,
+                  }}
+                >
+                  <div className="flex items-center justify-between text-xs border-b pb-2 text-white/70">
+                    <span className="font-bold flex items-center gap-1.5 text-amber-400">
+                      <BookOpen className="w-4 h-4" />
+                      Previsualización: Carta Menú Digital (1 Categoría por Página)
+                    </span>
+                    <span className="text-[11px] opacity-75">
+                      Prueba pasar las páginas o tocar los productos
+                    </span>
+                  </div>
+
+                  <BookMenu
+                    business={{
+                      name: selectedBranch?.name || 'Café Katela',
+                      logoUrl: themeData.logoUrl || selectedBranch?.logoUrl || null,
+                      isotypeUrl: themeData.isotypeUrl || selectedBranch?.isotypeUrl || null,
+                      currency: 'MXN',
+                      theme: {
+                        primaryColor: themeData.primaryColor,
+                        secondaryColor: themeData.secondaryColor,
+                        buttonColor: themeData.buttonColor,
+                        darkMode: !isLightBg,
+                        menuCoverColor: themeData.menuCoverColor,
+                        menuPaperColor: themeData.menuPaperColor,
+                        menuTextColor: themeData.menuTextColor,
+                        menuAccentColor: themeData.menuAccentColor,
+                        menuCoverTitle: themeData.menuCoverTitle,
+                        menuCoverSubtitle: themeData.menuCoverSubtitle,
+                        businessHours: themeData.businessHours,
+                      },
+                    }}
+                    categories={previewCategories}
+                    table={{ name: 'Mesa 4', area: 'Terraza' }}
+                    customColors={{
+                      primaryColor: themeData.primaryColor,
+                      secondaryColor: themeData.secondaryColor,
+                      buttonColor: themeData.buttonColor,
+                      bgColor: themeData.bgColor,
+                      darkMode: !isLightBg,
+                      menuCoverColor: themeData.menuCoverColor,
+                      menuPaperColor: themeData.menuPaperColor,
+                      menuTextColor: themeData.menuTextColor,
+                      menuAccentColor: themeData.menuAccentColor,
+                      menuCoverTitle: themeData.menuCoverTitle,
+                      menuCoverSubtitle: themeData.menuCoverSubtitle,
+                      businessHours: themeData.businessHours,
+                    }}
+                  />
+                </div>
+              )
+            }
+
+            // VISTA 8: BARRA LATERAL & LOGOS (CON LOS 8 TEMAS)
             return (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. Sidebar Expandido con Logo Grande y Nombre debajo */}

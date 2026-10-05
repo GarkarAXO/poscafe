@@ -58,6 +58,7 @@ export async function GET() {
         name: u.name,
         email: u.email,
         username: u.username,
+        gender: u.gender || 'MALE',
         active: u.active,
         hasPin: Boolean(u.pinHash),
         lastLoginAt: u.lastLoginAt,
@@ -147,6 +148,7 @@ export async function POST(request: Request) {
       username,
       password,
       pin,
+      gender = 'MALE',
       roleId,
       branchIds = [],
       defaultBranchId,
@@ -264,6 +266,7 @@ export async function POST(request: Request) {
           username: normalizedUsername,
           passwordHash,
           pinHash,
+          gender: gender === 'FEMALE' ? 'FEMALE' : 'MALE',
           active: true,
         },
       })

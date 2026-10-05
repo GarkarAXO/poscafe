@@ -16,7 +16,14 @@ import {
   Hash,
   Layers,
   MapPin,
+  QrCode,
+  Printer,
+  Download,
+  Copy,
+  ExternalLink,
+  X,
 } from 'lucide-react'
+import QRCode from 'qrcode'
 import { notify } from '@/lib/notify'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
 import { getStatusBadgeStyles, getContrastTextColor } from '@/lib/theme-utils'
@@ -77,6 +84,12 @@ export default function DashboardTablesManager({
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showAreaModal, setShowAreaModal] = useState(false)
   const [editingTable, setEditingTable] = useState<TableItem | null>(null)
+
+  // Modal de Código QR de Mesa
+  const [qrModalTable, setQrModalTable] = useState<TableItem | null>(null)
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('')
+  const [generatingQr, setGeneratingQr] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
 
   // Formulario y Gestión de Áreas
   const [areaFormData, setAreaFormData] = useState({
@@ -331,6 +344,130 @@ export default function DashboardTablesManager({
     }
   }
 
+  // Generar y abrir Código QR para comensales en mesa
+  const handleOpenTableQR = async (table: TableItem) => {
+    setQrModalTable(table)
+    setGeneratingQr(true)
+    setCopiedLink(false)
+    try {
+      const url = `${window.location.origin}/menu?table=${encodeURIComponent(table.name)}`
+      const dataUrl = await QRCode.toDataURL(url, {
+        width: 360,
+        margin: 2,
+        color: {
+          dark: '#3E2723',
+          light: '#FFFFFF',
+        },
+      })
+      setQrCodeDataUrl(dataUrl)
+    } catch (err) {
+      console.error('Error generando QR de mesa:', err)
+      notify.error('Error', 'No se pudo generar el código QR')
+    } finally {
+      setGeneratingQr(false)
+    }
+  }
+
+  const handleCopyLink = () => {
+    if (!qrModalTable) return
+    const url = `${window.location.origin}/menu?table=${encodeURIComponent(qrModalTable.name)}`
+    navigator.clipboard.writeText(url)
+    setCopiedLink(true)
+    notify.success('Copiado', 'Enlace copiado al portapapeles')
+    setTimeout(() => setCopiedLink(false), 3000)
+  }
+
+  const handlePrintQR = () => {
+    if (!qrModalTable || !qrCodeDataUrl) return
+    const printWindow = window.open('', '_blank', 'width=600,height=700')
+    if (!printWindow) return
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>QR ${qrModalTable.name} - ${branchName}</title>
+          <style>
+            @page { size: auto; margin: 10mm; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              text-align: center;
+              padding: 24px;
+              color: #2A1810;
+              margin: 0;
+            }
+            .card {
+              border: 2px dashed #C08552;
+              border-radius: 24px;
+              padding: 30px;
+              max-width: 340px;
+              margin: 0 auto;
+              background: #FAF6F0;
+            }
+            .tag {
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 2px;
+              font-weight: 800;
+              color: #895737;
+              margin-bottom: 6px;
+            }
+            h1 {
+              margin: 0 0 2px 0;
+              font-size: 26px;
+              font-weight: 900;
+              color: #5E3023;
+            }
+            .subtitle {
+              font-size: 13px;
+              color: #7A5B4F;
+              margin-bottom: 20px;
+              font-weight: 600;
+            }
+            img {
+              width: 220px;
+              height: 220px;
+              border-radius: 16px;
+              border: 1px solid #E6D5C3;
+              background: white;
+              padding: 10px;
+              box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+            }
+            .instructions {
+              margin-top: 18px;
+              font-size: 13px;
+              font-weight: 700;
+              color: #5E3023;
+              line-height: 1.4;
+            }
+            .brand {
+              margin-top: 20px;
+              font-size: 12px;
+              color: #A88C7D;
+              font-weight: 700;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="tag">Menú Digital</div>
+            <h1>${qrModalTable.name}</h1>
+            <div class="subtitle">${qrModalTable.areaName || branchName}</div>
+            <img src="${qrCodeDataUrl}" alt="QR ${qrModalTable.name}" />
+            <div class="instructions">📱 Escanea con tu cámara para explorar el menú y ordenar</div>
+            <div class="brand">${branchName}</div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
   // Guardar nueva área / zona (con opción de generar mesas)
   const handleSaveArea = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -461,6 +598,16 @@ export default function DashboardTablesManager({
             <Layers className="w-3.5 h-3.5" style={{ color: buttonColor }} />
             <span>Zonas / Áreas</span>
           </button>
+
+          <a
+            href="/menu"
+            target="_blank"
+            className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95 ${classes.buttonGhost}`}
+            title="Abrir Menú Digital para Clientes"
+          >
+            <QrCode className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Ver Menú QR</span>
+          </a>
 
           <button
             type="button"
@@ -953,6 +1100,15 @@ export default function DashboardTablesManager({
                 <div className={`flex items-center justify-end gap-1.5 pt-1 border-t ${classes.divider}`}>
                   <button
                     type="button"
+                    onClick={() => handleOpenTableQR(table)}
+                    className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all cursor-pointer"
+                    title="Código QR del Menú para esta mesa"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => {
                       setEditingTable(table)
                       setFormData({
@@ -981,6 +1137,99 @@ export default function DashboardTablesManager({
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* MODAL CÓDIGO QR DE MESA */}
+      {qrModalTable && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border text-center ${classes.modalContent}`}>
+            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+              <div className="text-left">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Menú Digital Interactivo
+                </span>
+                <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                  QR de {qrModalTable.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQrModalTable(null)}
+                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
+              >
+                ✕
+              </button>
+            </div>
+
+            {generatingQr ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2">
+                <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                <span className="text-xs text-slate-400">Generando código QR...</span>
+              </div>
+            ) : qrCodeDataUrl ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-white rounded-2xl border inline-block shadow-md">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={qrCodeDataUrl}
+                    alt={`Código QR ${qrModalTable.name}`}
+                    className="w-52 h-52 mx-auto"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <p className={`text-xs font-semibold ${classes.textMain}`}>
+                    Tus comensales verán directamente el menú de {qrModalTable.name}
+                  </p>
+                  <p className={`text-[11px] ${classes.textMuted}`}>
+                    Podrán explorar platillos, precios, variantes y solicitar asistencia a su mesero.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handlePrintQR}
+                    style={{ backgroundColor: buttonColor }}
+                    className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Imprimir Código QR para Mesa</span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyLink}
+                      className={`py-2 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiedLink ? '¡Copiado!' : 'Copiar Link'}</span>
+                    </button>
+
+                    <a
+                      href={qrCodeDataUrl}
+                      download={`QR-${qrModalTable.name.replace(/\s+/g, '-')}.png`}
+                      className={`py-2 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Descargar PNG</span>
+                    </a>
+                  </div>
+
+                  <a
+                    href={`/menu?table=${encodeURIComponent(qrModalTable.name)}`}
+                    target="_blank"
+                    className={`py-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center justify-center gap-1`}
+                  >
+                    <span>Probar vista de cliente en nueva pestaña</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
 

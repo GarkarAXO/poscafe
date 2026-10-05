@@ -101,3 +101,63 @@ export async function GET() {
     )
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const session = await getSession()
+    if (!session || !session.businessId || session.isPlatformAdmin) {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: 'No autorizado' } },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const {
+      takeawayBagItemId,
+      takeawayTrayItemId,
+      takeawayCutleryItemId,
+      recipesEnabled,
+      inventoryEnabled,
+      negativeStockEnabled,
+      primaryColor,
+      secondaryColor,
+      accentColor,
+    } = body
+
+    const updated = await prisma.businessSetting.upsert({
+      where: { businessId: session.businessId },
+      update: {
+        ...(takeawayBagItemId !== undefined ? { takeawayBagItemId: takeawayBagItemId || null } : {}),
+        ...(takeawayTrayItemId !== undefined ? { takeawayTrayItemId: takeawayTrayItemId || null } : {}),
+        ...(takeawayCutleryItemId !== undefined ? { takeawayCutleryItemId: takeawayCutleryItemId || null } : {}),
+        ...(recipesEnabled !== undefined ? { recipesEnabled: Boolean(recipesEnabled) } : {}),
+        ...(inventoryEnabled !== undefined ? { inventoryEnabled: Boolean(inventoryEnabled) } : {}),
+        ...(negativeStockEnabled !== undefined ? { negativeStockEnabled: Boolean(negativeStockEnabled) } : {}),
+        ...(primaryColor !== undefined ? { primaryColor } : {}),
+        ...(secondaryColor !== undefined ? { secondaryColor } : {}),
+        ...(accentColor !== undefined ? { accentColor } : {}),
+      },
+      create: {
+        businessId: session.businessId,
+        takeawayBagItemId: takeawayBagItemId || null,
+        takeawayTrayItemId: takeawayTrayItemId || null,
+        takeawayCutleryItemId: takeawayCutleryItemId || null,
+        recipesEnabled: recipesEnabled !== undefined ? Boolean(recipesEnabled) : true,
+        inventoryEnabled: inventoryEnabled !== undefined ? Boolean(inventoryEnabled) : true,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: updated,
+      message: 'Configuración actualizada exitosamente',
+    })
+  } catch (error) {
+    console.error('Error en PUT /api/business/settings:', error)
+    return NextResponse.json(
+      { success: false, error: { code: 'SERVER_ERROR', message: 'Error al actualizar configuración' } },
+      { status: 500 }
+    )
+  }
+}

@@ -32,6 +32,7 @@ interface KdsItem {
   categoryName: string
   quantity: number
   notes: string | null
+  modifiers?: string[]
   kitchenStatus: 'PENDING' | 'COOKING' | 'READY' | 'SERVED'
   createdAt: string
 }
@@ -59,6 +60,7 @@ export default function KdsPage() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [mounted, setMounted] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
   const [branchesCount, setBranchesCount] = useState(1)
   const [activeBranch, setActiveBranch] = useState<{
@@ -189,8 +191,9 @@ export default function KdsPage() {
     }
   }
 
-  // Reloj en tiempo real
+  // Reloj en tiempo real y montaje en cliente
   useEffect(() => {
+    setMounted(true)
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
@@ -417,8 +420,10 @@ export default function KdsPage() {
                 </span>
               )}
             </h1>
-            <p className={`text-[11px] font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            <p suppressHydrationWarning className={`text-[11px] font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+              {mounted
+                ? currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : '--:--:--'}
             </p>
           </div>
         </div>
@@ -834,6 +839,24 @@ export default function KdsPage() {
                               >
                                 {item.variantName}
                               </span>
+
+                              {/* Modificadores / Extras / Sabores seleccionados */}
+                              {item.modifiers && item.modifiers.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {item.modifiers.map((modName, idx) => (
+                                    <span
+                                      key={idx}
+                                      className={`text-[9px] font-black px-1.5 py-0.5 rounded-md border ${
+                                        isLight
+                                          ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                          : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                                      }`}
+                                    >
+                                      + {modName}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
                             {/* Badge de Estado del Platillo */}
@@ -860,16 +883,20 @@ export default function KdsPage() {
                             </span>
                           </div>
 
-                          {/* Notas de preparación destacadas */}
+                          {/* Notas de preparación y Alertas de Alergias destacadas */}
                           {item.notes && (
                             <div
                               className={`mt-2 p-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 border ${
-                                isLight
+                                item.notes.toUpperCase().includes('ALERGIA') || item.notes.toUpperCase().includes('ALÉRGICO')
+                                  ? 'bg-red-500/20 border-red-500 text-red-300 animate-pulse font-black'
+                                  : isLight
                                   ? 'bg-amber-100 border-amber-300 text-amber-950'
                                   : 'bg-amber-500/20 border-amber-500/30 text-amber-300'
                               }`}
                             >
-                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                              <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${
+                                item.notes.toUpperCase().includes('ALERGIA') ? 'text-red-400' : 'text-amber-500'
+                              }`} />
                               <span>{item.notes}</span>
                             </div>
                           )}

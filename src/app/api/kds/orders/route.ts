@@ -44,6 +44,9 @@ export async function GET(request: Request) {
                   },
                 },
               },
+              modifiers: {
+                include: { modifier: true },
+              },
             },
             orderBy: { createdAt: 'asc' },
           },
@@ -75,6 +78,9 @@ export async function GET(request: Request) {
                     include: { category: true },
                   },
                 },
+              },
+              modifiers: {
+                include: { modifier: true },
               },
             },
           },
@@ -113,6 +119,7 @@ export async function GET(request: Request) {
           categoryName: it.productVariant.product.category?.name || 'Varios',
           quantity: Number(it.quantity),
           notes: it.notes,
+          modifiers: it.modifiers?.map((m: any) => m.modifier?.name || '').filter(Boolean) || [],
           kitchenStatus: it.kitchenStatus || 'PENDING',
           createdAt: it.createdAt,
         })),

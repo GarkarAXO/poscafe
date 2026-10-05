@@ -86,6 +86,13 @@ export async function PUT(
       secondaryColor,
       buttonColor,
       bgColor,
+      businessHours,
+      menuCoverColor,
+      menuPaperColor,
+      menuTextColor,
+      menuAccentColor,
+      menuCoverTitle,
+      menuCoverSubtitle,
     } = body
 
     const existing = await prisma.branch.findFirst({
@@ -146,6 +153,13 @@ export async function PUT(
         ...(secondaryColor !== undefined && { secondaryColor: secondaryColor?.trim() || null }),
         ...(buttonColor !== undefined && { buttonColor: buttonColor?.trim() || null }),
         ...(bgColor !== undefined && { bgColor: bgColor?.trim() || null }),
+        ...(businessHours !== undefined && { businessHours: businessHours?.trim() || null }),
+        ...(menuCoverColor !== undefined && { menuCoverColor: menuCoverColor?.trim() || null }),
+        ...(menuPaperColor !== undefined && { menuPaperColor: menuPaperColor?.trim() || null }),
+        ...(menuTextColor !== undefined && { menuTextColor: menuTextColor?.trim() || null }),
+        ...(menuAccentColor !== undefined && { menuAccentColor: menuAccentColor?.trim() || null }),
+        ...(menuCoverTitle !== undefined && { menuCoverTitle: menuCoverTitle?.trim() || null }),
+        ...(menuCoverSubtitle !== undefined && { menuCoverSubtitle: menuCoverSubtitle?.trim() || null }),
       },
     })
 

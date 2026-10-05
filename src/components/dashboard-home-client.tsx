@@ -14,12 +14,15 @@ import {
   UtensilsCrossed,
   CreditCard,
   LayoutGrid,
+  QrCode,
+  MonitorPlay,
 } from 'lucide-react'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
 import { getContrastTextColor } from '@/lib/theme-utils'
 
 interface DashboardHomeClientProps {
   sessionName: string
+  sessionGender?: string | null
   business: any
   activeBranch: any
   tableCount: number
@@ -28,6 +31,7 @@ interface DashboardHomeClientProps {
 
 export default function DashboardHomeClient({
   sessionName,
+  sessionGender,
   business,
   activeBranch,
   tableCount,
@@ -68,7 +72,7 @@ export default function DashboardHomeClient({
               isLight ? 'text-[#2B1712]' : 'text-white'
             }`}
           >
-            Bienvenido, {sessionName}
+            {sessionGender === 'FEMALE' ? 'Bienvenida' : 'Bienvenido'}, {sessionName}
           </h1>
           <p className={`text-sm max-w-xl font-medium ${classes.textMuted}`}>
             Control centralizado para gestionar tus sucursales, consultar ventas del día y administrar tu catálogo.
@@ -108,6 +112,26 @@ export default function DashboardHomeClient({
           >
             <BarChart3 className="w-4 h-4" style={{ color: buttonColor }} />
             <span>Ventas y Arqueos</span>
+          </Link>
+
+          <Link
+            href="/menu"
+            target="_blank"
+            className={`px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 border transition-all cursor-pointer ${classes.buttonGhost}`}
+            title="Abrir Menú Digital para Clientes (QR)"
+          >
+            <QrCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Menú QR</span>
+          </Link>
+
+          <Link
+            href="/display"
+            target="_blank"
+            className={`px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 border transition-all cursor-pointer ${classes.buttonGhost}`}
+            title="Abrir Pantalla de Menú para Televisores"
+          >
+            <MonitorPlay className="w-4 h-4 text-amber-500" />
+            <span>Pantalla TV</span>
           </Link>
         </div>
       </div>

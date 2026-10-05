@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Coffee,
+  Package,
   Store,
   LogOut,
   ShoppingCart,
@@ -45,6 +46,10 @@ import {
   TerminalDeviceConfig,
 } from '@/lib/terminal-device'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
+import ProductCustomizerModal, {
+  CustomizedItemResult,
+  CustomizerProduct,
+} from '@/components/product-customizer-modal'
 
 interface Table {
   id: string
@@ -103,6 +108,22 @@ interface Product {
   inventoryPolicy: string
   category: { id: string; name: string }
   variants: ProductVariant[]
+  modifierGroups?: Array<{
+    modifierGroup: {
+      id: string
+      name: string
+      minSelect: number
+      maxSelect: number
+      isRequired: boolean
+      modifiers: Array<{
+        id: string
+        name: string
+        extraPrice: number
+        inventoryItemId?: string | null
+        quantityBase?: number | null
+      }>
+    }
+  }>
 }
 
 interface Category {
@@ -111,12 +132,19 @@ interface Category {
 }
 
 interface CartItem {
+  cartItemId?: string
   variantId: string
   productName: string
   variantName: string
   unitPrice: number
   quantity: number
   inventoryPolicy: string
+  notes?: string
+  modifiers?: Array<{
+    modifierId: string
+    name: string
+    unitPrice: number
+  }>
 }
 
 interface SaleSuccessData {
@@ -137,12 +165,15 @@ export default function PosTerminalPage() {
   const [error, setError] = useState<string | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
   const [showPendingTablesModal, setShowPendingTablesModal] = useState(false)
+  const [customizingProduct, setCustomizingProduct] = useState<CustomizerProduct | null>(null)
+  const [showCustomizerModal, setShowCustomizerModal] = useState(false)
 
   // Terminal Lock / Fast Shift Change states
   const [isTerminalLocked, setIsTerminalLocked] = useState(false)
   const [unlockPin, setUnlockPin] = useState('')
   const [unlockError, setUnlockError] = useState<string | null>(null)
   const [unlocking, setUnlocking] = useState(false)
+  const [welcomeOverlayUser, setWelcomeOverlayUser] = useState<any>(null)
 
   // Terminal Device / Branch Binding State
   const [terminalDevice, setTerminalDevice] = useState<TerminalDeviceConfig | null>(null)
@@ -269,7 +300,15 @@ export default function PosTerminalPage() {
       }))
       setIsTerminalLocked(false)
       setUnlockPin('')
-      notify.success('Turno Desbloqueado', `Operando como: ${newUser.name}`)
+      setWelcomeOverlayUser(newUser)
+      setTimeout(() => {
+        setWelcomeOverlayUser(null)
+      }, 2000)
+      const isFemale = newUser.gender === 'FEMALE'
+      notify.success(
+        isFemale ? '¡Bienvenida!' : '¡Bienvenido!',
+        `Operando como: ${newUser.name} (${newUser.role?.name || newUser.roleName || 'Colaborador'})`
+      )
     } catch {
       setUnlockError('Error de conexión al validar PIN')
     } finally {
@@ -311,6 +350,11 @@ export default function PosTerminalPage() {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD_DEBIT' | 'CARD_CREDIT' | 'TRANSFER'>('CASH')
   const [amountReceived, setAmountReceived] = useState<string>('')
   const [processingSale, setProcessingSale] = useState(false)
+  const [takeawayPackaging, setTakeawayPackaging] = useState({
+    includeBag: true,
+    includeTray: true,
+    includeCutlery: false,
+  })
 
   // Success Modal State
   const [saleSuccess, setSaleSuccess] = useState<SaleSuccessData | null>(null)
@@ -538,38 +582,72 @@ export default function PosTerminalPage() {
     )
   }
 
-  // Agregar al carrito
+  // Agregar al carrito (abre personalizador si tiene variantes o modificadores)
   const addToCart = (product: Product) => {
+    const hasMultipleVariants = product.variants && product.variants.length > 1
+    const hasModifierGroups = product.modifierGroups && product.modifierGroups.length > 0
+
+    if (hasMultipleVariants || hasModifierGroups) {
+      setCustomizingProduct(product as any)
+      setShowCustomizerModal(true)
+      return
+    }
+
     const variant = product.variants[0]
     if (!variant) return
 
     setCart((prev) => {
-      const existing = prev.find((it) => it.variantId === variant.id)
+      const existing = prev.find(
+        (it) => it.variantId === variant.id && (!it.modifiers || it.modifiers.length === 0) && !it.notes
+      )
       if (existing) {
         return prev.map((it) =>
-          it.variantId === variant.id ? { ...it, quantity: it.quantity + 1 } : it
+          it === existing ? { ...it, quantity: it.quantity + 1 } : it
         )
       }
       return [
         ...prev,
         {
+          cartItemId: `${variant.id}_${Date.now()}`,
           variantId: variant.id,
           productName: product.name,
           variantName: variant.name,
           unitPrice: Number(variant.price),
           quantity: 1,
           inventoryPolicy: product.inventoryPolicy,
+          modifiers: [],
+          notes: '',
         },
       ]
     })
   }
 
-  // Modificar cantidad
-  const updateQuantity = (variantId: string, delta: number) => {
+  // Callback al confirmar personalización
+  const handleConfirmCustomization = (result: CustomizedItemResult) => {
+    if (!customizingProduct) return
+
+    setCart((prev) => [
+      ...prev,
+      {
+        cartItemId: `${result.variantId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        variantId: result.variantId,
+        productName: customizingProduct.name,
+        variantName: result.variantName,
+        unitPrice: result.unitPrice,
+        quantity: result.quantity,
+        inventoryPolicy: (customizingProduct as any).inventoryPolicy || 'RECIPE',
+        notes: result.notes,
+        modifiers: result.modifiers,
+      },
+    ])
+  }
+
+  // Modificar cantidad (soporta cartItemId o variantId)
+  const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
       prev
         .map((it) => {
-          if (it.variantId === variantId) {
+          if (it.cartItemId === id || it.variantId === id) {
             const newQty = it.quantity + delta
             return newQty > 0 ? { ...it, quantity: newQty } : null
           }
@@ -758,11 +836,17 @@ export default function PosTerminalPage() {
           variantId: it.variantId,
           quantity: it.quantity,
           unitPrice: it.unitPrice,
+          notes: it.notes || '',
+          modifiers: it.modifiers?.map((m) => ({
+            modifierId: m.modifierId,
+            unitPrice: m.unitPrice,
+          })) || [],
         })),
         paymentMethod: total === 0 ? 'OTHER' : paymentMethod,
         amountReceived: total === 0 ? 0 : paymentMethod === 'CASH' ? receivedNum : total,
         discount: discount ? { amount: discount.amount, reason: discount.reason, approvedBy: discount.approvedBy } : undefined,
         courtesy: courtesy ? { amount: courtesy.amount, reason: courtesy.reason, beneficiary: courtesy.beneficiary, approvedBy: courtesy.approvedBy } : undefined,
+        takeawayPackaging: orderType !== 'DINE_IN' ? takeawayPackaging : undefined,
       }
 
       const res = await fetch('/api/pos/orders', {
@@ -1331,74 +1415,129 @@ export default function PosTerminalPage() {
                 <p>Toca los productos de la izquierda para agregarlos a la comanda.</p>
               </div>
             ) : (
-              cart.map((item) => (
-                <div
-                  key={item.variantId}
-                  className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
-                    isLight
-                      ? 'bg-[#FDFBF9] border-[#DECEBD]'
-                      : 'bg-slate-950/60 border-slate-800'
-                  }`}
-                >
-                  <div className="flex-1 pr-2">
-                    <span
-                      className={`font-bold block line-clamp-1 ${
-                        isLight ? 'text-[#2B1712]' : 'text-white'
-                      }`}
-                    >
-                      {item.productName}
-                    </span>
-                    <span
-                      className={`text-[10px] font-medium ${
-                        isLight ? 'text-[#7A5A43]' : 'text-slate-400'
-                      }`}
-                    >
-                      ${item.unitPrice.toFixed(2)} c/u
-                    </span>
-                  </div>
+              cart.map((item) => {
+                const itemKey = item.cartItemId || item.variantId
+                const isAllergy = item.notes && (item.notes.includes('ALERGIA') || item.notes.includes('ALÉRGICO'))
 
-                  {/* Quantity controls */}
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => updateQuantity(item.variantId, -1)}
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
-                        isLight
-                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                      }`}
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span
-                      className={`w-6 text-center font-bold text-xs ${
-                        isLight ? 'text-[#2B1712]' : 'text-white'
-                      }`}
-                    >
-                      {item.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => updateQuantity(item.variantId, 1)}
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
-                        isLight
-                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                      }`}
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-
+                return (
                   <div
-                    className={`w-16 text-right font-extrabold ${
-                      isLight ? 'text-[#5E3023]' : 'text-amber-400'
+                    key={itemKey}
+                    className={`p-2.5 rounded-xl border flex flex-col space-y-1.5 text-xs transition-colors ${
+                      isAllergy
+                        ? 'bg-rose-500/10 border-rose-500 shadow-rose-500/10'
+                        : isLight
+                        ? 'bg-[#FDFBF9] border-[#DECEBD]'
+                        : 'bg-slate-950/60 border-slate-800'
                     }`}
                   >
-                    ${(item.unitPrice * item.quantity).toFixed(2)}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 pr-2 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`font-bold block truncate ${
+                              isLight ? 'text-[#2B1712]' : 'text-white'
+                            }`}
+                          >
+                            {item.productName}
+                          </span>
+                          {item.variantName && item.variantName !== 'Regular' && (
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                isLight
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              }`}
+                            >
+                              {item.variantName}
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className={`text-[10px] font-medium ${
+                            isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                          }`}
+                        >
+                          ${item.unitPrice.toFixed(2)} c/u
+                        </span>
+                      </div>
+
+                      {/* Quantity controls */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(itemKey, -1)}
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                            isLight
+                              ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                          }`}
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span
+                          className={`w-6 text-center font-bold text-xs ${
+                            isLight ? 'text-[#2B1712]' : 'text-white'
+                          }`}
+                        >
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(itemKey, 1)}
+                          className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                            isLight
+                              ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023]'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                          }`}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <div
+                        className={`w-16 text-right font-extrabold shrink-0 ${
+                          isLight ? 'text-[#5E3023]' : 'text-amber-400'
+                        }`}
+                      >
+                        ${(item.unitPrice * item.quantity).toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Modificadores / Sabores */}
+                    {item.modifiers && item.modifiers.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {item.modifiers.map((m, idx) => (
+                          <span
+                            key={idx}
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                              isLight
+                                ? 'bg-amber-100 text-amber-950 border border-amber-200'
+                                : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
+                            }`}
+                          >
+                            + {m.name} {m.unitPrice > 0 ? `($${m.unitPrice.toFixed(2)})` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Alerta de Alergia o Notas */}
+                    {item.notes && (
+                      <div className="pt-0.5">
+                        {isAllergy ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 font-bold block animate-pulse">
+                            {item.notes}
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] italic block ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                            Nota: {item.notes}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
 
@@ -1604,6 +1743,61 @@ export default function PosTerminalPage() {
               </p>
             </div>
 
+            {/* Selector de empaques para llevar (cuando no es consumo en sucursal) */}
+            {orderType !== 'DINE_IN' && (
+              <div
+                className={`p-3 rounded-2xl border space-y-2 text-xs ${
+                  isLight ? 'bg-[#FAF6F0] border-[#DECEBD]' : 'bg-slate-950 border-slate-850'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-[#5E3023]' : 'text-amber-400'}`}>
+                    <Package className="w-3.5 h-3.5" /> Empaques Desechables (Para llevar)
+                  </span>
+                  <span className={`text-[10px] ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    Descontar de stock
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={takeawayPackaging.includeBag}
+                      onChange={(e) =>
+                        setTakeawayPackaging((prev) => ({ ...prev, includeBag: e.target.checked }))
+                      }
+                      className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className={isLight ? 'text-[#2B1712] font-medium' : 'text-slate-200'}>Bolsa</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={takeawayPackaging.includeTray}
+                      onChange={(e) =>
+                        setTakeawayPackaging((prev) => ({ ...prev, includeTray: e.target.checked }))
+                      }
+                      className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className={isLight ? 'text-[#2B1712] font-medium' : 'text-slate-200'}>Charola</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={takeawayPackaging.includeCutlery}
+                      onChange={(e) =>
+                        setTakeawayPackaging((prev) => ({ ...prev, includeCutlery: e.target.checked }))
+                      }
+                      className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className={isLight ? 'text-[#2B1712] font-medium' : 'text-slate-200'}>Cubiertos</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
             {/* Payment Method Selector */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
@@ -1788,14 +1982,20 @@ export default function PosTerminalPage() {
                 Descuento de Stock en Almacén:
               </span>
               <div className="text-xs space-y-1">
-                {saleSuccess.inventoryDeductions.map((ded, idx) => (
-                  <div key={idx} className="flex justify-between text-slate-300">
-                    <span>{ded.item}</span>
-                    <strong className="text-emerald-400">
-                      -{ded.deducted} {ded.unit}
-                    </strong>
-                  </div>
-                ))}
+                {saleSuccess.inventoryDeductions && saleSuccess.inventoryDeductions.length > 0 ? (
+                  saleSuccess.inventoryDeductions.map((ded, idx) => (
+                    <div key={idx} className="flex justify-between text-slate-300">
+                      <span>{ded.item}</span>
+                      <strong className="text-emerald-400">
+                        -{ded.deducted} {ded.unit}
+                      </strong>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[11px] text-slate-400 italic">
+                    Sin deducciones de empaque desechable (servicio en loza/cerámica o producto sin receta).
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2473,6 +2673,29 @@ export default function PosTerminalPage() {
         </div>
       )}
 
+      {/* PANTALLA / OVERLAY DE BIENVENIDA AL ENTRAR O DESBLOQUEAR TERMINAL */}
+      {welcomeOverlayUser && (
+        <div className="fixed inset-0 z-50 bg-[#14100E]/85 backdrop-blur-md flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-[#251E1B] border border-[#3E2723] rounded-3xl p-8 text-center space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-bounce duration-1000">
+              <Coffee className="w-8 h-8" />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#C08552]/20 border border-[#C08552]/40 text-[#DECEBD] mb-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#C08552]" />
+                <span>{welcomeOverlayUser.role?.name || welcomeOverlayUser.roleName || 'Terminal POS'}</span>
+              </div>
+              <h2 className="text-2xl font-black text-white">
+                {welcomeOverlayUser.gender === 'FEMALE' ? '¡Bienvenida,' : '¡Bienvenido,'} {welcomeOverlayUser.name}!
+              </h2>
+              <p className="text-xs text-[#A88C7D] mt-1 font-medium">
+                Turno activado. ¡Mucho éxito en el servicio!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL FULLSCREEN DE BLOQUEO DE TERMINAL Y RELEVO RÁPIDO */}
       {isTerminalLocked && (
         <div className="fixed inset-0 z-50 bg-[#F3E9DC] flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white overflow-y-auto">
@@ -2662,6 +2885,20 @@ export default function PosTerminalPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Personalizador de Producto (Tamaños, Sabores, Extras, Alergias) */}
+      <ProductCustomizerModal
+        isOpen={showCustomizerModal}
+        onClose={() => {
+          setShowCustomizerModal(false)
+          setCustomizingProduct(null)
+        }}
+        product={customizingProduct}
+        isLight={isLight}
+        primaryColor={themePrimary}
+        buttonColor={themePrimary || '#C08552'}
+        onConfirm={handleConfirmCustomization}
+      />
     </div>
   )
 }

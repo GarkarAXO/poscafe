@@ -42,6 +42,7 @@ interface Branch {
   secondaryColor?: string | null
   buttonColor?: string | null
   bgColor?: string | null
+  businessHours?: string | null
   createdAt: string
   warehouses: Array<{ id: string; name: string; code: string; isDefault: boolean }>
   cashRegisters: Array<{ id: string; name: string; code: string }>
@@ -98,6 +99,7 @@ export default function BranchesManagerPage() {
     primaryColor: '#C08552',
     secondaryColor: '#5E3023',
     buttonColor: '#C08552',
+    businessHours: 'Lunes a Domingo: 8:00 AM - 10:00 PM',
   })
   const [savingBranding, setSavingBranding] = useState(false)
 
@@ -110,6 +112,7 @@ export default function BranchesManagerPage() {
       primaryColor: branch.primaryColor || '#C08552',
       secondaryColor: branch.secondaryColor || '#5E3023',
       buttonColor: branch.buttonColor || '#C08552',
+      businessHours: branch.businessHours || 'Lunes a Domingo: 8:00 AM - 10:00 PM',
     })
   }
 
@@ -836,6 +839,23 @@ export default function BranchesManagerPage() {
                     placeholder="https://ejemplo.com/logo.png"
                     className={`w-full px-3.5 py-2.5 rounded-xl border focus:outline-none ${classes.input}`}
                   />
+                </div>
+
+                {/* Horario de Servicio */}
+                <div className="space-y-1.5">
+                  <label className={`block font-medium ${classes.textMain}`}>
+                    Horario de Servicio
+                  </label>
+                  <input
+                    type="text"
+                    value={brandingData.businessHours}
+                    onChange={(e) => setBrandingData({ ...brandingData, businessHours: e.target.value })}
+                    placeholder="Ej: Lunes a Domingo: 8:00 AM - 10:00 PM"
+                    className={`w-full px-3.5 py-2.5 rounded-xl border focus:outline-none ${classes.input}`}
+                  />
+                  <p className={`text-[11px] ${classes.textMuted}`}>
+                    Aparece en la carta de menú digital y pie del establecimiento.
+                  </p>
                 </div>
               </div>
 
