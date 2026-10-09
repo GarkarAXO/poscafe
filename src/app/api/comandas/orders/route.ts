@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       // 1. Verificar si ya existe una orden activa en esta mesa
       let existingOrder = null
-      if (orderType === 'DINE_IN' && tableId) {
+      if (tableId) {
         existingOrder = await tx.order.findFirst({
           where: {
             branchId,
@@ -95,6 +95,7 @@ export async function POST(request: Request) {
             subtotal: newSubtotal,
             total: newTotal,
             status: OrderStatus.SENT, // Actualizar a enviada para alertar a cocina
+            orderType: orderType ? (orderType as OrderType) : existingOrder.orderType,
             customerName: customerName ? customerName.trim() : existingOrder.customerName,
             notes: notes ? notes.trim() : existingOrder.notes,
           },
@@ -111,6 +112,14 @@ export async function POST(request: Request) {
             },
           },
         })
+
+        // Si la mesa estaba en PRE-CUENTA o cualquier otro estado, marcarla como OCUPADA al marchar nuevos ítems
+        if (tableId) {
+          await tx.table.update({
+            where: { id: tableId },
+            data: { status: TableStatus.OCCUPIED },
+          })
+        }
       } else {
         // Crear una nueva comanda
         const datePrefix = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -132,11 +141,11 @@ export async function POST(request: Request) {
         order = await tx.order.create({
           data: {
             branchId,
-            tableId: orderType === 'DINE_IN' ? tableId : null,
+            tableId: tableId || null,
             waiterId: session.userId,
             orderNumber,
             customerName: customerName?.trim() || null,
-            orderType: orderType as OrderType,
+            orderType: (orderType as OrderType) || OrderType.DINE_IN,
             status: OrderStatus.SENT,
             subtotal,
             total: subtotal,
@@ -177,8 +186,8 @@ export async function POST(request: Request) {
           }
         }
 
-        // Marcar la mesa como ocupada si es DINE_IN
-        if (orderType === 'DINE_IN' && tableId) {
+        // Marcar la mesa como ocupada si está asignada
+        if (tableId) {
           await tx.table.update({
             where: { id: tableId },
             data: { status: TableStatus.OCCUPIED },

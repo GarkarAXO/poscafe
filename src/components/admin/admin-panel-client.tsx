@@ -45,6 +45,12 @@ export interface SerializedBusiness {
   active: boolean
   createdAt: string
   branchesCount: number
+  branches?: Array<{
+    id: string
+    name: string
+    code: string
+    maxStaff: number
+  }>
   usersCount: number
   productsCount: number
   settings: {
@@ -126,6 +132,7 @@ export default function AdminPanelClient({
   const [editOwnerPassword, setEditOwnerPassword] = useState('')
   const [showEditPassword, setShowEditPassword] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [branchesStaff, setBranchesStaff] = useState<Array<{ id: string; name: string; code: string; maxStaff: number }>>([])
 
   // Modal Nuevo Negocio
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -204,7 +211,9 @@ export default function AdminPanelClient({
     setModalError(null)
     setSaveSuccessMsg(null)
     setEditOwnerPassword('')
-    setShowEditPassword(false)
+    setBranchesStaff(
+      biz.branches ? biz.branches.map((b) => ({ ...b, maxStaff: b.maxStaff ?? 10 })) : []
+    )
 
     setEditForm({
       name: biz.name,
@@ -244,6 +253,12 @@ export default function AdminPanelClient({
       if (editOwnerPassword.trim()) {
         payload.newOwnerPassword = editOwnerPassword.trim()
       }
+      if (branchesStaff.length > 0) {
+        payload.branchesStaffLimits = branchesStaff.map((b) => ({
+          id: b.id,
+          maxStaff: Number(b.maxStaff) || 10,
+        }))
+      }
 
       const res = await fetch(`/api/admin/businesses/${selectedBusiness.id}`, {
         method: 'PUT',
@@ -272,6 +287,12 @@ export default function AdminPanelClient({
                   ...b.settings,
                   ...editForm.settings,
                 },
+                branches: b.branches
+                  ? b.branches.map((br) => {
+                      const updated = branchesStaff.find((bs) => bs.id === br.id)
+                      return updated ? { ...br, maxStaff: Number(updated.maxStaff) || 10 } : br
+                    })
+                  : b.branches,
                 subscription: b.subscription
                   ? {
                       ...b.subscription,
@@ -440,6 +461,14 @@ export default function AdminPanelClient({
           active: b.active,
           createdAt: b.createdAt,
           branchesCount: b.branches?.length || 0,
+          branches: Array.isArray(b.branches)
+            ? b.branches.map((br: any) => ({
+                id: br.id,
+                name: br.name,
+                code: br.code,
+                maxStaff: br.maxStaff ?? 10,
+              }))
+            : [],
           usersCount: b._count?.users || 0,
           productsCount: b._count?.products || 0,
           settings: b.settings
@@ -1033,6 +1062,66 @@ export default function AdminPanelClient({
                         <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                       </label>
                     </div>
+                  </div>
+
+                  {/* Límite de Personal por Sucursal */}
+                  <div className="pt-2 border-t border-slate-800/80 space-y-3">
+                    <div>
+                      <strong className="text-white text-xs flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-violet-400" />
+                        Límite de Personal por Sucursal (Cupo de Empleados)
+                      </strong>
+                      <span className="text-[11px] text-slate-400">
+                        Define el número máximo de colaboradores activos autorizados para cada sucursal de este negocio.
+                      </span>
+                    </div>
+
+                    {branchesStaff.length === 0 ? (
+                      <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 text-center">
+                        Este negocio no tiene sucursales registradas aún.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {branchesStaff.map((branch, idx) => (
+                          <div
+                            key={branch.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl bg-slate-950 border border-slate-800 gap-3"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <Building2 className="w-4 h-4 text-violet-400 shrink-0" />
+                              <div className="min-w-0">
+                                <span className="text-xs font-semibold text-white block truncate">
+                                  {branch.name}
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  Código: {branch.code}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                              <label className="text-[11px] text-slate-400 whitespace-nowrap">
+                                Máx. Personal:
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={500}
+                                value={branch.maxStaff}
+                                onChange={(e) => {
+                                  const val = Math.max(1, parseInt(e.target.value) || 1)
+                                  setBranchesStaff((prev) =>
+                                    prev.map((b, i) => (i === idx ? { ...b, maxStaff: val } : b))
+                                  )
+                                }}
+                                className="w-20 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-violet-500"
+                              />
+                              <span className="text-[10px] text-slate-500">colaboradores</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

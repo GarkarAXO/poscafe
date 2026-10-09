@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { pin, requiredPermission } = body
+    const { pin, requiredPermission, requireAdmin } = body
 
     if (!pin || String(pin).trim().length !== 4) {
       return NextResponse.json(
@@ -23,9 +23,9 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!requiredPermission) {
+    if (!requiredPermission && !requireAdmin) {
       return NextResponse.json(
-        { success: false, error: { code: 'INVALID_INPUT', message: 'Se requiere especificar la acción a autorizar' } },
+        { success: false, error: { code: 'INVALID_INPUT', message: 'Se requiere especificar la acción o rol a autorizar' } },
         { status: 400 }
       )
     }
@@ -60,21 +60,45 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verificar si el autorizador cuenta con el permiso requerido
-    const merged = mergePermissions(authorizer.roles)
-    const hasPerm = Boolean(merged[requiredPermission as keyof UserPermissions])
+    // Si se requiere rol de administrador / gerente
+    if (requireAdmin) {
+      const authorizerRoleCodes = authorizer.roles.map((r) => r.role.code)
+      const isAuthorizerAdmin =
+        authorizerRoleCodes.includes('ADMIN') ||
+        authorizerRoleCodes.includes('SUPERADMIN') ||
+        authorizerRoleCodes.includes('BRANCH_MANAGER')
+      const merged = mergePermissions(authorizer.roles)
+      const hasAdminPerm = isAuthorizerAdmin || Boolean(merged.canManageSettings)
 
-    if (!hasPerm) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: `${authorizer.name} no cuenta con el permiso para autorizar esta acción`,
+      if (!hasAdminPerm) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'INSUFFICIENT_PERMISSIONS',
+              message: `${authorizer.name} no es administrador ni gerente de sucursal`,
+            },
           },
-        },
-        { status: 403 }
-      )
+          { status: 403 }
+        )
+      }
+    } else if (requiredPermission) {
+      // Verificar si el autorizador cuenta con el permiso requerido
+      const merged = mergePermissions(authorizer.roles)
+      const hasPerm = Boolean(merged[requiredPermission as keyof UserPermissions])
+
+      if (!hasPerm) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'INSUFFICIENT_PERMISSIONS',
+              message: `${authorizer.name} no cuenta con el permiso para autorizar esta acción`,
+            },
+          },
+          { status: 403 }
+        )
+      }
     }
 
     return NextResponse.json({

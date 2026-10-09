@@ -18,7 +18,7 @@ export async function GET() {
       include: {
         settings: true,
         branches: {
-          select: { id: true, name: true, code: true, active: true },
+          select: { id: true, name: true, code: true, active: true, maxStaff: true },
         },
         users: {
           select: { id: true, name: true, email: true },

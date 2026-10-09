@@ -32,6 +32,11 @@ import {
   LogOut,
   Laptop,
   Columns,
+  CreditCard,
+  MoreHorizontal,
+  ChevronDown,
+  ChevronUp,
+  Scissors,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
@@ -40,6 +45,9 @@ import ProductCustomizerModal, {
   CustomizedItemResult,
   CustomizerProduct,
 } from '@/components/product-customizer-modal'
+import ThermalTicketPrinterAnimation, {
+  ThermalTicketData,
+} from '@/components/ThermalTicketPrinterAnimation'
 
 interface TableItem {
   id: string
@@ -53,6 +61,7 @@ interface TableItem {
     orderNumber: string
     customerName: string | null
     orderType: string
+    notes?: string | null
     status: string
     subtotal: number
     total: number
@@ -176,6 +185,27 @@ export default function ComanderaPage() {
   const [orderNotes, setOrderNotes] = useState('')
   const [submittingOrder, setSubmittingOrder] = useState(false)
 
+  // Tipo de orden (Salón vs Para Llevar) y empaques
+  const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN')
+  const [takeawayPackaging, setTakeawayPackaging] = useState<{
+    includeBag: boolean
+    includeTray: boolean
+    includeCutlery: boolean
+  }>({
+    includeBag: true,
+    includeTray: false,
+    includeCutlery: false,
+  })
+
+  // Referencias para evitar closure bugs en polling y monitoreo de platillos listos
+  const activeTableRef = useRef<TableItem | null>(null)
+  const prevReadyTablesRef = useRef<Map<string, number>>(new Map())
+
+  // Sincronizar referencia de la mesa activa abierta
+  useEffect(() => {
+    activeTableRef.current = activeTable
+  }, [activeTable])
+
   // Acciones de mesa física
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [targetTransferTableId, setTargetTransferTableId] = useState('')
@@ -194,8 +224,28 @@ export default function ComanderaPage() {
   // Advertencia al abrir mesa asignada a otro compañero en modo ASSIGNED
   const [takeoverWarningTable, setTakeoverWarningTable] = useState<TableItem | null>(null)
 
-  // Modal para imprimir ticket de cobro (pre-cuenta)
-  const [showBillReceiptModal, setShowBillReceiptModal] = useState(false)
+  // Animación interactiva de impresora térmica de tickets
+  const [showPrintingAnimation, setShowPrintingAnimation] = useState(false)
+  const [billReceiptData, setBillReceiptData] = useState<ThermalTicketData | null>(null)
+
+  // Estados de cobro rápido desde comandera
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false)
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH')
+  const [checkoutAmountReceived, setCheckoutAmountReceived] = useState('')
+  const [checkoutPrintTicket, setCheckoutPrintTicket] = useState(true)
+  const [processingCheckout, setProcessingCheckout] = useState(false)
+
+  // Menú de opciones secundarias de mesa (cabecera limpia)
+  const [showTableOptionsMenu, setShowTableOptionsMenu] = useState(false)
+
+  // Colapsar / expandir lista de platillos marchados en cocina
+  const [kitchenItemsCollapsed, setKitchenItemsCollapsed] = useState(false)
+
+  // Estados para panel de Rectificar Orden en el Menú
+  const [showOrderReviewDrawer, setShowOrderReviewDrawer] = useState(false)
+  const [expandedReviewProducts, setExpandedReviewProducts] = useState<Record<string, boolean>>({})
+  // Modal para preguntar primero al cliente si es consumo en mesa o para llevar/domicilio
+  const [showOrderTypeSelectionModal, setShowOrderTypeSelectionModal] = useState(false)
 
   // Terminal Lock / Waiter Shift Relevo states
   const [isTerminalLocked, setIsTerminalLocked] = useState(false)
@@ -358,7 +408,41 @@ export default function ComanderaPage() {
     }
   }
 
-  // Refrescar solo mesas cada 8 segundos para sincronizar con la cocina
+  // Sintetizador de audio Web Audio API para timbre de servicio (Platillos listos en cocina)
+  const playWaiterChime = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioContextClass) return
+      const ctx = new AudioContextClass()
+      const now = ctx.currentTime
+
+      // Tono 1: A5 (880Hz)
+      const osc1 = ctx.createOscillator()
+      const gain1 = ctx.createGain()
+      osc1.type = 'triangle'
+      osc1.frequency.setValueAtTime(880, now)
+      gain1.gain.setValueAtTime(0.35, now)
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45)
+      osc1.connect(gain1)
+      gain1.connect(ctx.destination)
+      osc1.start(now)
+      osc1.stop(now + 0.45)
+
+      // Tono 2: E6 (1318.5Hz) campanilla armónica
+      const osc2 = ctx.createOscillator()
+      const gain2 = ctx.createGain()
+      osc2.type = 'triangle'
+      osc2.frequency.setValueAtTime(1318.5, now + 0.12)
+      gain2.gain.setValueAtTime(0.3, now + 0.12)
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.7)
+      osc2.connect(gain2)
+      gain2.connect(ctx.destination)
+      osc2.start(now + 0.12)
+      osc2.stop(now + 0.7)
+    } catch {}
+  }
+
+  // Refrescar mesas periódicamente para sincronizar con la cocina y alertar al mesero
   const refreshTables = async () => {
     try {
       const res = await fetch('/api/comandas/tables').then((r) => r.json())
@@ -381,11 +465,45 @@ export default function ComanderaPage() {
         if (res.data.tableServiceMode) {
           setTableServiceMode(res.data.tableServiceMode)
         }
-        // Si hay una mesa activa abierta, actualizar sus datos
-        if (activeTable) {
-          const allTables = loadedAreas.flatMap((a: Area) => a.tables)
-          const updated = allTables.find((t: TableItem) => t.id === activeTable.id)
-          if (updated) setActiveTable(updated)
+
+        const allTables = loadedAreas.flatMap((a: Area) => a.tables)
+
+        // Monitoreo de platillos listos para alertar al mesero con sonido y Sileo toast
+        const currentReadyMap = new Map<string, number>()
+        const newlyReadyAlerts: string[] = []
+
+        allTables.forEach((t: TableItem) => {
+          const readyItems = t.activeOrder?.items?.filter((it) => it.kitchenStatus === 'READY') || []
+          const count = readyItems.length
+          if (count > 0) {
+            currentReadyMap.set(t.id, count)
+            const prevCount = prevReadyTablesRef.current.get(t.id) || 0
+            if (count > prevCount) {
+              const readyNames = readyItems
+                .map((it) => `${it.quantity}x ${it.productName}`)
+                .slice(0, 2)
+                .join(', ')
+              newlyReadyAlerts.push(`Mesa ${t.name}: ${count} platillo(s) listos (${readyNames})`)
+            }
+          }
+        })
+
+        if (newlyReadyAlerts.length > 0) {
+          playWaiterChime()
+          newlyReadyAlerts.forEach((alertMsg) => {
+            notify.success('🔔 ¡Platillos listos para servir!', alertMsg)
+          })
+        }
+        prevReadyTablesRef.current = currentReadyMap
+
+        // Si hay una mesa activa abierta, actualizar sus datos usando la referencia (evita closure bug)
+        const currentActive = activeTableRef.current
+        if (currentActive) {
+          const updated = allTables.find((t: TableItem) => t.id === currentActive.id)
+          if (updated) {
+            setActiveTable(updated)
+            activeTableRef.current = updated
+          }
         }
       }
     } catch {
@@ -395,8 +513,8 @@ export default function ComanderaPage() {
 
   useEffect(() => {
     loadComanderaData()
-    // Sondeo periódico cada 6 segundos
-    const interval = setInterval(refreshTables, 6000)
+    // Sondeo periódico cada 3 segundos para sincronización con cocina
+    const interval = setInterval(refreshTables, 3000)
 
     // Sincronización instantánea al volver al apartado o enfocar la pestaña
     const handleFocus = () => {
@@ -407,14 +525,26 @@ export default function ComanderaPage() {
         refreshTables()
       }
     }
+    const handleKitchenEvent = () => {
+      refreshTables()
+    }
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'poscafe_kitchen_event') {
+        refreshTables()
+      }
+    }
 
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('poscafe:kitchen-updated', handleKitchenEvent)
+    window.addEventListener('storage', handleStorage)
 
     return () => {
       clearInterval(interval)
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('poscafe:kitchen-updated', handleKitchenEvent)
+      window.removeEventListener('storage', handleStorage)
     }
   }, [])
 
@@ -447,9 +577,27 @@ export default function ComanderaPage() {
 
   const openTableOrder = (table: TableItem) => {
     setActiveTable(table)
+    activeTableRef.current = table
     setStagedItems([])
     setCustomerName(table.activeOrder?.customerName || '')
     setOrderNotes('')
+
+    const isTakeaway = (table.activeOrder?.orderType as any) === 'TAKEAWAY'
+    setOrderType(isTakeaway ? 'TAKEAWAY' : 'DINE_IN')
+    const notes = table.activeOrder?.notes || ''
+    setTakeawayPackaging({
+      includeBag: !notes.includes('Sin Bolsa'),
+      includeTray: notes.includes('Portavasos') || notes.includes('Charola'),
+      includeCutlery: notes.includes('Cubiertos'),
+    })
+
+    // Si la mesa no tiene orden activa previa, preguntar primero al cliente cómo será el servicio
+    if (!table.activeOrder) {
+      setShowOrderTypeSelectionModal(true)
+    } else {
+      setShowOrderTypeSelectionModal(false)
+    }
+
     // En móvil/tablet/pc: si está disponible, abrir catálogo para registrar artículos rápido; si está ocupada, ver resumen
     setOrderViewTab(table.status === 'AVAILABLE' ? 'catalog' : 'order')
     setShowOrderModal(true)
@@ -473,6 +621,57 @@ export default function ComanderaPage() {
     openTableOrder(table)
   }
 
+  // Marcar platillo individual como servido a la mesa
+  const handleMarkItemServed = async (itemId: string, itemName: string) => {
+    try {
+      const res = await fetch(`/api/kds/items/${itemId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'SERVED' }),
+      }).then((r) => r.json())
+
+      if (res.success) {
+        notify.success('Platillo servido', `${itemName} entregado a la mesa`)
+        try {
+          localStorage.setItem('poscafe_kitchen_event', JSON.stringify({ type: 'ITEM_SERVED', itemId, timestamp: Date.now() }))
+          window.dispatchEvent(new CustomEvent('poscafe:kitchen-updated'))
+        } catch {}
+        await refreshTables()
+      } else {
+        notify.error('Error al servir', res.error?.message || 'No se pudo actualizar estado')
+      }
+    } catch {
+      notify.error('Error de red', 'No se pudo comunicar con el servidor')
+    }
+  }
+
+  // Marcar todos los platillos listos de la comanda como servidos a la mesa
+  const handleMarkAllReadyServed = async () => {
+    if (!activeTable?.activeOrder) return
+    const readyItems = activeTable.activeOrder.items.filter((it) => it.kitchenStatus === 'READY')
+    if (readyItems.length === 0) return
+
+    try {
+      await Promise.all(
+        readyItems.map((it) =>
+          fetch(`/api/kds/items/${it.id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'SERVED' }),
+          })
+        )
+      )
+      notify.success('Mesa servida', 'Todos los platillos listos han sido marcados como servidos en mesa.')
+      try {
+        localStorage.setItem('poscafe_kitchen_event', JSON.stringify({ type: 'ALL_SERVED', timestamp: Date.now() }))
+        window.dispatchEvent(new CustomEvent('poscafe:kitchen-updated'))
+      } catch {}
+      await refreshTables()
+    } catch {
+      notify.error('Error de conexión', 'No fue posible actualizar todos los platillos')
+    }
+  }
+
   // Agregar platillo al pedido nuevo (abre modal de personalización si tiene variantes o modificadores)
   const handleAddProduct = (prod: Product) => {
     const hasMultipleVariants = prod.variants && prod.variants.length > 1
@@ -486,6 +685,10 @@ export default function ComanderaPage() {
 
     const variant = prod.variants[0]
     if (!variant) return
+
+    if (activeTable?.status === 'BILL_PRINTED') {
+      setActiveTable((prev) => (prev ? { ...prev, status: 'OCCUPIED' } : null))
+    }
 
     setStagedItems((prev) => {
       const existing = prev.find(
@@ -515,6 +718,10 @@ export default function ComanderaPage() {
   // Callback al confirmar personalización en el modal
   const handleConfirmCustomization = (result: CustomizedItemResult) => {
     if (!customizingProduct) return
+
+    if (activeTable?.status === 'BILL_PRINTED') {
+      setActiveTable((prev) => (prev ? { ...prev, status: 'OCCUPIED' } : null))
+    }
 
     setStagedItems((prev) => [
       ...prev,
@@ -576,6 +783,74 @@ export default function ComanderaPage() {
     )
   }
 
+  // Separar un ítem con cantidad > 1 para permitir notas individuales a cada unidad (ej. 2 capuccinos: uno sin hielo y otro con todo)
+  const handleSplitStagedItem = (id: string) => {
+    setStagedItems((prev) => {
+      const idx = prev.findIndex((it) => (it.stagedId ? it.stagedId === id : it.variantId === id))
+      if (idx === -1) return prev
+      const item = prev[idx]
+      if (item.quantity <= 1) return prev
+
+      const item1 = { ...item, quantity: item.quantity - 1 }
+      const item2 = {
+        ...item,
+        stagedId: `${item.variantId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        quantity: 1,
+        notes: '',
+      }
+
+      const next = [...prev]
+      next.splice(idx, 1, item1, item2)
+      return next
+    })
+  }
+
+  // Alternar nota preestablecida en un ítem
+  const handleTogglePresetNote = (id: string, preset: string) => {
+    setStagedItems((prev) =>
+      prev.map((it) => {
+        if (it.stagedId === id || it.variantId === id) {
+          const current = it.notes ? it.notes.split(', ').filter(Boolean) : []
+          let updated: string[]
+          if (current.includes(preset)) {
+            updated = current.filter((s) => s !== preset)
+          } else {
+            updated = [...current, preset]
+          }
+          return { ...it, notes: updated.join(', ') }
+        }
+        return it
+      })
+    )
+  }
+
+  // Alternar acordeón de producto en rectificación
+  const toggleReviewProductExpand = (productName: string) => {
+    setExpandedReviewProducts((prev) => ({
+      ...prev,
+      [productName]: prev[productName] === undefined ? false : !prev[productName],
+    }))
+  }
+
+  // Agrupar stagedItems por producto para visualización en acordeón
+  const groupedStagedProducts = stagedItems.reduce((acc, item) => {
+    const key = item.productName
+    if (!acc[key]) {
+      acc[key] = {
+        productName: item.productName,
+        totalQuantity: 0,
+        totalSubtotal: 0,
+        items: [],
+      }
+    }
+    const itemModTotal = item.modifiers?.reduce((mAcc, m) => mAcc + m.unitPrice, 0) || 0
+    const itemTotal = (item.unitPrice + itemModTotal) * item.quantity
+    acc[key].totalQuantity += item.quantity
+    acc[key].totalSubtotal += itemTotal
+    acc[key].items.push(item)
+    return acc
+  }, {} as Record<string, { productName: string; totalQuantity: number; totalSubtotal: number; items: StagedItem[] }>)
+
   // Enviar / Marchar comanda a cocina
   const handleSendToKitchen = async () => {
     if (!activeTable) return
@@ -591,11 +866,26 @@ export default function ComanderaPage() {
     const tableName = activeTable.name
 
     try {
+      let finalNotes = orderNotes.trim()
+      if (orderType === 'TAKEAWAY') {
+        const pkgs: string[] = []
+        if (takeawayPackaging.includeBag) pkgs.push('Bolsa')
+        if (takeawayPackaging.includeTray) pkgs.push('Portavasos/Charola')
+        if (takeawayPackaging.includeCutlery) pkgs.push('Cubiertos')
+        const pkgSummary = pkgs.length > 0 ? `[PARA LLEVAR: ${pkgs.join(', ')}]` : '[PARA LLEVAR]'
+        finalNotes = finalNotes ? `${finalNotes} ${pkgSummary}` : pkgSummary
+      }
+
       const payload = {
         tableId: activeTable.id,
-        orderType: 'DINE_IN',
+        orderType,
         customerName: customerName.trim(),
-        notes: orderNotes.trim(),
+        notes: finalNotes,
+        takeawayPackaging: orderType === 'TAKEAWAY' ? {
+          bags: takeawayPackaging.includeBag ? 1 : 0,
+          cupTrays: takeawayPackaging.includeTray ? 1 : 0,
+          cutlerySets: takeawayPackaging.includeCutlery ? 1 : 0,
+        } : undefined,
         items: stagedItems.map((it) => ({
           variantId: it.variantId,
           quantity: it.quantity,
@@ -617,11 +907,23 @@ export default function ComanderaPage() {
       const json = await res.json()
 
       if (json.success) {
-        setSuccessMsg('¡Comanda enviada a Cocina y Barra!')
-        notify.success('Comanda marchada', `Enviada a preparación en cocina para la mesa ${tableName}`)
+        setSuccessMsg(
+          orderType === 'TAKEAWAY'
+            ? '¡Comanda PARA LLEVAR enviada a Cocina y Barra!'
+            : '¡Comanda enviada a Cocina y Barra!'
+        )
+        notify.success(
+          orderType === 'TAKEAWAY' ? '🥡 Comanda para llevar marchada' : 'Comanda marchada',
+          `Enviada a preparación para la mesa ${tableName} (${orderType === 'TAKEAWAY' ? 'Para llevar' : 'Servicio en mesa'})`
+        )
         setTimeout(() => setSuccessMsg(null), 3500)
         setStagedItems([])
         setOrderViewTab('order')
+        setActiveTable((prev) => (prev ? { ...prev, status: 'OCCUPIED' } : null))
+        try {
+          localStorage.setItem('poscafe_kitchen_event', JSON.stringify({ type: 'NEW_ORDER', timestamp: Date.now() }))
+          window.dispatchEvent(new CustomEvent('poscafe:kitchen-updated'))
+        } catch {}
         await refreshTables()
       } else {
         const errMsg = json.error?.message || 'Error al enviar la comanda'
@@ -659,10 +961,34 @@ export default function ComanderaPage() {
     }
   }
 
-  // Liberar mesa
+  // Liberar mesa con validación estricta
   const handleReleaseTable = async () => {
     if (!activeTable) return
     const tableName = activeTable.name
+
+    // 1. Validar platillos en cocina o pendientes
+    if (activeTable.activeOrder?.items && activeTable.activeOrder.items.length > 0) {
+      const inKitchen = activeTable.activeOrder.items.filter(
+        (it) => it.kitchenStatus === 'PENDING' || it.kitchenStatus === 'COOKING' || it.kitchenStatus === 'READY'
+      )
+      if (inKitchen.length > 0) {
+        notify.warning(
+          'No se puede liberar la mesa',
+          `Hay ${inKitchen.length} artículo(s) preparándose o listos en cocina. Debes servirlos o cancelarlos antes de liberar la mesa.`
+        )
+        return
+      }
+
+      // 2. Validar si la cuenta está pendiente de cobro
+      if (activeTable.activeOrder.total > 0 && activeTable.activeOrder.status !== 'PAID') {
+        notify.warning(
+          'Cuenta pendiente de pago',
+          `La ${tableName} tiene un consumo pendiente de $${activeTable.activeOrder.total.toFixed(2)} MXN. Usa el botón "Cobrar Cuenta" para liquidar y liberar automáticamente.`
+        )
+        return
+      }
+    }
+
     notify.action({
       title: `¿Liberar ${tableName}?`,
       description: 'La mesa quedará disponible y se cerrará su turno.',
@@ -677,6 +1003,7 @@ export default function ComanderaPage() {
           const json = await res.json()
           if (json.success) {
             setShowOrderModal(false)
+            setShowTableOptionsMenu(false)
             notify.success('Mesa liberada', `${tableName} ahora se encuentra disponible`)
             await refreshTables()
           } else {
@@ -687,6 +1014,350 @@ export default function ComanderaPage() {
         }
       },
     })
+  }
+
+  // Fallback a ventana emergente si el navegador bloquea iframe
+  const openPrintWindowFallback = (html: string) => {
+    try {
+      const printWindow = window.open('', '_blank', 'width=380,height=600')
+      if (printWindow) {
+        printWindow.document.open()
+        printWindow.document.write(html)
+        printWindow.document.close()
+        setTimeout(() => {
+          try {
+            printWindow.focus()
+            printWindow.print()
+          } catch {}
+        }, 300)
+      } else {
+        setShowPrintingAnimation(true)
+      }
+    } catch {
+      setShowPrintingAnimation(true)
+    }
+  }
+
+  // Función para imprimir el ticket en formato térmico estándar de 80mm de forma directa e infalible
+  const printTicketDocument = (ticket: NonNullable<typeof billReceiptData>) => {
+    try {
+      setBillReceiptData(ticket)
+      setShowPrintingAnimation(true)
+      const itemsHtml = ticket.items
+        .map(
+          (it) => `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px; font-size:11px; line-height:1.25;">
+          <div style="padding-right:8px; text-align:left;">
+            <strong>${it.quantity}x</strong> ${it.productName}
+            ${it.notes ? `<div style="font-size:9px; color:#525252; font-style:italic; padding-left:10px; margin-top:1px;">(${it.notes})</div>` : ''}
+          </div>
+          <div style="font-weight:bold; white-space:nowrap; text-align:right;">$${it.subtotal.toFixed(2)}</div>
+        </div>
+      `
+        )
+        .join('')
+
+      const paymentMethodLabels: Record<string, string> = {
+        CASH: 'Efectivo',
+        CARD: 'Tarjeta',
+        TRANSFER: 'Transferencia',
+      }
+
+      const paymentInfoHtml = ticket.isPaid
+        ? `
+        <div style="border-top:1px dashed #555; padding-top:4px; margin-top:6px; font-size:10px; color:#171717;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+            <span>Método de Pago:</span>
+            <strong>${paymentMethodLabels[ticket.paymentMethod || 'CASH'] || ticket.paymentMethod || 'Efectivo'}</strong>
+          </div>
+          ${
+            ticket.paymentMethod === 'CASH' && ticket.amountReceived !== undefined
+              ? `
+            <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+              <span>Recibido:</span>
+              <span>$${ticket.amountReceived.toFixed(2)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-weight:900; color:#000;">
+              <span>Cambio:</span>
+              <span>$${(ticket.change || 0).toFixed(2)}</span>
+            </div>
+          `
+              : ''
+          }
+        </div>
+      `
+        : ''
+
+      const fullHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Ticket - ${ticket.tableName}</title>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 4mm 5mm 6mm 5mm;
+            }
+            @media print {
+              html, body {
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              .ticket-container {
+                width: 100% !important;
+                max-width: 270px !important;
+                margin: 0 auto !important;
+                padding: 4px 8px 14px 8px !important;
+              }
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+              color: #0a0a0a;
+              background: #fff;
+              width: 100%;
+              margin: 0;
+              padding: 0;
+              font-variant-numeric: tabular-nums;
+            }
+            .ticket-container {
+              width: 100%;
+              max-width: 270px;
+              margin: 0 auto;
+              padding: 8px 12px 18px 12px;
+            }
+            .center { text-align: center; }
+            .border-b-dashed { border-bottom: 1px dashed #555; padding-bottom: 6px; margin-bottom: 6px; }
+            .border-t-dashed { border-top: 1px dashed #555; padding-top: 6px; margin-top: 6px; }
+            .flex { display: flex; justify-content: space-between; }
+            .logo-img {
+              max-width: 140px;
+              max-height: 56px;
+              object-fit: contain;
+              margin: 0 auto 6px auto;
+              display: block;
+              filter: grayscale(100%) contrast(125%);
+            }
+          </style>
+        </head>
+        <body>
+          <div class="ticket-container">
+            <!-- Cabecera del ticket -->
+            <div class="center border-b-dashed">
+              ${ticket.logoUrl ? `<img src="${ticket.logoUrl}" class="logo-img" alt="Logo" />` : ''}
+              <div style="font-size:14px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px; line-height:1.2; margin-bottom:2px; color:#000;">
+                ${ticket.businessName || ticket.branchName || 'CAFETERÍA & RESTAURANTE'}
+              </div>
+              <div style="font-size:10px; font-weight:bold; letter-spacing:0.5px; color:#404040; margin-top:2px;">
+                ${ticket.isPaid ? '--- COMPROBANTE DE PAGO ---' : '--- PRE-CUENTA DE CONSUMO ---'}
+              </div>
+              <div style="font-size:12px; font-weight:900; margin-top:3px; color:#000;">
+                MESA: ${ticket.tableName}
+              </div>
+              <div style="font-size:10px; font-weight:500; color:#525252; margin-top:2px;">
+                Folio: #${ticket.orderNumber ? ticket.orderNumber.slice(-6) : '000000'}
+              </div>
+              <div style="font-size:9px; font-weight:500; color:#737373; margin-top:2px;">
+                ${ticket.date || new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+              </div>
+            </div>
+
+            <!-- Datos de mesero y cliente -->
+            <div class="border-b-dashed" style="font-size:10px; color:#262626; line-height:1.35;">
+              <div class="flex" style="margin-bottom:2px;">
+                <span>Atendió:</span>
+                <strong style="font-weight:bold;">${ticket.waiterName}</strong>
+              </div>
+              ${ticket.customerName ? `
+              <div class="flex">
+                <span>Cliente:</span>
+                <strong style="font-weight:bold;">${ticket.customerName}</strong>
+              </div>` : ''}
+            </div>
+
+            <!-- Desglose de platillos -->
+            <div class="border-b-dashed">
+              <div class="flex" style="font-size:10px; font-weight:bold; border-bottom:1px solid #d4d4d4; padding-bottom:3px; margin-bottom:4px; color:#171717;">
+                <span>CANT / DESCRIPCIÓN</span>
+                <span style="text-align:right;">TOTAL</span>
+              </div>
+              ${itemsHtml}
+            </div>
+
+            <!-- Totales -->
+            <div style="margin-top:4px;">
+              <div class="flex" style="font-size:11px; color:#262626; margin-bottom:2px;">
+                <span>Subtotal:</span>
+                <span>$${ticket.subtotal.toFixed(2)}</span>
+              </div>
+              <div class="flex" style="font-size:14px; font-weight:900; border-top:1.5px solid #000; padding-top:4px; margin-top:4px; color:#000;">
+                <span>TOTAL:</span>
+                <span>$${ticket.total.toFixed(2)} MXN</span>
+              </div>
+            </div>
+
+            <!-- Datos de pago si ya está liquidado -->
+            ${paymentInfoHtml}
+
+            <!-- Mensaje inferior del ticket -->
+            <div class="center border-t-dashed" style="margin-top:6px; padding-top:6px;">
+              <div style="font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:0.5px; color:#171717;">
+                ${ticket.isPaid ? '*** ¡GRACIAS POR SU VISITA! ***' : '*** FAVOR DE PAGAR EN CAJA ***'}
+              </div>
+              <div style="font-size:9px; color:#525252; margin-top:2px;">
+                ${ticket.isPaid ? 'Comprobante de pago emitido exitosamente.' : 'Documento informativo de consumo.'}
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+
+      // 1. Usar iframe en el DOM (no bloqueado por popup blockers, imprime solo el ticket)
+      let iframe = document.getElementById('poscafe-ticket-print-frame') as HTMLIFrameElement | null
+      if (!iframe) {
+        iframe = document.createElement('iframe')
+        iframe.id = 'poscafe-ticket-print-frame'
+        iframe.style.position = 'fixed'
+        iframe.style.top = '-9999px'
+        iframe.style.left = '-9999px'
+        iframe.style.width = '1px'
+        iframe.style.height = '1px'
+        iframe.style.border = 'none'
+        document.body.appendChild(iframe)
+      }
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+      if (iframeDoc) {
+        iframeDoc.open()
+        iframeDoc.write(fullHtml)
+        iframeDoc.close()
+
+        setTimeout(() => {
+          try {
+            iframe?.contentWindow?.focus()
+            iframe?.contentWindow?.print()
+          } catch (frameErr) {
+            console.warn('Fallo al invocar print en iframe:', frameErr)
+            openPrintWindowFallback(fullHtml)
+          }
+        }, 200)
+      } else {
+        openPrintWindowFallback(fullHtml)
+      }
+    } catch (e) {
+      console.warn('Error al invocar impresión térmica:', e)
+      setShowPrintingAnimation(true)
+    }
+  }
+
+  // Cobrar cuenta rápido desde Comandera de Piso
+  const handleQuickCheckout = async () => {
+    if (!activeTable || !activeTable.activeOrder) return
+
+    setProcessingCheckout(true)
+    const tableName = activeTable.name
+    const totalOrder = Number(activeTable.activeOrder.total)
+    const activeOrderData = activeTable.activeOrder
+
+    const sessionBusinessName = currentUser?.business?.name || currentUser?.name || activeBranch?.name || 'CAFETERÍA & RESTAURANTE'
+    const sessionLogoUrl = activeBranch?.logoUrl || currentUser?.business?.settings?.ticketLogoUrl || currentUser?.business?.settings?.logoUrl || activeBranch?.isotypeUrl || null
+
+    // 1. Preparar snapshot seguro del ticket para que no se pierda al liberar la mesa
+    const ticketSnapshot: NonNullable<typeof billReceiptData> = {
+      tableName: activeTable.name,
+      orderNumber: activeOrderData.orderNumber,
+      businessName: sessionBusinessName,
+      branchName: sessionBusinessName,
+      logoUrl: sessionLogoUrl,
+      waiterName: activeTable.currentWaiter?.name || activeOrderData.waiter?.name || currentUser?.name || 'Mesero',
+      customerName: activeOrderData.customerName,
+      items: activeOrderData.items.map((it) => ({
+        id: it.id,
+        productName: it.productName,
+        quantity: it.quantity,
+        subtotal: it.subtotal,
+        notes: it.notes,
+      })),
+      subtotal: Number(activeOrderData.subtotal),
+      total: totalOrder,
+      paymentMethod: checkoutPaymentMethod,
+      amountReceived:
+        checkoutPaymentMethod === 'CASH' && checkoutAmountReceived
+          ? Number(checkoutAmountReceived)
+          : totalOrder,
+      change:
+        checkoutPaymentMethod === 'CASH' && checkoutAmountReceived
+          ? Math.max(0, Number(checkoutAmountReceived) - totalOrder)
+          : 0,
+      isPaid: true,
+      date: new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }),
+    }
+
+    setBillReceiptData(ticketSnapshot)
+
+    // 2. Si se solicitó imprimir ticket primero, ejecutar la impresión de forma DESACOPLADA.
+    // La impresión no bloquea ni detiene el cobro si la impresora falla o se cancela.
+    if (checkoutPrintTicket) {
+      try {
+        printTicketDocument(ticketSnapshot)
+      } catch (printErr) {
+        console.warn('Fallo en impresión de ticket (no bloquea el cobro):', printErr)
+        notify.warning(
+          'Impresión no disponible',
+          'No se pudo comunicar con la impresora, pero el cobro de la mesa continuará con normalidad.'
+        )
+      }
+    }
+
+    // 3. Concluir el registro del cobro y liberación de mesa
+    try {
+      const payload = {
+        paymentMethod: checkoutPaymentMethod,
+        amountReceived:
+          checkoutPaymentMethod === 'CASH' && checkoutAmountReceived
+            ? Number(checkoutAmountReceived)
+            : totalOrder,
+      }
+
+      const res = await fetch(`/api/comandas/tables/${activeTable.id}/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const json = await res.json()
+
+      if (json.success) {
+        setShowCheckoutModal(false)
+        setShowOrderModal(false)
+        setShowTableOptionsMenu(false)
+        notify.success(
+          'Mesa cobrada exitosamente',
+          `Pago de $${totalOrder.toFixed(2)} MXN registrado y ${tableName} liberada.`
+        )
+
+        try {
+          localStorage.setItem('poscafe_kitchen_event', JSON.stringify({ type: 'CHECKOUT', timestamp: Date.now() }))
+          window.dispatchEvent(new CustomEvent('poscafe:kitchen-updated'))
+        } catch {}
+
+        await refreshTables()
+      } else {
+        const errMsg = json.error?.message || 'No se pudo procesar el cobro'
+        notify.error('Error al cobrar', errMsg)
+      }
+    } catch {
+      notify.error('Error de conexión', 'No fue posible registrar el cobro de la mesa')
+    } finally {
+      setProcessingCheckout(false)
+    }
   }
 
   // Traspasar mesa
@@ -827,6 +1498,32 @@ export default function ComanderaPage() {
   // Abrir modal de ticket de cobro (pre-cuenta)
   const handleOpenPrintBill = async () => {
     if (!activeTable || !activeTable.activeOrder) return
+    const orderData = activeTable.activeOrder
+    const sessionBusinessName = currentUser?.business?.name || currentUser?.name || activeBranch?.name || 'CAFETERÍA & RESTAURANTE'
+    const sessionLogoUrl = activeBranch?.logoUrl || currentUser?.business?.settings?.ticketLogoUrl || currentUser?.business?.settings?.logoUrl || activeBranch?.isotypeUrl || null
+
+    const ticket: NonNullable<typeof billReceiptData> = {
+      tableName: activeTable.name,
+      orderNumber: orderData.orderNumber,
+      businessName: sessionBusinessName,
+      branchName: sessionBusinessName,
+      logoUrl: sessionLogoUrl,
+      waiterName: activeTable.currentWaiter?.name || orderData.waiter?.name || currentUser?.name || 'Mesero',
+      customerName: orderData.customerName,
+      items: orderData.items.map((it) => ({
+        id: it.id,
+        productName: it.productName,
+        quantity: it.quantity,
+        subtotal: it.subtotal,
+        notes: it.notes,
+      })),
+      subtotal: Number(orderData.subtotal),
+      total: Number(orderData.total),
+      isPaid: false,
+      date: new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }),
+    }
+    setBillReceiptData(ticket)
+
     try {
       if (activeTable.status !== 'BILL_PRINTED') {
         await fetch(`/api/comandas/tables/${activeTable.id}/status`, {
@@ -837,7 +1534,7 @@ export default function ComanderaPage() {
         await refreshTables()
       }
     } catch {}
-    setShowBillReceiptModal(true)
+    printTicketDocument(ticket)
   }
 
   // Filtros de productos
@@ -1300,6 +1997,9 @@ export default function ComanderaPage() {
                       const isOccupied = table.status === 'OCCUPIED'
                       const isBillPrinted = table.status === 'BILL_PRINTED'
                       const isAvailable = table.status === 'AVAILABLE'
+                      const readyItemsCount = table.activeOrder?.items?.filter((it) => it.kitchenStatus === 'READY').length || 0
+                      const hasReadyItems = readyItemsCount > 0
+                      const isTakeawayOrder = table.activeOrder?.orderType === 'TAKEAWAY'
                       const isTransferred = !!table.currentWaiter && table.currentWaiter.id !== table.assignedWaiter?.id
                       const isMyAssignedTable = tableServiceMode === 'ASSIGNED' && table.assignedWaiter?.id === currentUser?.id
                       const isTransferredToMe =
@@ -1312,7 +2012,9 @@ export default function ComanderaPage() {
                         table.currentWaiter.id !== currentUser?.id
 
                       const cardBg = isLight
-                        ? isTransferredToMe
+                        ? hasReadyItems
+                          ? '#ECFDF5'
+                          : isTransferredToMe
                           ? '#E0F2FE'
                           : isMyAssignedTable
                           ? '#FFFFFF'
@@ -1321,6 +2023,8 @@ export default function ComanderaPage() {
                           : isOccupied
                           ? '#FFFBEB'
                           : '#FFFFFF'
+                        : hasReadyItems
+                        ? '#064e3b35'
                         : isTransferredToMe
                         ? '#08334440'
                         : isMyAssignedTable
@@ -1331,7 +2035,9 @@ export default function ComanderaPage() {
                         ? `${themeSecondary}20`
                         : `${themeBg}C0`
 
-                      const cardBorder = isLight
+                      const cardBorder = hasReadyItems
+                        ? '#10b981'
+                        : isLight
                         ? isTransferredToMe
                           ? '#06b6d4'
                           : isMyAssignedTable
@@ -1359,12 +2065,16 @@ export default function ComanderaPage() {
                           style={{
                             backgroundColor: cardBg,
                             borderColor: cardBorder,
-                            ...(isMyAssignedTable
+                            ...(hasReadyItems
+                              ? { boxShadow: '0 8px 24px rgba(16, 185, 129, 0.25)' }
+                              : isMyAssignedTable
                               ? { boxShadow: `0 8px 24px ${themePrimary}25` }
                               : {}),
                           }}
-                          className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[148px] sm:min-h-[165px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none shadow-sm ${
-                            isTransferredToMe
+                          className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[118px] sm:min-h-[160px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none shadow-sm ${
+                            hasReadyItems
+                              ? 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/20'
+                              : isTransferredToMe
                               ? 'shadow-lg shadow-cyan-500/15 ring-2 ring-cyan-500/40'
                               : isMyAssignedTable
                               ? 'ring-2'
@@ -1378,35 +2088,44 @@ export default function ComanderaPage() {
                           }`}
                         >
                           {/* Cabecera de la Mesa */}
-                          <div className="flex items-start justify-between">
-                            <div>
+                          <div className="flex items-start justify-between gap-1.5">
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`text-base sm:text-lg font-black block leading-tight ${
+                                <span className={`text-base sm:text-lg font-black block leading-tight truncate ${
                                   isLight ? 'text-[#2B1712]' : 'text-white'
                                 }`}>
                                   {table.name}
                                 </span>
-                                {isTransferredToMe && (
-                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
-                                    isLight
-                                      ? 'bg-cyan-100 text-cyan-950 border-cyan-300'
-                                      : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                                {hasReadyItems ? (
+                                  <span className="text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-0.5 sm:gap-1 shadow-xs animate-pulse">
+                                    🔔 ¡{readyItemsCount} Listo!
+                                  </span>
+                                ) : table.activeOrder?.items?.some((it) => it.kitchenStatus === 'COOKING') ? (
+                                  <span className="text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 flex items-center gap-0.5 sm:gap-1 shadow-xs">
+                                    🍳 En Marcha
+                                  </span>
+                                ) : table.activeOrder?.items?.some((it) => it.kitchenStatus === 'PENDING') ? (
+                                  <span className="text-[9px] sm:text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-600 text-white flex items-center gap-0.5 sm:gap-1 shadow-xs">
+                                    ⏳ En Cocina
+                                  </span>
+                                ) : null}
+                                {isTakeawayOrder && (
+                                  <span className={`text-[8px] sm:text-[9px] font-black px-1 sm:px-1.5 py-0.5 rounded border ${
+                                    isLight ? 'bg-amber-100 text-amber-950 border-amber-300' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                                   }`}>
-                                    🔄 Encargada
+                                    🥡 Llevar
                                   </span>
                                 )}
-                                {isTransferredAway && (
-                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
-                                    isLight
-                                      ? 'bg-amber-100 text-amber-950 border-amber-300'
-                                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                {isTransferredToMe && (
+                                  <span className={`text-[8px] sm:text-[9px] font-black px-1 sm:px-1.5 py-0.5 rounded border ${
+                                    isLight ? 'bg-cyan-100 text-cyan-950 border-cyan-300' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
                                   }`}>
-                                    ⭐ En apoyo
+                                    🔄 Relevo
                                   </span>
                                 )}
                                 {!isTransferredAway && isMyAssignedTable && (
                                   <span
-                                    className={`text-[9px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 shadow-xs tracking-wide ${
+                                    className={`hidden sm:inline-flex text-[9px] font-black px-2 py-0.5 rounded-full border items-center gap-1 shadow-xs tracking-wide ${
                                       isLight
                                         ? 'bg-[#C08552]/15 text-[#5E3023] border-[#C08552]/40'
                                         : ''
@@ -1425,7 +2144,9 @@ export default function ComanderaPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+
+                              {/* Capacidad visible en pantallas sm+ */}
+                              <div className="mt-1 hidden sm:flex items-center gap-1.5 flex-wrap">
                                 <span
                                   className="text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 font-semibold"
                                   style={{
@@ -1440,11 +2161,11 @@ export default function ComanderaPage() {
                               </div>
                             </div>
 
-                            {/* Status Badge */}
-                            <div className="flex items-center gap-1.5">
+                            {/* Status Dot / Pre-cuenta */}
+                            <div className="flex items-center gap-1 shrink-0">
                               {isBillPrinted && (
                                 <span
-                                  className={`text-[9px] font-black px-2 py-0.5 rounded-full border flex items-center gap-1 animate-pulse shadow-xs ${
+                                  className={`text-[8px] sm:text-[9px] font-black px-1.5 sm:px-2 py-0.5 rounded-full border flex items-center gap-0.5 animate-pulse shadow-xs ${
                                     isLight
                                       ? 'bg-purple-100 text-purple-950 border-purple-300'
                                       : ''
@@ -1459,11 +2180,12 @@ export default function ComanderaPage() {
                                         }
                                   }
                                 >
-                                  <Receipt className="w-2.5 h-2.5" style={{ color: themePrimary }} /> Pre-cuenta
+                                  <Receipt className="w-2.5 h-2.5" style={{ color: themePrimary }} />
+                                  <span className="hidden sm:inline">Pre-cuenta</span>
                                 </span>
                               )}
                               <span
-                                className={`w-3 h-3 rounded-full ${
+                                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${
                                   isAvailable
                                     ? isLight ? 'bg-emerald-600 shadow-sm' : 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
                                     : isBillPrinted
@@ -1484,118 +2206,95 @@ export default function ComanderaPage() {
                             </div>
                           </div>
 
-                          {/* Indicador de Atención según Modo */}
-                          {tableServiceMode === 'FREE' ? (
-                            <div
-                              className="text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border"
-                              style={{
-                                backgroundColor: isLight ? '#FDFBF9' : `${themeSecondary}25`,
-                                borderColor: isLight ? '#DECEBD' : `${themeSecondary}50`,
-                              }}
-                            >
-                              {table.activeOrder ? (
-                                <span className={`flex items-center gap-1 truncate font-medium ${
-                                  isLight ? 'text-[#7A5A43]' : 'text-slate-300'
-                                }`}>
-                                  <Users className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                                  Atiende: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}</strong>
+                          {/* Cuerpo Central - Optimizado para Móvil vs Desktop */}
+                          {table.activeOrder ? (
+                            <div className="my-1 sm:my-1.5">
+                              {/* Versión Móvil: Una línea compacta */}
+                              <div className="sm:hidden text-[10px] truncate">
+                                <span className={isLight ? 'text-[#7A5A43]' : 'text-slate-400'}>
+                                  👤 {table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}
                                 </span>
-                              ) : (
-                                <span className={`flex items-center gap-1 truncate font-medium ${
-                                  isLight ? 'text-emerald-900 font-bold' : 'text-emerald-400/90'
-                                }`}>
-                                  <Sparkles className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                                  Servicio Libre (Cualquiera)
-                                </span>
-                              )}
-                            </div>
-                          ) : isTransferredToMe ? (
-                            <div className={`text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border ${
-                              isLight ? 'bg-cyan-50 border-cyan-200 text-cyan-950' : 'bg-cyan-950/40 border-cyan-500/30 text-cyan-200'
-                            }`}>
-                              <span className="flex items-center gap-1 truncate font-semibold">
-                                <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
-                                Encargada por: <strong className={isLight ? 'text-cyan-950 font-bold' : 'text-white'}>{table.assignedWaiter?.name || 'Compañero'}</strong>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleReturnTableToTitular(table)
-                                }}
-                                className="w-full py-1 px-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-[10px] font-bold text-cyan-300 flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                                title={`Devolver mesa a ${table.assignedWaiter?.name || 'Titular'}`}
-                              >
-                                <RotateCcw className="w-2.5 h-2.5" />
-                                <span>Devolver a {table.assignedWaiter?.name?.split(' ')[0] || 'Titular'}</span>
-                              </button>
-                            </div>
-                          ) : isTransferredAway ? (
-                            <div className={`text-[10px] space-y-1.5 my-1.5 p-2 rounded-xl border ${
-                              isLight ? 'bg-amber-50 border-amber-200 text-amber-950' : 'bg-amber-950/40 border-amber-500/30 text-amber-200'
-                            }`}>
-                              <span className="flex items-center gap-1 truncate font-semibold">
-                                <UserCheck className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                                En apoyo: <strong className={isLight ? 'text-amber-950 font-bold' : 'text-white'}>{table.currentWaiter?.name}</strong>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleReturnTableToTitular(table)
-                                }}
-                                className="w-full py-1 px-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[10px] font-bold text-amber-300 flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                                title="Retomar atención directa de mi mesa"
-                              >
-                                <RotateCcw className="w-2.5 h-2.5" />
-                                <span>Retomar atención</span>
-                              </button>
+                              </div>
+
+                              {/* Versión Tablet/Desktop Completa */}
+                              <div className="hidden sm:block">
+                                {tableServiceMode === 'FREE' ? (
+                                  <div
+                                    className="text-[10px] space-y-0.5 p-1.5 rounded-xl border"
+                                    style={{
+                                      backgroundColor: isLight ? '#FDFBF9' : `${themeSecondary}25`,
+                                      borderColor: isLight ? '#DECEBD' : `${themeSecondary}50`,
+                                    }}
+                                  >
+                                    <span className={`flex items-center gap-1 truncate font-medium ${
+                                      isLight ? 'text-[#7A5A43]' : 'text-slate-300'
+                                    }`}>
+                                      <Users className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                      Atiende: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{table.activeOrder.waiter?.name || table.currentWaiter?.name || 'Mesero'}</strong>
+                                    </span>
+                                  </div>
+                                ) : isTransferredToMe ? (
+                                  <div className={`text-[10px] space-y-1 p-1.5 rounded-xl border ${
+                                    isLight ? 'bg-cyan-50 border-cyan-200 text-cyan-950' : 'bg-cyan-950/40 border-cyan-500/30 text-cyan-200'
+                                  }`}>
+                                    <span className="flex items-center gap-1 truncate font-semibold">
+                                      <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                                      Encargada: <strong className={isLight ? 'text-cyan-950 font-bold' : 'text-white'}>{table.assignedWaiter?.name || 'Compañero'}</strong>
+                                    </span>
+                                  </div>
+                                ) : isTransferredAway ? (
+                                  <div className={`text-[10px] space-y-1 p-1.5 rounded-xl border ${
+                                    isLight ? 'bg-amber-50 border-amber-200 text-amber-950' : 'bg-amber-950/40 border-amber-500/30 text-amber-200'
+                                  }`}>
+                                    <span className="flex items-center gap-1 truncate font-semibold">
+                                      <UserCheck className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                                      En apoyo: <strong className={isLight ? 'text-amber-950 font-bold' : 'text-white'}>{table.currentWaiter?.name}</strong>
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="text-[10px] space-y-0.5 p-1.5 rounded-xl border truncate"
+                                    style={{
+                                      backgroundColor: isLight
+                                        ? (isMyAssignedTable ? '#FFFBEB' : '#FDFBF9')
+                                        : (isMyAssignedTable ? `${themePrimary}20` : `${themeSecondary}25`),
+                                      borderColor: isLight
+                                        ? (isMyAssignedTable ? '#FCD34D' : '#DECEBD')
+                                        : (isMyAssignedTable ? `${themePrimary}50` : `${themeSecondary}50`),
+                                    }}
+                                  >
+                                    <span className="flex items-center gap-1 truncate">
+                                      <Users className="w-2.5 h-2.5 shrink-0" style={{ color: themePrimary }} />
+                                      {table.assignedWaiter ? (
+                                        <span>Titular: <strong>{table.assignedWaiter.name}</strong></span>
+                                      ) : (
+                                        <span className="italic">Libre</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           ) : (
-                            <div
-                              className="text-[10px] space-y-0.5 my-1.5 p-2 rounded-xl border"
-                              style={{
-                                backgroundColor: isLight
-                                  ? (isMyAssignedTable ? '#FFFBEB' : '#FDFBF9')
-                                  : (isMyAssignedTable ? `${themePrimary}20` : `${themeSecondary}25`),
-                                borderColor: isLight
-                                  ? (isMyAssignedTable ? '#FCD34D' : '#DECEBD')
-                                  : (isMyAssignedTable ? `${themePrimary}50` : `${themeSecondary}50`),
-                                color: isLight
-                                  ? '#5E3023'
-                                  : (isMyAssignedTable ? '#F3E9DC' : '#DECEBD'),
-                              }}
-                            >
-                              <span className="flex items-center gap-1 truncate">
-                                <Users className="w-2.5 h-2.5 shrink-0" style={{ color: themePrimary }} />
-                                {isMyAssignedTable ? (
-                                  <strong style={{ color: themePrimary }}>⭐ Tu Mesa Asignada</strong>
-                                ) : table.assignedWaiter ? (
-                                  <span>
-                                    Titular: <strong className={isLight ? 'text-[#2B1712]' : 'text-slate-200'}>{table.assignedWaiter.name}</strong>
-                                  </span>
-                                ) : (
-                                  <span className={`italic ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>⚡ Sin mesero titular</span>
-                                )}
+                            <div className="text-center py-1 my-auto">
+                              <span className={`text-[11px] sm:text-xs font-bold block flex items-center justify-center gap-1 ${
+                                isLight ? 'text-emerald-900 font-black' : 'text-emerald-400'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isLight ? 'bg-emerald-600' : 'bg-emerald-400'}`}></span>
+                                Libre
                               </span>
-
-                              {isTransferred && (
-                                <span className={`flex items-center gap-1 truncate font-semibold ${
-                                  isLight ? 'text-cyan-950 font-bold' : 'text-cyan-300'
-                                }`}>
-                                  <ArrowRightLeft className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
-                                  Relevo: {table.currentWaiter?.name}
-                                </span>
-                              )}
+                              <span className={`text-[9px] sm:text-[10px] block ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                                Toca para abrir
+                              </span>
                             </div>
                           )}
 
-                          {/* Info de Comanda si está ocupada */}
-                          {table.activeOrder ? (
-                            <div className="space-y-1.5 pt-1">
+                          {/* Pie de Tarjeta: Conteo de Artículos y Total */}
+                          {table.activeOrder && (
+                            <div className="pt-1 border-t border-dashed border-slate-200 dark:border-slate-800 space-y-0.5">
                               <div className="flex justify-between items-center text-xs">
                                 <span
-                                  className="px-2 py-0.5 rounded-md border font-mono text-[10px] font-bold flex items-center gap-1"
+                                  className="px-1.5 sm:px-2 py-0.5 rounded-md border font-mono text-[9px] sm:text-[10px] font-bold flex items-center gap-1"
                                   style={{
                                     backgroundColor: isLight ? '#F3E9DC' : `${themeSecondary}35`,
                                     borderColor: isLight ? '#DECEBD' : `${themeSecondary}60`,
@@ -1603,32 +2302,20 @@ export default function ComanderaPage() {
                                   }}
                                 >
                                   <UtensilsCrossed className="w-2.5 h-2.5" style={{ color: themePrimary }} />
-                                  {table.activeOrder.itemsCount} {table.activeOrder.itemsCount === 1 ? 'artículo' : 'artículos'}
+                                  <span>{table.activeOrder.itemsCount}</span>
                                 </span>
-                                <strong className="font-black text-sm tracking-tight font-mono" style={{ color: isLight ? '#5E3023' : themePrimary }}>
+                                <strong className="font-black text-xs sm:text-sm tracking-tight font-mono" style={{ color: isLight ? '#5E3023' : themePrimary }}>
                                   ${table.activeOrder.total.toFixed(2)}
                                 </strong>
                               </div>
 
                               {table.activeOrder.customerName && (
-                                <span className={`text-[10px] block truncate italic font-medium ${
+                                <span className={`text-[9px] sm:text-[10px] block truncate italic font-medium ${
                                   isLight ? 'text-[#7A5A43]' : 'text-slate-300'
                                 }`}>
                                   👤 {table.activeOrder.customerName}
                                 </span>
                               )}
-                            </div>
-                          ) : (
-                            <div className="text-center py-1">
-                              <span className={`text-xs font-bold block flex items-center justify-center gap-1 ${
-                                isLight ? 'text-emerald-900 font-black' : 'text-emerald-400'
-                              }`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${isLight ? 'bg-emerald-600' : 'bg-emerald-400'}`}></span>
-                                Libre
-                              </span>
-                              <span className={`text-[10px] ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                                Toca para abrir
-                              </span>
                             </div>
                           )}
                         </button>
@@ -1652,7 +2339,7 @@ export default function ComanderaPage() {
               borderColor: isLight ? '#DECEBD' : `${themeSecondary}60`,
             }}
           >
-            {/* Header del Modal con estilo App Nativa */}
+            {/* Header Limpio del Modal de Mesa */}
             <div
               className="p-3 sm:px-5 border-b flex items-center justify-between shrink-0"
               style={{
@@ -1660,11 +2347,12 @@ export default function ComanderaPage() {
                 borderColor: isLight ? '#DECEBD' : `${themeSecondary}50`,
               }}
             >
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              {/* Izquierda: Volver + Nombre de Mesa + Status simple */}
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <button
                   type="button"
                   onClick={() => setShowOrderModal(false)}
-                  className={`p-2 -ml-1 rounded-xl cursor-pointer md:hidden ${
+                  className={`p-2 -ml-1 rounded-xl cursor-pointer ${
                     isLight
                       ? 'bg-white hover:bg-[#F3E9DC] border border-[#DECEBD] text-[#5E3023]'
                       : 'bg-[#251e1b] hover:bg-[#332924] text-slate-300'
@@ -1674,209 +2362,154 @@ export default function ComanderaPage() {
                   <ArrowLeft className="w-5 h-5" style={{ color: themePrimary }} />
                 </button>
 
-                <div
-                  className="w-10 h-10 rounded-2xl border flex items-center justify-center font-bold shrink-0"
-                  style={{
-                    backgroundColor: `${themePrimary}${isLight ? '15' : '20'}`,
-                    borderColor: `${themePrimary}${isLight ? '35' : '40'}`,
-                    color: isLight ? '#5E3023' : themePrimary,
-                  }}
-                >
-                  <UtensilsCrossed className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className={`text-base sm:text-lg font-black truncate ${
-                      isLight ? 'text-[#2B1712]' : 'text-white'
-                    }`}>
-                      {activeTable.name}
-                    </h3>
-                    {/* Badge Comanda Mesa • X cantidad */}
-                    <span
-                      className="text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold border flex items-center gap-1.5 shadow-xs"
-                      style={{
-                        backgroundColor: isLight ? '#F3E9DC' : `${themeSecondary}40`,
-                        borderColor: isLight ? '#DECEBD' : `${themeSecondary}70`,
-                        color: isLight ? '#5E3023' : '#F3E9DC',
-                      }}
-                    >
-                      <UtensilsCrossed className="w-3 h-3" style={{ color: themePrimary }} />
-                      <span>{totalOrderCount} {totalOrderCount === 1 ? 'artículo' : 'artículos'}</span>
-                    </span>
-
-                    <span
-                      className={`text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 ${
-                        activeTable.status === 'AVAILABLE'
-                          ? getStatusBadgeStyles('AVAILABLE', isLight).className
-                          : activeTable.status === 'BILL_PRINTED'
-                          ? getStatusBadgeStyles('BILL_PRINTED', isLight).className
-                          : getStatusBadgeStyles('OCCUPIED', isLight).className
-                      }`}
-                    >
-                      {activeTable.status === 'AVAILABLE'
-                        ? 'Libre'
-                        : activeTable.status === 'BILL_PRINTED'
-                        ? 'Pre-cuenta'
-                        : `Ocupada (#${activeTable.activeOrder?.orderNumber || ''})`}
-                    </span>
-                  </div>
-                  <div className={`flex flex-wrap items-center gap-x-2 text-[11px] truncate ${
-                    isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                <div className="min-w-0 flex items-center gap-2">
+                  <h3 className={`text-lg sm:text-xl font-black tracking-tight truncate ${
+                    isLight ? 'text-[#2B1712]' : 'text-white'
                   }`}>
-                    {tableServiceMode === 'FREE' ? (
-                      <span className={`font-medium flex items-center gap-1 ${
-                        isLight ? 'text-emerald-900 font-bold' : 'text-emerald-400'
-                      }`}>
-                        <Sparkles className="w-3 h-3" />
-                        Servicio Libre
-                        {activeTable.activeOrder?.waiter && (
-                          <span className={`ml-1 ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
-                            • Abierta por: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{activeTable.activeOrder.waiter.name}</strong>
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <>
-                        <span>
-                          Titular: <strong className={isLight ? 'text-[#2B1712]' : 'text-slate-200'}>{activeTable.assignedWaiter?.name || 'Sin asignar'}</strong>
-                        </span>
-                        {activeTable.currentWaiter && activeTable.currentWaiter.id !== activeTable.assignedWaiter?.id && (
-                          <span className={`font-medium ${isLight ? 'text-cyan-950 font-bold' : 'text-cyan-300'}`}>
-                            • Relevo: {activeTable.currentWaiter.name}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
+                    {activeTable.name}
+                  </h3>
                 </div>
               </div>
 
-              {/* Acciones de Cabecera */}
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                {/* Asignar titular permanente (SOLO ADMINISTRADOR / GERENTE) */}
-                {isOwnerOrAdmin && (
+              {/* Derecha: Menú Opciones (⋯) + Cerrar */}
+              <div className="flex items-center gap-2">
+
+                {/* Menú de Opciones Secundarias (⋯ Opciones) */}
+                <div className="relative">
                   <button
                     type="button"
-                    onClick={() => {
-                      setTargetAssignWaiterId(activeTable.assignedWaiter?.id || '')
-                      setShowAssignWaiterModal(true)
-                    }}
-                    className={`px-2.5 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                    onClick={() => setShowTableOptionsMenu(!showTableOptionsMenu)}
+                    className={`p-2 rounded-xl border text-xs flex items-center gap-1 transition-all cursor-pointer font-bold ${
                       isLight
                         ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
                         : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
                     }`}
-                    title="Asignar mesero titular permanente a la mesa"
+                    title="Más opciones de la mesa"
                   >
-                    <UserPlus className="w-3.5 h-3.5 text-[#C08552]" />
-                    <span className="hidden lg:inline">Titular</span>
+                    <MoreHorizontal className="w-5 h-5" />
+                    <span className="hidden sm:inline">Opciones</span>
                   </button>
-                )}
 
-                {/* Si la mesa está encargada (currentWaiter seteado), botón de Retomar o Devolver */}
-                {activeTable.currentWaiter && (
-                  <button
-                    type="button"
-                    onClick={() => handleReturnTableToTitular(activeTable)}
-                    className={`px-2.5 py-1.5 rounded-xl text-xs border flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
-                      isLight
-                        ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300'
-                        : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
-                    }`}
-                    title={
-                      activeTable.assignedWaiter?.id === currentUser?.id
-                        ? 'Retomar la atención de tu mesa'
-                        : `Devolver mesa a su titular (${activeTable.assignedWaiter?.name || 'Titular'})`
-                    }
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">
-                      {activeTable.assignedWaiter?.id === currentUser?.id
-                        ? 'Retomar Mesa'
-                        : 'Devolver al Titular'}
-                    </span>
-                    <span className="sm:hidden">
-                      {activeTable.assignedWaiter?.id === currentUser?.id ? 'Retomar' : 'Devolver'}
-                    </span>
-                  </button>
-                )}
+                  {/* Dropdown flotante de Opciones de Mesa */}
+                  {showTableOptionsMenu && (
+                    <div
+                      className={`absolute right-0 top-full mt-1.5 w-56 rounded-2xl border shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 ${
+                        isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-[#1c1715] border-[#382b25] text-slate-100'
+                      }`}
+                    >
+                      {/* Imprimir Pre-cuenta / Ticket */}
+                      {activeTable.activeOrder && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowTableOptionsMenu(false)
+                            handleOpenPrintBill()
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer text-left ${
+                            isLight ? 'hover:bg-[#F3E9DC] text-[#5E3023]' : 'hover:bg-[#251e1b] text-slate-200'
+                          }`}
+                        >
+                          <Printer className="w-4 h-4 text-purple-400" />
+                          <span>Imprimir Pre-cuenta</span>
+                        </button>
+                      )}
 
-                {/* Encargar mesa a compañero (disponible para el mesero que atiende o admin) */}
-                {(!activeTable.currentWaiter ||
-                  activeTable.currentWaiter.id === currentUser?.id ||
-                  isOwnerOrAdmin) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTargetTransferWaiterId('')
-                      setShowTransferWaiterModal(true)
-                    }}
-                    className={`px-2.5 py-1.5 rounded-xl text-xs border flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
-                      isLight
-                        ? 'bg-cyan-100 hover:bg-cyan-200 text-cyan-950 border-cyan-300'
-                        : 'bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border-cyan-500/30'
-                    }`}
-                    title="Encargar mesa temporalmente a otro compañero mesero"
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Encargar</span>
-                  </button>
-                )}
+                      {/* Mover / Traspasar Mesa */}
+                      {activeTable.activeOrder && (currentUser?.permissions?.canTransferTables || isOwnerOrAdmin || activeTable.assignedWaiter?.id === currentUser?.id || activeTable.currentWaiter?.id === currentUser?.id) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowTableOptionsMenu(false)
+                            setShowTransferModal(true)
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer text-left ${
+                            isLight ? 'hover:bg-[#F3E9DC] text-[#5E3023]' : 'hover:bg-[#251e1b] text-slate-200'
+                          }`}
+                        >
+                          <ArrowRightLeft className="w-4 h-4 text-cyan-400" />
+                          <span>Mover a otra mesa</span>
+                        </button>
+                      )}
 
-                {activeTable.activeOrder && (
-                  <>
-                    {(currentUser?.permissions?.canTransferTables ||
-                      currentUser?.roleCodes?.includes('ADMIN') ||
-                      currentUser?.roleCodes?.includes('SUPERADMIN') ||
-                      currentUser?.roleCodes?.includes('BRANCH_MANAGER') ||
-                      activeTable.assignedWaiter?.id === currentUser?.id ||
-                      activeTable.currentWaiter?.id === currentUser?.id) && (
+                      {/* Encargar Mesa a Compañero */}
+                      {(!activeTable.currentWaiter || activeTable.currentWaiter.id === currentUser?.id || isOwnerOrAdmin) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowTableOptionsMenu(false)
+                            setTargetTransferWaiterId('')
+                            setShowTransferWaiterModal(true)
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer text-left ${
+                            isLight ? 'hover:bg-[#F3E9DC] text-[#5E3023]' : 'hover:bg-[#251e1b] text-slate-200'
+                          }`}
+                        >
+                          <UserCheck className="w-4 h-4 text-cyan-400" />
+                          <span>Encargar a compañero</span>
+                        </button>
+                      )}
+
+                      {/* Asignar Titular Permanente (Admin) */}
+                      {isOwnerOrAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowTableOptionsMenu(false)
+                            setTargetAssignWaiterId(activeTable.assignedWaiter?.id || '')
+                            setShowAssignWaiterModal(true)
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer text-left ${
+                            isLight ? 'hover:bg-[#F3E9DC] text-[#5E3023]' : 'hover:bg-[#251e1b] text-slate-200'
+                          }`}
+                        >
+                          <UserPlus className="w-4 h-4 text-amber-400" />
+                          <span>Asignar mesero titular</span>
+                        </button>
+                      )}
+
+                      {/* Si está encargada, devolver o retomar */}
+                      {activeTable.currentWaiter && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowTableOptionsMenu(false)
+                            handleReturnTableToTitular(activeTable)
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer text-left ${
+                            isLight ? 'hover:bg-amber-50 text-amber-900' : 'hover:bg-amber-950/40 text-amber-300'
+                          }`}
+                        >
+                          <RotateCcw className="w-4 h-4 text-amber-400" />
+                          <span>
+                            {activeTable.assignedWaiter?.id === currentUser?.id
+                              ? 'Retomar mi mesa'
+                              : 'Devolver al titular'}
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Separador */}
+                      <div className={`h-px my-1 ${isLight ? 'bg-[#DECEBD]' : 'bg-[#382b25]'}`} />
+
+                      {/* Liberar Mesa (con validación de seguridad) */}
                       <button
                         type="button"
-                        onClick={() => setShowTransferModal(true)}
-                        className={`px-2.5 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
-                          isLight
-                            ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
-                            : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+                        onClick={() => {
+                          setShowTableOptionsMenu(false)
+                          handleReleaseTable()
+                        }}
+                        className={`w-full px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer text-left ${
+                          isLight ? 'hover:bg-red-50 text-red-700' : 'hover:bg-red-950/40 text-red-400'
                         }`}
-                        title="Mover comanda a otra mesa física"
                       >
-                        <ArrowRightLeft className="w-3.5 h-3.5 text-cyan-400" />
-                        <span className="hidden lg:inline">Mover</span>
+                        <LogOut className="w-4 h-4 text-rose-500" />
+                        <span>Liberar mesa</span>
                       </button>
-                    )}
+                    </div>
+                  )}
+                </div>
 
-                    {/* Imprimir Pre-cuenta / Ticket */}
-                    <button
-                      type="button"
-                      onClick={handleOpenPrintBill}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs border flex items-center gap-1.5 transition-all cursor-pointer font-bold ${
-                        isLight
-                          ? 'bg-purple-100 hover:bg-purple-200 text-purple-950 border-purple-300'
-                          : 'bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border-violet-500/30'
-                      }`}
-                      title="Imprimir ticket de cobro / pre-cuenta"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Ticket</span>
-                    </button>
-
-                    {/* Liberar mesa */}
-                    <button
-                      type="button"
-                      onClick={handleReleaseTable}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs border transition-all cursor-pointer ${
-                        isLight
-                          ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 font-bold'
-                          : 'bg-red-600/10 hover:bg-red-600/20 text-red-400 border-red-500/30'
-                      }`}
-                      title="Liberar mesa"
-                    >
-                      Liberar
-                    </button>
-                  </>
-                )}
-
+                {/* Botón cerrar en desktop */}
                 <button
                   type="button"
                   onClick={() => setShowOrderModal(false)}
@@ -2013,6 +2646,108 @@ export default function ComanderaPage() {
                 <Columns className="w-4 h-4 shrink-0" />
                 <span className="truncate">Vista Dividida</span>
               </button>
+            </div>
+
+            {/* Barra de Modo de Consumo y Empaques (Preguntar al cliente primero: Mesa vs Para Llevar) */}
+            <div
+              className={`px-3 py-2 border-b flex items-center justify-between gap-2 flex-wrap shrink-0 ${
+                isLight ? 'bg-white border-[#DECEBD]' : 'bg-[#181311] border-[#382b25]'
+              }`}
+            >
+              {/* Selector de Modo */}
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[11px] font-bold ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                  Consumo:
+                </span>
+                <div
+                  className="inline-flex p-0.5 rounded-xl border text-xs"
+                  style={{
+                    backgroundColor: isLight ? '#F3E9DC' : '#14100e',
+                    borderColor: isLight ? '#DECEBD' : '#382b25',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOrderType('DINE_IN')}
+                    className={`px-2.5 py-1 rounded-lg font-black text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                      orderType === 'DINE_IN'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : isLight
+                        ? 'text-[#7A5A43] hover:text-[#2B1712]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🍽️ En Mesa</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderType('TAKEAWAY')
+                      if (!takeawayPackaging.includeBag && !takeawayPackaging.includeTray) {
+                        setTakeawayPackaging((prev) => ({ ...prev, includeBag: true }))
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-black text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                      orderType === 'TAKEAWAY'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : isLight
+                        ? 'text-[#7A5A43] hover:text-[#2B1712]'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🥡 Para Llevar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Empaques opcionales si es Para Llevar */}
+              {orderType === 'TAKEAWAY' ? (
+                <div className="flex items-center gap-1 text-[11px] animate-in fade-in">
+                  <span className={`text-[10px] font-bold hidden xs:inline ${isLight ? 'text-emerald-800' : 'text-emerald-400'}`}>
+                    Empaque:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeBag: !prev.includeBag }))}
+                    className={`px-2 py-1 rounded-lg border font-bold cursor-pointer transition-all ${
+                      takeawayPackaging.includeBag
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : isLight ? 'bg-white text-slate-500 border-[#DECEBD]' : 'bg-[#251e1b] text-slate-400 border-[#382b25]'
+                    }`}
+                    title="Descontar bolsa de inventario"
+                  >
+                    {takeawayPackaging.includeBag ? '✓ Bolsa' : '+ Bolsa'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeTray: !prev.includeTray }))}
+                    className={`px-2 py-1 rounded-lg border font-bold cursor-pointer transition-all ${
+                      takeawayPackaging.includeTray
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : isLight ? 'bg-white text-slate-500 border-[#DECEBD]' : 'bg-[#251e1b] text-slate-400 border-[#382b25]'
+                    }`}
+                    title="Descontar portavasos/charola de inventario"
+                  >
+                    {takeawayPackaging.includeTray ? '✓ Portavasos' : '+ Portavasos'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeCutlery: !prev.includeCutlery }))}
+                    className={`px-2 py-1 rounded-lg border font-bold cursor-pointer transition-all ${
+                      takeawayPackaging.includeCutlery
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : isLight ? 'bg-white text-slate-500 border-[#DECEBD]' : 'bg-[#251e1b] text-slate-400 border-[#382b25]'
+                    }`}
+                    title="Descontar cubiertos de inventario"
+                  >
+                    {takeawayPackaging.includeCutlery ? '✓ Cubiertos' : '+ Cubiertos'}
+                  </button>
+                </div>
+              ) : (
+                <span className={`text-[10px] italic hidden sm:inline ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                  (Servicio en vajilla y cristalería de la cafetería)
+                </span>
+              )}
             </div>
 
             {/* Contenido Dinámico: Catálogo Táctil vs Tarjetas de Comanda */}
@@ -2223,36 +2958,314 @@ export default function ComanderaPage() {
 
                   {/* Barra Flotante Inferior de Resumen cuando hay artículos registrados */}
                   {stagedItems.length > 0 && orderViewTab === 'catalog' && (
-                    <div className={`sticky bottom-0 left-0 right-0 p-3 border-t backdrop-blur-md flex items-center justify-between shadow-2xl z-30 rounded-2xl ${
-                      isLight
-                        ? 'bg-white/95 border-[#DECEBD] text-[#2B1712]'
-                        : 'bg-[#1c1715]/95 border-[#382b25] text-slate-100'
-                    }`}>
-                      <div>
-                        <span className={`text-xs block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
-                          {stagedItems.reduce((acc, it) => acc + it.quantity, 0)}{' '}
-                          {stagedItems.reduce((acc, it) => acc + it.quantity, 0) === 1
-                            ? 'artículo registrado'
-                            : 'artículos registrados'}
-                        </span>
-                        <strong className={`text-sm sm:text-base font-black font-mono ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
-                          $
-                          {stagedItems
-                            .reduce((acc, it) => acc + it.unitPrice * it.quantity, 0)
-                            .toFixed(2)}{' '}
-                          MXN
-                        </strong>
-                      </div>
+                    <div className="sticky bottom-0 left-0 right-0 z-30 flex flex-col">
+                      {/* Drawer Desplegable para Rectificar la Orden */}
+                      {showOrderReviewDrawer && (
+                        <div
+                          className={`p-3 sm:p-4 border-t-2 rounded-t-3xl shadow-2xl space-y-3 max-h-[55vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 backdrop-blur-xl ${
+                            isLight
+                              ? 'bg-white/98 border-[#C08552] text-[#2B1712]'
+                              : 'bg-[#181311]/98 border-[#C08552]/70 text-slate-100'
+                          }`}
+                        >
+                          {/* Header del Drawer de Rectificación */}
+                          <div className="flex items-center justify-between pb-2 border-b border-dashed border-[#DECEBD] dark:border-[#382b25]">
+                            <div className="flex items-center gap-2">
+                              <span className="p-1.5 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                                <Sparkles className="w-4 h-4" />
+                              </span>
+                              <div>
+                                <h4 className={`text-xs sm:text-sm font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                                  Rectificar Ronda ({stagedItems.reduce((acc, it) => acc + it.quantity, 0)} artículos)
+                                </h4>
+                                <p className={`text-[10px] ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                                  Especifica notas individuales (ej. uno sin hielo y otro con todo)
+                                </p>
+                              </div>
+                            </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setOrderViewTab('order')}
-                        style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
-                        className="px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg active:scale-95 cursor-pointer transition-all"
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setStagedItems([])}
+                                className="text-[11px] text-rose-500 hover:text-rose-600 font-bold px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                                title="Vaciar toda la ronda"
+                              >
+                                Vaciar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowOrderReviewDrawer(false)}
+                                className={`p-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${
+                                  isLight
+                                    ? 'bg-[#F3E9DC] hover:bg-[#DECEBD] text-[#5E3023] border-[#DECEBD]'
+                                    : 'bg-[#251e1b] hover:bg-[#332924] text-slate-300 border-[#382b25]'
+                                }`}
+                                title="Minimizar panel de rectificación"
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Lista Agrupada en Acordeón por Producto */}
+                          <div className="space-y-2.5">
+                            {Object.values(groupedStagedProducts).map((group) => {
+                              const isExpanded = expandedReviewProducts[group.productName] !== false
+
+                              return (
+                                <div
+                                  key={group.productName}
+                                  className={`rounded-2xl border transition-all overflow-hidden ${
+                                    isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+                                  }`}
+                                >
+                                  {/* Encabezado del Acordeón del Producto */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleReviewProductExpand(group.productName)}
+                                    className={`w-full p-2.5 sm:p-3 flex items-center justify-between text-left transition-colors cursor-pointer select-none ${
+                                      isLight ? 'hover:bg-[#F3E9DC]/60' : 'hover:bg-[#1f1815]'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span
+                                        className="w-6 h-6 rounded-lg flex items-center justify-center font-black text-xs text-white shrink-0"
+                                        style={{ backgroundColor: themeButton }}
+                                      >
+                                        {group.totalQuantity}
+                                      </span>
+                                      <strong className={`text-xs sm:text-sm font-black truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                                        {group.productName}
+                                      </strong>
+                                      {group.items.some((it) => it.notes) && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold shrink-0">
+                                          Con notas
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className={`text-xs font-mono font-black ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
+                                        ${group.totalSubtotal.toFixed(2)}
+                                      </span>
+                                      {isExpanded ? (
+                                        <ChevronUp className="w-4 h-4 opacity-70" />
+                                      ) : (
+                                        <ChevronDown className="w-4 h-4 opacity-70" />
+                                      )}
+                                    </div>
+                                  </button>
+
+                                  {/* Contenido Desplegado del Producto: Ítems individuales para notas específicas */}
+                                  {isExpanded && (
+                                    <div className={`p-2.5 sm:p-3 border-t space-y-2.5 ${
+                                      isLight ? 'border-[#DECEBD] bg-white' : 'border-[#2a201b] bg-[#1a1412]'
+                                    }`}>
+                                      {group.items.map((item, itemIdx) => {
+                                        const itemKey = item.stagedId || item.variantId
+                                        const isAllergy = item.notes && (item.notes.includes('ALERGIA') || item.notes.includes('ALÉRGICO') || item.notes.includes('Alérgico'))
+
+                                        return (
+                                          <div
+                                            key={itemKey}
+                                            className={`p-2.5 rounded-xl border space-y-2 transition-all ${
+                                              isAllergy
+                                                ? 'bg-rose-500/10 border-rose-500/60'
+                                                : isLight
+                                                ? 'bg-[#FDFBF9] border-[#E8DCCF]'
+                                                : 'bg-[#15100e] border-[#382b25]'
+                                            }`}
+                                          >
+                                            {/* Fila del Ítem: Variante, Botón Separar y Controles */}
+                                            <div className="flex items-center justify-between gap-2">
+                                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                <span className={`text-xs font-bold ${isLight ? 'text-[#2B1712]' : 'text-slate-200'}`}>
+                                                  #{itemIdx + 1}
+                                                </span>
+                                                {item.variantName && item.variantName !== 'Regular' && (
+                                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                                    isLight ? 'bg-amber-100 text-amber-900' : 'bg-amber-500/20 text-amber-300'
+                                                  }`}>
+                                                    {item.variantName}
+                                                  </span>
+                                                )}
+
+                                                {/* Botón Separar Ítems (si cantidad > 1) para permitir decir ej. 1 sin hielo y 1 con todo */}
+                                                {item.quantity > 1 && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleSplitStagedItem(itemKey)}
+                                                    className="px-2 py-0.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-black text-[10px] flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 transition-all shrink-0"
+                                                    title="Separar en 2 líneas para poner notas individuales a cada uno"
+                                                  >
+                                                    <Scissors className="w-3 h-3" />
+                                                    <span>Separar ({item.quantity})</span>
+                                                  </button>
+                                                )}
+                                              </div>
+
+                                              {/* Stepper y Basura */}
+                                              <div className="flex items-center gap-1.5 shrink-0">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => updateStagedQty(itemKey, -1)}
+                                                  className={`w-7 h-7 flex items-center justify-center rounded-lg border font-bold text-xs cursor-pointer active:scale-90 ${
+                                                    isLight ? 'bg-white border-[#DECEBD] text-[#5E3023]' : 'bg-[#251e1b] border-[#382b25] text-slate-300'
+                                                  }`}
+                                                >
+                                                  <Minus className="w-3 h-3" />
+                                                </button>
+                                                <span className={`font-black text-xs font-mono min-w-[20px] text-center ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                                                  {item.quantity}
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => updateStagedQty(itemKey, 1)}
+                                                  style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                                                  className="w-7 h-7 flex items-center justify-center rounded-lg font-bold text-xs cursor-pointer active:scale-90 shadow-xs"
+                                                >
+                                                  <Plus className="w-3 h-3" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => removeItemFromStaged(itemKey)}
+                                                  className="w-7 h-7 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-500/10 cursor-pointer active:scale-90 ml-1"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            {/* Modificadores / Extras */}
+                                            {item.modifiers && item.modifiers.length > 0 && (
+                                              <div className="flex flex-wrap gap-1 text-[10px]">
+                                                {item.modifiers.map((m, mIdx) => (
+                                                  <span key={mIdx} className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-semibold">
+                                                    + {m.name}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {/* Chips Rápidos de Notas Preestablecidas */}
+                                            <div className="space-y-1.5 pt-1">
+                                              <div className="flex flex-wrap gap-1">
+                                                {['Sin hielo', 'Con todo', 'Sin azúcar', 'Deslactosada', 'Bien caliente', 'Para llevar', 'Alérgico/a'].map((chip) => {
+                                                  const isSelected = item.notes?.includes(chip)
+                                                  return (
+                                                    <button
+                                                      key={chip}
+                                                      type="button"
+                                                      onClick={() => handleTogglePresetNote(itemKey, chip)}
+                                                      className={`text-[10px] px-2 py-0.5 rounded-lg border transition-all cursor-pointer select-none active:scale-95 ${
+                                                        isSelected
+                                                          ? 'bg-amber-600 text-white border-amber-600 font-black shadow-xs'
+                                                          : isLight
+                                                          ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
+                                                          : 'bg-[#1f1815] hover:bg-[#2c221e] text-slate-300 border-[#382b25]'
+                                                      }`}
+                                                    >
+                                                      {isSelected ? `✓ ${chip}` : `+ ${chip}`}
+                                                    </button>
+                                                  )
+                                                })}
+                                              </div>
+
+                                              {/* Input de Nota libre */}
+                                              <input
+                                                type="text"
+                                                placeholder="Nota específica (ej. término medio, sin cebolla)..."
+                                                value={item.notes || ''}
+                                                onChange={(e) => updateItemNote(itemKey, e.target.value)}
+                                                className={`w-full px-2.5 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
+                                                  isLight
+                                                    ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
+                                                    : 'bg-[#181311] border border-[#382b25] text-amber-200 placeholder-slate-500'
+                                                }`}
+                                              />
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Barra Fija Inferior con Total, Rectificar y Enviar Directo a Cocina */}
+                      <div
+                        className={`p-3 border-t backdrop-blur-md flex items-center justify-between gap-2 shadow-2xl rounded-2xl ${
+                          isLight
+                            ? 'bg-white/95 border-[#DECEBD] text-[#2B1712]'
+                            : 'bg-[#1c1715]/95 border-[#382b25] text-slate-100'
+                        }`}
                       >
-                        <ShoppingBag className="w-4 h-4" />
-                        <span>Ver Comanda ({stagedItems.reduce((acc, it) => acc + it.quantity, 0)}) →</span>
-                      </button>
+                        {/* Botón Rectificar / Resumen con Total al Lado */}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowOrderReviewDrawer(!showOrderReviewDrawer)}
+                            className={`px-3 py-2 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 select-none ${
+                              showOrderReviewDrawer
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                                : isLight
+                                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023] border-[#DECEBD]'
+                                : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 border-[#382b25]'
+                            }`}
+                            title="Desplegar resumen para rectificar la orden"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Rectificar ({stagedItems.reduce((acc, it) => acc + it.quantity, 0)})</span>
+                            {showOrderReviewDrawer ? (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          <div className="hidden xs:block sm:block">
+                            <span className={`text-[10px] block font-medium leading-none ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                              Total ronda:
+                            </span>
+                            <strong className={`text-xs sm:text-sm font-black font-mono leading-tight ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
+                              $
+                              {stagedItems
+                                .reduce((acc, it) => {
+                                  const modTotal = it.modifiers?.reduce((mAcc, m) => mAcc + m.unitPrice, 0) || 0
+                                  return acc + (it.unitPrice + modTotal) * it.quantity
+                                }, 0)
+                                .toFixed(2)}{' '}
+                              MXN
+                            </strong>
+                          </div>
+                        </div>
+
+                        {/* Botón de Acción: Enviar Directo a Cocina */}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={handleSendToKitchen}
+                            disabled={submittingOrder}
+                            style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                            className="px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 shadow-lg active:scale-95 cursor-pointer transition-all select-none disabled:opacity-50"
+                            title="Enviar ronda directo a cocina"
+                          >
+                            {submittingOrder ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Send className="w-4 h-4" />
+                                <span>Enviar a Cocina</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2269,17 +3282,19 @@ export default function ComanderaPage() {
                       : 'flex-1'
                   }`}
                 >
-                  {/* Nombre de comensal opcional */}
-                  <div className="shrink-0 space-y-1">
-                    <label className={`text-[11px] font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                      Nombre de Comensal / Referencia:
-                    </label>
+
+
+                  {/* Nombre de comensal / referencia compacto */}
+                  <div className="shrink-0 flex items-center gap-2">
+                    <span className={`text-[11px] font-bold shrink-0 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                      👤 Comensal:
+                    </span>
                     <input
                       type="text"
-                      placeholder="Ej. Familia López / Mesa 4"
+                      placeholder="Nombre o referencia (ej. Familia López)..."
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
+                      className={`flex-1 px-3 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
                         isLight
                           ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
                           : 'bg-[#1c1715] border border-[#382b25] text-white placeholder-slate-500'
@@ -2287,372 +3302,616 @@ export default function ComanderaPage() {
                     />
                   </div>
 
-                  {/* Lista 1: Platillos ya en Cocina / KDS */}
-                  {activeTable.activeOrder && activeTable.activeOrder.items.length > 0 && (
-                    <div className={`space-y-2 shrink-0 p-3 rounded-2xl border ${
-                      isLight ? 'bg-white border-[#DECEBD] shadow-xs' : 'bg-[#191412] border-[#382b25]'
-                    }`}>
-                      <span className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                        isLight ? 'text-[#7A5A43]' : 'text-slate-400'
-                      }`}>
-                        <Clock className="w-3.5 h-3.5 text-cyan-500" />
-                        Marchado en Cocina ({activeTable.activeOrder.items.length})
-                      </span>
-
-                      <div
-                        className={`overflow-y-auto pr-1 gap-2 ${
-                          orderViewTab === 'split'
-                            ? 'space-y-2 max-h-40'
-                            : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-h-48'
-                        }`}
-                      >
-                        {activeTable.activeOrder.items.map((it) => (
-                          <div
-                            key={it.id}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
-                              isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#1c1715] border-[#382b25]'
-                            }`}
-                          >
-                            <div className="min-w-0 pr-2">
-                              <span className={`font-bold block truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-                                {it.quantity}x {it.productName}
-                              </span>
-                              {it.notes && (
-                                <span className={`text-[10px] block italic truncate mt-0.5 ${
-                                  isLight ? 'text-amber-800' : 'text-amber-300/90'
-                                }`}>
-                                  Nota: {it.notes}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="text-right shrink-0">
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  it.kitchenStatus === 'READY'
-                                    ? isLight
-                                      ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold'
-                                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                    : it.kitchenStatus === 'COOKING'
-                                    ? isLight
-                                      ? 'bg-amber-100 text-amber-950 border border-amber-300 font-bold'
-                                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                    : isLight
-                                    ? 'bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
-                                    : 'bg-slate-800 text-slate-400'
-                                }`}
-                              >
-                                {it.kitchenStatus === 'READY'
-                                  ? '✓ Listo'
-                                  : it.kitchenStatus === 'COOKING'
-                                  ? '🍳 Preparando'
-                                  : '⏳ En espera'}
-                              </span>
-                              <span className={`text-[11px] block mt-0.5 font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                                ${it.subtotal.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Lista 2: TARJETAS de Nuevos Platillos a Marchar */}
-                  <div className="flex-1 flex flex-col space-y-3 overflow-y-auto">
+                  {/* SECCIÓN 1: PRODUCTOS AGREGADOS / CONSUMIDOS EN LA MESA */}
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between shrink-0">
-                      <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                        isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
-                      }`}>
-                        <Sparkles className="w-3.5 h-3.5" />
-                        Nuevos Artículos por Marchar ({stagedItems.length})
-                      </span>
                       <div className="flex items-center gap-2">
-                        {orderViewTab === 'order' && (
-                          <button
-                            type="button"
-                            onClick={() => setOrderViewTab('catalog')}
-                            className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
-                              isLight
-                                ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
-                                : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            <Plus className="w-3.5 h-3.5" style={{ color: themePrimary }} />
-                            <span>Agregar Más</span>
-                          </button>
-                        )}
-
-                        {stagedItems.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setStagedItems([])}
-                            className="text-xs text-red-500 hover:text-red-600 font-bold transition-colors px-2 py-1 cursor-pointer"
-                          >
-                            Vaciar ronda
-                          </button>
-                        )}
+                        <span className={`text-xs sm:text-sm font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                          isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
+                        }`}>
+                          <ShoppingBag className="w-4 h-4" />
+                          Consumo en Mesa ({activeTable.activeOrder?.items?.length || 0})
+                        </span>
                       </div>
-                    </div>
 
-                    {stagedItems.length === 0 ? (
-                      <div className={`flex-1 flex flex-col items-center justify-center text-xs border border-dashed rounded-3xl p-8 text-center space-y-3 ${
-                        isLight
-                          ? 'border-[#DECEBD] bg-white/60 text-[#7A5A43]'
-                          : 'border-[#382b25] text-slate-500'
-                      }`}>
-                        <ShoppingBag className="w-12 h-12 opacity-30 text-[#C08552]" />
-                        <div>
-                          <p className={`font-bold text-sm ${isLight ? 'text-[#2B1712]' : 'text-slate-300'}`}>
-                            Sin artículos registrados aún
-                          </p>
-                          <p className={`text-xs mt-1 ${isLight ? 'text-[#7A5A43]' : 'text-slate-500'}`}>
-                            Selecciona platillos o bebidas del menú para agregarlos a esta ronda.
-                          </p>
-                        </div>
+                      {/* Botón Servir Todo si hay platillos listos */}
+                      {activeTable.activeOrder?.items?.some((it) => it.kitchenStatus === 'READY') && (
                         <button
                           type="button"
-                          onClick={() => setOrderViewTab('catalog')}
-                          style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
-                          className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg cursor-pointer active:scale-95"
+                          onClick={handleMarkAllReadyServed}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer animate-pulse"
+                          title="Marcar todos los platillos listos como entregados a la mesa"
                         >
-                          <UtensilsCrossed className="w-4 h-4" />
-                          <span>Abrir Catálogo / Menú</span>
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>🔔 Servir Todo a Mesa</span>
                         </button>
-                      </div>
-                    ) : (
-                      <div
-                        className={`overflow-y-auto flex-1 pr-1 gap-3.5 auto-rows-max ${
-                          orderViewTab === 'split'
-                            ? 'grid grid-cols-1 xl:grid-cols-2'
-                            : 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
-                        }`}
-                      >
-                        {stagedItems.map((item) => {
-                          const itemKey = item.stagedId || item.variantId
-                          const isAllergy = item.notes && (item.notes.includes('ALERGIA') || item.notes.includes('ALÉRGICO'))
+                      )}
+                    </div>
+
+                    {/* Si la mesa tiene platillos agregados / consumidos */}
+                    {activeTable.activeOrder && activeTable.activeOrder.items.length > 0 ? (
+                      <div className="space-y-2 max-h-72 sm:max-h-80 overflow-y-auto pr-1">
+                        {activeTable.activeOrder.items.map((it) => {
+                          const isReady = it.kitchenStatus === 'READY'
+                          const isCooking = it.kitchenStatus === 'COOKING'
+                          const isServed = it.kitchenStatus === 'SERVED'
 
                           return (
                             <div
-                              key={itemKey}
-                              className={`p-3.5 rounded-2xl border flex flex-col justify-between space-y-3 text-xs shadow-md transition-colors ${
-                                isAllergy
-                                  ? 'bg-rose-500/10 border-rose-500 shadow-rose-500/10'
+                              key={it.id}
+                              className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all shadow-xs ${
+                                isReady
+                                  ? isLight
+                                    ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/40'
+                                    : 'bg-emerald-950/30 border-emerald-500/60 ring-2 ring-emerald-500/30'
+                                  : isCooking
+                                  ? isLight
+                                    ? 'bg-amber-50/70 border-amber-300'
+                                    : 'bg-amber-950/20 border-amber-600/40'
                                   : isLight
-                                  ? 'bg-white border-[#DECEBD] hover:border-[#C08552]'
-                                  : 'bg-[#1c1715] border-[#382b25] hover:border-[#C08552]/40'
+                                  ? 'bg-white border-[#DECEBD]'
+                                  : 'bg-[#1a1412] border-[#382b25]'
                               }`}
                             >
-                              {/* Cabecera de la Tarjeta: Nombre, Tamaño, Modificadores y Subtotal */}
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0 flex-1 space-y-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <strong className={`block text-sm font-bold truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-                                      {item.productName}
-                                    </strong>
-                                    {item.variantName && item.variantName !== 'Regular' && (
-                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                                        isLight
-                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                      }`}>
-                                        {item.variantName}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className={`text-xs font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                                      ${item.unitPrice.toFixed(2)} c/u
+                              {/* Nombre, Cantidad, Variante y Notas */}
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span
+                                    className="px-2 py-0.5 rounded-lg text-xs font-black text-white shrink-0"
+                                    style={{ backgroundColor: themeButton }}
+                                  >
+                                    {it.quantity}x
+                                  </span>
+                                  <strong className={`text-xs sm:text-sm font-black truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                                    {it.productName}
+                                  </strong>
+                                  {it.variantName && it.variantName !== 'Regular' && (
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                      isLight ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    }`}>
+                                      {it.variantName}
                                     </span>
-                                    <span className={`font-black text-xs font-mono ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
-                                      • ${(item.unitPrice * item.quantity).toFixed(2)}
-                                    </span>
-                                  </div>
-
-                                  {/* Modificadores / Extras Seleccionados */}
-                                  {item.modifiers && item.modifiers.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 pt-0.5">
-                                      {item.modifiers.map((m, idx) => (
-                                        <span
-                                          key={idx}
-                                          className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                            isLight
-                                              ? 'bg-amber-100 text-amber-950 border border-amber-200'
-                                              : 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
-                                          }`}
-                                        >
-                                          + {m.name} {m.unitPrice > 0 ? `($${m.unitPrice.toFixed(2)})` : ''}
-                                        </span>
-                                      ))}
-                                    </div>
                                   )}
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => removeItemFromStaged(itemKey)}
-                                  className={`w-8 h-8 rounded-xl flex items-center justify-center active:scale-90 transition-colors cursor-pointer shrink-0 ${
-                                    isLight
-                                      ? 'text-rose-600 hover:bg-rose-50'
-                                      : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
-                                  }`}
-                                  title="Quitar platillo"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {it.notes && (
+                                  <p className={`text-xs italic flex items-center gap-1 ${
+                                    it.notes.includes('ALERGIA') || it.notes.includes('ALÉRGICO')
+                                      ? 'text-rose-600 dark:text-rose-400 font-bold'
+                                      : isLight
+                                      ? 'text-amber-900'
+                                      : 'text-amber-300'
+                                  }`}>
+                                    <span>📝 {it.notes}</span>
+                                  </p>
+                                )}
                               </div>
 
-                              {/* Stepper Táctil: Disminuir [-] y Aumentar [+] */}
-                              <div className={`flex items-center justify-between p-1.5 rounded-xl border ${
-                                isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
-                              }`}>
-                                <span className={`text-[11px] font-medium px-2 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                                  Cantidad:
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => updateStagedQty(itemKey, -1)}
-                                    className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm ${
-                                      isLight
-                                        ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border border-[#DECEBD]'
-                                        : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 hover:text-white'
+                              {/* Estado en Cocina + Botón Servir + Subtotal */}
+                              <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-dashed border-[#DECEBD] dark:border-[#382b25]">
+                                {/* Badge de Estado KDS */}
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-xl flex items-center gap-1 ${
+                                      isReady
+                                        ? 'bg-emerald-600 text-white animate-pulse shadow-sm'
+                                        : isCooking
+                                        ? isLight
+                                          ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                        : isServed
+                                        ? isLight
+                                          ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                          : 'bg-slate-800 text-slate-400'
+                                        : isLight
+                                        ? 'bg-blue-100 text-blue-950 border border-blue-300'
+                                        : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                     }`}
-                                    title="Disminuir"
                                   >
-                                    <Minus className="w-4 h-4" />
-                                  </button>
-
-                                  <span className={`font-black text-sm sm:text-base px-2 min-w-[28px] text-center font-mono ${
-                                    isLight ? 'text-[#2B1712]' : 'text-white'
-                                  }`}>
-                                    {item.quantity}
+                                    {isReady ? (
+                                      <>🔔 Listo para Servir</>
+                                    ) : isCooking ? (
+                                      <>🍳 Preparando</>
+                                    ) : isServed ? (
+                                      <>✅ Servido</>
+                                    ) : (
+                                      <>⏳ En Espera</>
+                                    )}
                                   </span>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => updateStagedQty(itemKey, 1)}
-                                    style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
-                                    className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl active:scale-90 transition-colors cursor-pointer font-black text-sm shadow-md"
-                                    title="Aumentar"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Alerta de Alergia destacada si existe */}
-                              {isAllergy && (
-                                <div className="p-2 rounded-xl bg-rose-500/20 border border-rose-500 text-rose-600 dark:text-rose-300 font-bold text-[11px] flex items-center gap-1.5 animate-pulse">
-                                  <span>⚠️ ALERTA COCINA:</span>
-                                  <span>{item.notes}</span>
-                                </div>
-                              )}
-
-                              {/* Notas Rápidas y Chips para Cocina */}
-                              <div className={`space-y-1.5 pt-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-[#251e1b]'}`}>
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="text"
-                                    placeholder="Nota especial (ej. sin azúcar, para llevar)..."
-                                    value={item.notes}
-                                    onChange={(e) => updateItemNote(itemKey, e.target.value)}
-                                    className={`flex-1 px-2.5 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-[#C08552] ${
-                                      isLight
-                                        ? 'bg-white border border-[#DECEBD] text-[#2B1712] placeholder-[#A88C7D]'
-                                        : 'bg-[#14100e] border border-[#382b25] text-amber-200 placeholder-slate-500'
-                                    }`}
-                                  />
-                                  {item.notes && (
+                                  {/* Botón individual de Servir si está LISTO */}
+                                  {isReady && (
                                     <button
                                       type="button"
-                                      onClick={() => updateItemNote(itemKey, '')}
-                                      className={`text-xs px-1.5 py-1 cursor-pointer ${isLight ? 'text-slate-500 hover:text-black' : 'text-slate-400 hover:text-white'}`}
-                                      title="Borrar nota"
+                                      onClick={() => handleMarkItemServed(it.id, it.productName)}
+                                      className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
+                                      title="Confirmar entrega en la mesa"
                                     >
-                                      ✕
+                                      <CheckCircle className="w-3.5 h-3.5" />
+                                      <span>Servir</span>
                                     </button>
                                   )}
                                 </div>
 
-                                <div className="flex flex-wrap gap-1">
-                                  {PRESET_NOTES.slice(0, 5).map((note) => (
-                                    <button
-                                      key={note}
-                                      type="button"
-                                      onClick={() => appendNoteToItem(itemKey, note)}
-                                      className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-lg border active:scale-95 transition-all cursor-pointer ${
-                                        isLight
-                                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023] font-medium'
-                                          : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
-                                      }`}
-                                    >
-                                      +{note}
-                                    </button>
-                                  ))}
-                                </div>
+                                {/* Subtotal */}
+                                <span className={`text-xs sm:text-sm font-mono font-black ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
+                                  ${it.subtotal.toFixed(2)}
+                                </span>
                               </div>
                             </div>
                           )
                         })}
                       </div>
+                    ) : (
+                      <div className={`p-4 rounded-2xl border border-dashed text-center space-y-1.5 ${
+                        isLight ? 'border-[#DECEBD] bg-white/70 text-[#7A5A43]' : 'border-[#382b25] bg-[#1a1412]/50 text-slate-400'
+                      }`}>
+                        <p className={`font-bold text-xs ${isLight ? 'text-[#2B1712]' : 'text-slate-200'}`}>
+                          Sin platillos marchados aún en esta mesa
+                        </p>
+                        <p className="text-[11px]">
+                          Selecciona platillos del catálogo o revisa la ronda a continuación para enviar a cocina.
+                        </p>
+                      </div>
                     )}
                   </div>
 
-                  {/* Subtotal de la nueva ronda y Botón Marchar */}
-                  <div className={`pt-3 border-t space-y-2.5 shrink-0 ${
-                    isLight ? 'border-[#DECEBD] bg-[#FDFBF9]' : 'border-[#382b25] bg-[#14100e]'
+
+
+                  {/* SECCIÓN 3: RESUMEN TOTAL DE LA CUENTA Y OPCIONES DE COBRO */}
+                  <div className={`p-3.5 sm:p-4 rounded-3xl border space-y-3 shrink-0 ${
+                    isLight ? 'bg-white border-[#DECEBD] shadow-md' : 'bg-[#181311] border-[#382b25]'
                   }`}>
-                    <div className="flex justify-between items-center text-xs sm:text-sm">
-                      <span className={isLight ? 'text-[#7A5A43] font-medium' : 'text-slate-400'}>Total ronda a marchar:</span>
-                      <strong className={`text-base sm:text-lg font-black font-mono ${
-                        isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
-                      }`}>
-                        $
-                        {stagedItems
-                          .reduce((acc, curr) => acc + curr.unitPrice * curr.quantity, 0)
-                          .toFixed(2)}{' '}
-                        MXN
-                      </strong>
-                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <span className={`text-[11px] block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                          Total Consumido ({activeTable.name}):
+                        </span>
+                        <strong className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${
+                          isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
+                        }`}>
+                          ${(activeTable.activeOrder?.total || 0).toFixed(2)} MXN
+                        </strong>
+                      </div>
 
-                    <div className="flex gap-2">
-                      {orderViewTab === 'order' && (
-                        <button
-                          type="button"
-                          onClick={() => setOrderViewTab('catalog')}
-                          className={`flex-1 py-3 rounded-2xl border font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer transition-all ${
-                            isLight
-                              ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
-                              : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300 hover:text-white'
-                          }`}
-                        >
-                          <UtensilsCrossed className="w-4 h-4" style={{ color: themePrimary }} />
-                          <span>+ Agregar Más</span>
-                        </button>
+                      {/* Botones de Cobro y Ticket */}
+                      {activeTable.activeOrder && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleOpenPrintBill}
+                            className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl border font-bold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer select-none active:scale-95 transition-all ${
+                              isLight
+                                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023] border-[#DECEBD]'
+                                : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 border-[#382b25]'
+                            }`}
+                            title="Imprimir ticket informativo de pre-cuenta para el cliente"
+                          >
+                            <Printer className="w-4 h-4" />
+                            <span>Imprimir Ticket</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCheckoutPaymentMethod('CASH')
+                              setCheckoutAmountReceived(activeTable.activeOrder?.total ? String(activeTable.activeOrder.total) : '')
+                              setShowCheckoutModal(true)
+                            }}
+                            className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer select-none"
+                            title="Cobrar la cuenta y liquidar la mesa"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            <span>Cobrar Cuenta</span>
+                          </button>
+                        </div>
                       )}
-
-                      <button
-                        type="button"
-                        onClick={handleSendToKitchen}
-                        disabled={submittingOrder || stagedItems.length === 0}
-                        style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
-                        className="flex-1 py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95 select-none"
-                      >
-                        {submittingOrder ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4" />
-                            <span>Enviar a Cocina</span>
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL INICIAL OBLIGATORIO: SELECCIÓN DE MODO DE CONSUMO (MESA VS PARA LLEVAR) */}
+      {showOrderTypeSelectionModal && activeTable && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div
+            className={`w-full max-w-lg rounded-3xl p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95 my-auto border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-[#1a1412] border-[#382b25] text-white'
+            }`}
+          >
+            {/* Header */}
+            <div className="text-center space-y-1">
+              <span className="inline-flex p-3 rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 text-2xl">
+                🍽️ / 🥡
+              </span>
+              <h3 className={`text-lg sm:text-xl font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                Iniciar Pedido en {activeTable.name}
+              </h3>
+              <p className={`text-xs sm:text-sm ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                Pregunta primero al cliente cómo será su pedido para que cocina y barra preparen en vajilla o empaques desechables.
+              </p>
+            </div>
+
+            {/* Dos Opciones Principales Táctiles */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Opción 1: Consumo en Mesa */}
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderType('DINE_IN')
+                  setShowOrderTypeSelectionModal(false)
+                }}
+                className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between space-y-2 group active:scale-95 ${
+                  orderType === 'DINE_IN'
+                    ? 'border-amber-600 bg-amber-500/10 shadow-md ring-2 ring-amber-500/30'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-[#FDFBF9] hover:border-amber-500'
+                    : 'border-[#382b25] bg-[#14100e] hover:border-amber-600/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl">🍽️</span>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    isLight ? 'bg-amber-100 text-amber-900' : 'bg-amber-500/20 text-amber-300'
+                  }`}>
+                    Vajilla & Cristalería
+                  </span>
+                </div>
+                <div>
+                  <h4 className={`text-sm font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Comer Aquí (En Mesa)
+                  </h4>
+                  <p className={`text-[11px] mt-0.5 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    Cocina y barra servirán en platos, tazas y vasos de la cafetería. No se descuentan vasos desechables.
+                  </p>
+                </div>
+              </button>
+
+              {/* Opción 2: Para Llevar / Domicilio */}
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderType('TAKEAWAY')
+                  if (!takeawayPackaging.includeBag && !takeawayPackaging.includeTray) {
+                    setTakeawayPackaging((prev) => ({ ...prev, includeBag: true }))
+                  }
+                }}
+                className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between space-y-2 group active:scale-95 ${
+                  orderType === 'TAKEAWAY'
+                    ? 'border-emerald-600 bg-emerald-500/10 shadow-md ring-2 ring-emerald-500/30'
+                    : isLight
+                    ? 'border-[#DECEBD] bg-[#FDFBF9] hover:border-emerald-500'
+                    : 'border-[#382b25] bg-[#14100e] hover:border-emerald-600/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl">🥡</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                    Vasos & Empaques
+                  </span>
+                </div>
+                <div>
+                  <h4 className={`text-sm font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Para Llevar / Domicilio
+                  </h4>
+                  <p className={`text-[11px] mt-0.5 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    Cocina y barra prepararán en vasos térmicos, charolas y empaques desechables.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Si seleccionó Para Llevar, configurar empaques */}
+            {orderType === 'TAKEAWAY' && (
+              <div
+                className={`p-3.5 rounded-2xl border space-y-2.5 animate-in fade-in ${
+                  isLight ? 'bg-emerald-50/70 border-emerald-300' : 'bg-emerald-950/20 border-emerald-800/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-950 dark:text-emerald-300 flex items-center gap-1.5">
+                    <span>📦 Empaques a descontar de inventario:</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                    (Vasos y tapas automáticos)
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeBag: !prev.includeBag }))}
+                    className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                      takeawayPackaging.includeBag
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : isLight ? 'bg-white text-slate-600 border-[#DECEBD]' : 'bg-[#1c1715] text-slate-400 border-[#382b25]'
+                    }`}
+                  >
+                    <span className="text-lg">🛍️</span>
+                    <span>{takeawayPackaging.includeBag ? '✓ Bolsa' : 'Sin Bolsa'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeTray: !prev.includeTray }))}
+                    className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                      takeawayPackaging.includeTray
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : isLight ? 'bg-white text-slate-600 border-[#DECEBD]' : 'bg-[#1c1715] text-slate-400 border-[#382b25]'
+                    }`}
+                  >
+                    <span className="text-lg">☕</span>
+                    <span>{takeawayPackaging.includeTray ? '✓ Portavasos' : 'Sin Portavasos'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeCutlery: !prev.includeCutlery }))}
+                    className={`p-2.5 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                      takeawayPackaging.includeCutlery
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : isLight ? 'bg-white text-slate-600 border-[#DECEBD]' : 'bg-[#1c1715] text-slate-400 border-[#382b25]'
+                    }`}
+                  >
+                    <span className="text-lg">🍴</span>
+                    <span>{takeawayPackaging.includeCutlery ? '✓ Cubiertos' : 'Sin Cubiertos'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Botón de Confirmación para empezar a tomar pedido */}
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#DECEBD] dark:border-[#382b25]">
+              <button
+                type="button"
+                onClick={() => setShowOrderTypeSelectionModal(false)}
+                style={{ backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }}
+                className="w-full py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all select-none"
+              >
+                <span>Comenzar a Ordenar {orderType === 'TAKEAWAY' ? '🥡 (Para Llevar)' : '🍽️ (En Mesa)'} →</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE COBRO RÁPIDO DESDE COMANDERA */}
+      {showCheckoutModal && activeTable && activeTable.activeOrder && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div
+            className={`w-full max-w-md rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-[#1a1412] border-[#382b25] text-white'
+            }`}
+          >
+            {/* Header */}
+            <div className={`flex items-center justify-between pb-3 border-b ${
+              isLight ? 'border-[#DECEBD]' : 'border-white/10'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-white shadow-md"
+                  style={{ backgroundColor: themeButton }}
+                >
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Cobrar {activeTable.name}
+                  </h3>
+                  <p className={`text-xs ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    Folio: {activeTable.activeOrder.orderNumber}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowCheckoutModal(false)}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                  isLight
+                    ? 'bg-[#F3E9DC] hover:bg-[#DECEBD] text-[#5E3023]'
+                    : 'bg-[#251e1b] hover:bg-[#332924] text-slate-400 hover:text-white'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Resumen del Consumo */}
+            <div className={`p-3.5 rounded-2xl border space-y-2 text-xs ${
+              isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+            }`}>
+              <div className="flex items-center justify-between font-bold">
+                <span className={isLight ? 'text-[#7A5A43]' : 'text-slate-400'}>
+                  Consumo ({activeTable.activeOrder.items.length} artículos):
+                </span>
+                <span className={`font-mono text-base font-black ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
+                  ${activeTable.activeOrder.total.toFixed(2)} MXN
+                </span>
+              </div>
+
+              {/* Lista compacta de artículos */}
+              <div className="max-h-32 overflow-y-auto space-y-1 pr-1 border-t pt-2 border-dashed border-slate-300 dark:border-slate-800">
+                {activeTable.activeOrder.items.map((it) => (
+                  <div key={it.id} className="flex justify-between items-center text-[11px]">
+                    <span className="truncate pr-2">
+                      <strong className="font-bold">{it.quantity}x</strong> {it.productName}
+                    </span>
+                    <span className="font-mono shrink-0 font-medium">${it.subtotal.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Selector de Método de Pago */}
+            <div className="space-y-1.5">
+              <label className={`text-xs font-bold block ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
+                Método de Pago:
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutPaymentMethod('CASH')}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    checkoutPaymentMethod === 'CASH'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-400/40'
+                      : isLight
+                      ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                      : 'bg-[#1c1715] border-[#382b25] text-slate-300 hover:bg-[#251e1b]'
+                  }`}
+                >
+                  <span className="text-base">💵</span>
+                  <span>Efectivo</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCheckoutPaymentMethod('CARD')}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    checkoutPaymentMethod === 'CARD'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-400/40'
+                      : isLight
+                      ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                      : 'bg-[#1c1715] border-[#382b25] text-slate-300 hover:bg-[#251e1b]'
+                  }`}
+                >
+                  <span className="text-base">💳</span>
+                  <span>Tarjeta</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCheckoutPaymentMethod('TRANSFER')}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                    checkoutPaymentMethod === 'TRANSFER'
+                      ? 'bg-violet-600 text-white border-violet-600 shadow-md ring-2 ring-violet-400/40'
+                      : isLight
+                      ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                      : 'bg-[#1c1715] border-[#382b25] text-slate-300 hover:bg-[#251e1b]'
+                  }`}
+                >
+                  <span className="text-base">📱</span>
+                  <span>Transferencia</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Si es efectivo: input de monto recibido y cálculo de cambio */}
+            {checkoutPaymentMethod === 'CASH' && (
+              <div className={`p-3 rounded-2xl border space-y-2 text-xs ${
+                isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+              }`}>
+                <div className="flex items-center justify-between gap-3">
+                  <label className={`font-semibold ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    Monto Recibido:
+                  </label>
+                  <div className="relative w-36">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={activeTable.activeOrder.total}
+                      placeholder={activeTable.activeOrder.total.toFixed(2)}
+                      value={checkoutAmountReceived}
+                      onChange={(e) => setCheckoutAmountReceived(e.target.value)}
+                      className={`w-full pl-6 pr-3 py-1.5 rounded-xl border font-mono font-bold text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 text-right ${
+                        isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-[#1c1715] border-[#382b25] text-white'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Cambio */}
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
+                  <span className="font-bold">Cambio a Entregar:</span>
+                  <strong className={`font-mono text-base font-black ${
+                    Number(checkoutAmountReceived || 0) >= activeTable.activeOrder.total
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-amber-500'
+                  }`}>
+                    ${Math.max(0, (Number(checkoutAmountReceived || activeTable.activeOrder.total) - activeTable.activeOrder.total)).toFixed(2)} MXN
+                  </strong>
+                </div>
+              </div>
+            )}
+
+            {/* Checkbox de Imprimir Ticket */}
+            <label className={`flex items-start gap-2.5 p-2.5 rounded-xl border border-dashed text-xs cursor-pointer select-none ${
+              isLight ? 'border-[#DECEBD] bg-amber-50/50' : 'border-[#382b25] bg-amber-950/20'
+            }`}>
+              <input
+                type="checkbox"
+                checked={checkoutPrintTicket}
+                onChange={(e) => setCheckoutPrintTicket(e.target.checked)}
+                className="w-4 h-4 rounded mt-0.5 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              <div className="space-y-0.5">
+                <span className={`font-bold block ${isLight ? 'text-[#5E3023]' : 'text-amber-200'}`}>
+                  🖨️ Imprimir ticket primero antes de registrar cobro
+                </span>
+                <span className={`text-[10px] block ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                  La impresión no detiene ni bloquea el cobro si la impresora falla o se cancela.
+                </span>
+              </div>
+            </label>
+
+            {/* Botones de Acción */}
+            <div className={`pt-3 border-t flex items-center justify-between gap-2 ${
+              isLight ? 'border-[#DECEBD]' : 'border-white/10'
+            }`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCheckoutModal(false)
+                  handleOpenPrintBill()
+                }}
+                className={`px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border flex items-center gap-1.5 ${
+                  isLight
+                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                }`}
+                title="Ver o imprimir pre-cuenta sin registrar cobro"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Solo Ticket</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCheckoutModal(false)}
+                  className={`px-3.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border ${
+                    isLight
+                      ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                  }`}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleQuickCheckout}
+                  disabled={processingCheckout}
+                  className="px-4 py-2.5 rounded-xl text-white text-xs font-black flex items-center gap-1.5 shadow-lg cursor-pointer bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 transition-all select-none"
+                >
+                  {processingCheckout ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : checkoutPrintTicket ? (
+                    <Printer className="w-4 h-4" />
+                  ) : (
+                    <CreditCard className="w-4 h-4" />
+                  )}
+                  <span>
+                    {checkoutPrintTicket ? 'Imprimir y Cobrar' : 'Cobrar y Liberar'} (${activeTable.activeOrder.total.toFixed(2)})
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2889,167 +4148,6 @@ export default function ComanderaPage() {
               >
                 {assigningWaiter ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 <span>Guardar Titular</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE TICKET DE COBRO / PRE-CUENTA IMPRIMIBLE */}
-      {showBillReceiptModal && activeTable && activeTable.activeOrder && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div
-            className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto border ${
-              isLight
-                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
-                : 'bg-[#17120F] border-[#382B25] text-white'
-            }`}
-          >
-            {/* Header del modal */}
-            <div
-              className={`flex items-center justify-between pb-3 border-b ${
-                isLight ? 'border-[#DECEBD]' : 'border-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center font-bold"
-                  style={{
-                    backgroundColor: `${themePrimary}20`,
-                    color: isLight ? '#5E3023' : themePrimary,
-                  }}
-                >
-                  <Printer className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className={`text-sm font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-                    Ticket de Pre-cuenta
-                  </h3>
-                  <p className={`text-[11px] ${isLight ? 'text-[#895737]' : 'text-slate-400'}`}>
-                    Previsualización e Impresión
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowBillReceiptModal(false)}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold cursor-pointer transition-colors ${
-                  isLight
-                    ? 'bg-[#F3E9DC] text-[#5E3023] hover:bg-[#E6D5C3]'
-                    : 'bg-[#2B1712] text-slate-400 hover:text-white'
-                }`}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Vista previa térmica de Ticket (Fondo blanco, texto negro monoespaciado) */}
-            <div
-              id="bill-receipt-print"
-              className="bg-white text-slate-950 font-mono text-xs p-4 rounded-xl shadow-inner border border-slate-300 space-y-2.5 print:m-0 print:p-0 print:border-none print:shadow-none"
-            >
-              {/* Cabecera del ticket */}
-              <div className="text-center space-y-0.5 border-b border-dashed border-slate-400 pb-2">
-                <strong className="text-sm block tracking-wider uppercase font-extrabold">
-                  {activeBranch?.name || 'CAFETERÍA & RESTAURANTE'}
-                </strong>
-                <p className="text-[10px] text-slate-600">--- PRE-CUENTA DE CONSUMO ---</p>
-                <p className="text-[11px] font-bold">MESA: {activeTable.name}</p>
-                <p className="text-[10px] text-slate-600">
-                  Folio: {activeTable.activeOrder.orderNumber}
-                </p>
-                <p className="text-[10px] text-slate-500">
-                  Fecha: {new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
-                </p>
-              </div>
-
-              {/* Datos de servicio */}
-              <div className="text-[10px] space-y-0.5 border-b border-dashed border-slate-400 pb-2 text-slate-700">
-                <p>
-                  Mesero: <strong>{activeTable.currentWaiter?.name || activeTable.activeOrder.waiter?.name || currentUser?.name}</strong>
-                  {activeTable.assignedWaiter && activeTable.currentWaiter && activeTable.assignedWaiter.id !== activeTable.currentWaiter.id && (
-                    <span className="block text-[9px] text-slate-500">
-                      (Titular: {activeTable.assignedWaiter.name})
-                    </span>
-                  )}
-                </p>
-                {activeTable.activeOrder.customerName && (
-                  <p>Comensal: {activeTable.activeOrder.customerName}</p>
-                )}
-              </div>
-
-              {/* Desglose de platillos */}
-              <div className="space-y-1.5 border-b border-dashed border-slate-400 pb-2">
-                <div className="flex justify-between text-[10px] font-bold border-b border-slate-200 pb-1">
-                  <span>CANT / DESCRIPCIÓN</span>
-                  <span>TOTAL</span>
-                </div>
-                {activeTable.activeOrder.items.map((it) => (
-                  <div key={it.id} className="text-[11px] flex justify-between items-start">
-                    <div className="pr-2">
-                      <span className="font-bold">{it.quantity}x</span> {it.productName}
-                      {it.notes && (
-                        <span className="block text-[9px] text-slate-500 italic">
-                          ({it.notes})
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-semibold shrink-0">
-                      ${it.subtotal.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Totales */}
-              <div className="space-y-1 pt-1">
-                <div className="flex justify-between text-xs">
-                  <span>Subtotal:</span>
-                  <span>${activeTable.activeOrder.subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm font-black border-t border-slate-900 pt-1">
-                  <span>TOTAL A PAGAR:</span>
-                  <span>${activeTable.activeOrder.total.toFixed(2)} MXN</span>
-                </div>
-              </div>
-
-              {/* Mensaje de cobro en caja */}
-              <div className="text-center pt-2 border-t border-dashed border-slate-400 space-y-1">
-                <p className="text-[10px] font-bold">
-                  *** FAVOR DE PAGAR EN CAJA ***
-                </p>
-                <p className="text-[9px] text-slate-500">
-                  Este documento es una pre-cuenta informativa de consumo. Su comprobante de pago oficial se entrega al pagar en caja.
-                </p>
-                <p className="text-[10px] font-semibold pt-1">¡Gracias por su visita!</p>
-              </div>
-            </div>
-
-            {/* Acciones del modal */}
-            <div className="flex items-center justify-between gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowBillReceiptModal(false)}
-                className={`px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border ${
-                  isLight
-                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
-                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
-                }`}
-              >
-                Cerrar
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  window.print()
-                  notify.success('Ticket enviado a impresión', `Pre-cuenta de ${activeTable.name}`)
-                }}
-                style={{ backgroundColor: themeButton }}
-                className="px-5 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 shadow-lg cursor-pointer hover:opacity-90 transition-opacity"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Imprimir Ticket</span>
               </button>
             </div>
           </div>
@@ -3334,6 +4432,18 @@ export default function ComanderaPage() {
         primaryColor={themePrimary}
         buttonColor={themeButton}
         onConfirm={handleConfirmCustomization}
+      />
+
+      {/* MODAL CON ANIMACIÓN DE IMPRESORA TÉRMICA EN TIEMPO REAL */}
+      <ThermalTicketPrinterAnimation
+        isOpen={showPrintingAnimation}
+        ticket={billReceiptData}
+        onClose={() => setShowPrintingAnimation(false)}
+        onReprint={() => {
+          if (billReceiptData) {
+            printTicketDocument(billReceiptData)
+          }
+        }}
       />
     </div>
   )

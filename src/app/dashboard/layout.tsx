@@ -24,10 +24,12 @@ export default async function DashboardLayout({
     session.permissions.canViewReports ||
     session.permissions.canManageInventory
 
+  // Los meseros operan exclusivamente en la Comandera de Mesas
+  if (session.roleCodes.includes('WAITER') && !isOwnerOrAdmin) {
+    redirect('/comandera')
+  }
+
   if (!isOwnerOrAdmin && !hasManagementPermission) {
-    if (session.roleCodes.includes('WAITER')) {
-      redirect('/comandera')
-    }
     if (session.permissions.canAccessPOS || session.roleCodes.includes('CASHIER')) {
       redirect('/pos')
     }

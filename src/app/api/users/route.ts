@@ -13,13 +13,25 @@ export async function GET() {
       )
     }
 
-    // 1. Obtener información de la suscripción y límites del plan
-    const subscription = await prisma.subscription.findUnique({
-      where: { businessId: session.businessId },
-      include: { plan: true },
-    })
-
-    const maxUsers = subscription?.plan?.maxUsers ?? 3
+    // 1. Obtener límite de colaboradores (prioriza el maxStaff de la sucursal activa)
+    let maxUsers = 10
+    if (session.activeBranchId) {
+      const branch = await prisma.branch.findUnique({
+        where: { id: session.activeBranchId },
+        select: { maxStaff: true },
+      })
+      if (branch?.maxStaff && branch.maxStaff > 0) {
+        maxUsers = branch.maxStaff
+      }
+    } else {
+      const subscription = await prisma.subscription.findUnique({
+        where: { businessId: session.businessId },
+        include: { plan: true },
+      })
+      if (subscription?.plan?.maxUsers) {
+        maxUsers = subscription.plan.maxUsers
+      }
+    }
 
     // 2. Obtener usuarios del negocio
     const users = await prisma.user.findMany({
@@ -49,7 +61,10 @@ export async function GET() {
       orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
     })
 
-    const activeUsersCount = users.filter((u: any) => u.active).length
+    // Contar usuarios activos en la sucursal actual
+    const activeUsersCount = users.filter((u: any) =>
+      u.active && (!session.activeBranchId || u.userBranches.some((ub: any) => ub.branch.id === session.activeBranchId))
+    ).length
 
     return NextResponse.json({
       success: true,
@@ -84,7 +99,7 @@ export async function GET() {
         maxUsers,
         activeUsers: activeUsersCount,
         canAddUser: activeUsersCount < maxUsers,
-        planName: subscription?.plan?.name || 'Plan Estándar',
+        planName: 'Capacidad de Personal',
       },
     })
   } catch (error) {

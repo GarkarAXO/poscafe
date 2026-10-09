@@ -45,7 +45,7 @@ export async function PATCH(
     })
 
     // Actualizar estado general de la orden si corresponde
-    if (status === 'COOKING') {
+    if (status === 'COOKING' || status === 'READY') {
       await prisma.order.update({
         where: { id: item.orderId },
         data: { status: 'PREPARING' },

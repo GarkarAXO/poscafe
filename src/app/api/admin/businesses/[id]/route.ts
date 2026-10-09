@@ -26,6 +26,7 @@ export async function PUT(
       subscriptionStatus,
       settings, // Objeto con logoUrl, primaryColor, secondaryColor, accentColor, multiBranchEnabled, canCustomizeColors, recipesEnabled, tablesEnabled, kitchenEnabled, etc.
       newOwnerPassword,
+      branchesStaffLimits, // Array<{ id: string, maxStaff: number }>
     } = body
 
     if (newOwnerPassword !== undefined && newOwnerPassword !== null && newOwnerPassword.trim() !== '') {
@@ -185,6 +186,18 @@ export async function PUT(
             where: { id: ownerUser.id },
             data: { passwordHash },
           })
+        }
+      }
+
+      // 5. Actualizar límite de personal por sucursal (maxStaff) si se especificó
+      if (Array.isArray(branchesStaffLimits) && branchesStaffLimits.length > 0) {
+        for (const b of branchesStaffLimits) {
+          if (b.id && typeof b.maxStaff === 'number') {
+            await tx.branch.update({
+              where: { id: b.id },
+              data: { maxStaff: Math.max(1, Math.floor(b.maxStaff)) },
+            })
+          }
         }
       }
 

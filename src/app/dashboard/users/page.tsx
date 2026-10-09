@@ -208,8 +208,8 @@ export default function UsersAndRolesPage() {
     } else {
       if (planLimits && !planLimits.canAddUser) {
         notify.warning(
-          'Límite de plan alcanzado',
-          `Tu plan ${planLimits.planName} permite hasta ${planLimits.maxUsers} usuarios. Actualiza tu plan para registrar más personal.`
+          'Límite de colaboradores alcanzado',
+          `Esta sucursal permite un máximo de ${planLimits.maxUsers} colaboradores activos. Consulta con el administrador para ampliar el cupo de personal.`
         )
         return
       }
@@ -371,8 +371,8 @@ export default function UsersAndRolesPage() {
       // Activar
       if (planLimits && !planLimits.canAddUser) {
         notify.warning(
-          'Límite de plan',
-          `Has alcanzado el límite de ${planLimits.maxUsers} usuarios activos en tu plan. Desactiva otro colaborador o actualiza tu plan.`
+          'Límite de colaboradores alcanzado',
+          `Has alcanzado el límite de ${planLimits.maxUsers} colaboradores activos en esta sucursal. Desactiva otro colaborador o solicita al administrador aumentar el cupo.`
         )
         return
       }
@@ -555,8 +555,8 @@ export default function UsersAndRolesPage() {
               </div>
             </div>
 
-            <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${classes.badge}`}>
-              {planLimits.planName}
+            <span className={`text-[11px] font-medium px-2 py-0.5 rounded border ${classes.badge}`}>
+              Cupo Sucursal
             </span>
           </div>
         )}

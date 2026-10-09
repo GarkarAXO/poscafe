@@ -43,6 +43,50 @@ export async function POST(
     }
 
     if (action === 'RELEASE') {
+      // Validar si la mesa tiene una orden activa con platillos en cocina o saldo sin liquidar
+      const activeOrder = await prisma.order.findFirst({
+        where: {
+          tableId,
+          branchId,
+          status: { in: [OrderStatus.DRAFT, OrderStatus.SENT, OrderStatus.PREPARING, OrderStatus.SERVED] },
+        },
+        include: {
+          items: true,
+        },
+      })
+
+      if (activeOrder) {
+        const inKitchenItems = activeOrder.items.filter((it: any) =>
+          it.kitchenStatus === 'PENDING' || it.kitchenStatus === 'COOKING' || it.kitchenStatus === 'READY'
+        )
+
+        if (inKitchenItems.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: 'ITEMS_IN_KITCHEN',
+                message: `No se puede liberar la mesa: hay ${inKitchenItems.length} platillo(s) preparándose o pendientes en cocina.`,
+              },
+            },
+            { status: 400 }
+          )
+        }
+
+        if (Number(activeOrder.total) > 0 && activeOrder.status !== OrderStatus.PAID) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: {
+                code: 'ORDER_UNPAID',
+                message: `No se puede liberar la mesa: tiene un consumo pendiente de cobro por $${Number(activeOrder.total).toFixed(2)} MXN. Cobra la cuenta primero.`,
+              },
+            },
+            { status: 400 }
+          )
+        }
+      }
+
       // Liberar mesa y regresar al mesero asignado titular
       const updated = await prisma.table.update({
         where: { id: tableId },

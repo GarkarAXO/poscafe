@@ -162,10 +162,12 @@ model BusinessSetting {
   courtesiesEnabled    Boolean  @default(true)
   negativeStockEnabled Boolean  @default(false)
 
-  // Insumos predeterminados de empaque para llevar (Bolsas, Charolas, Cubiertos)
-  takeawayBagItemId     String?
-  takeawayTrayItemId    String?
-  takeawayCutleryItemId String?
+  // Insumos predeterminados de empaque para llevar (Bolsas, Charolas vasos, Charolas comida, Cubiertos, Popotes)
+  takeawayBagItemId      String?
+  takeawayTrayItemId     String?
+  takeawayFoodTrayItemId String?
+  takeawayCutleryItemId  String?
+  takeawayStrawItemId    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -196,6 +198,9 @@ model Branch {
 
   // Modo de servicio en mesas: 'FREE' (Libre: cualquier mesero atiende) | 'ASSIGNED' (Mesero asignado por mesa)
   tableServiceMode String?   @default("FREE")
+
+  // Límite máximo de colaboradores asignables a esta sucursal (configurable por el Administrador)
+  maxStaff         Int?      @default(10)
 
   // Personalización visual por sucursal
   logoUrl        String?

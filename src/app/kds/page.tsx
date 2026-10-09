@@ -21,6 +21,7 @@ import {
   Flame,
   CheckCheck,
   ShieldAlert,
+  MoreHorizontal,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
@@ -59,6 +60,7 @@ export default function KdsPage() {
   const [error, setError] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [mounted, setMounted] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
@@ -75,6 +77,8 @@ export default function KdsPage() {
   } | null>(null)
 
   const prevOrderCountRef = useRef<number>(0)
+  // Protección contra condición de carrera entre optimistic updates y polling cada 4s
+  const pendingItemStatusUpdatesRef = useRef<Map<string, { status: string; timestamp: number }>>(new Map())
 
   // Validar permisos y cargar datos de sucursal para temas
   useEffect(() => {
@@ -164,6 +168,13 @@ export default function KdsPage() {
     }
   }
 
+const STATUS_RANK: Record<string, number> = {
+  PENDING: 0,
+  COOKING: 1,
+  READY: 2,
+  SERVED: 3,
+}
+
   // Cargar órdenes KDS
   const fetchKdsOrders = async (silent = false) => {
     try {
@@ -171,7 +182,34 @@ export default function KdsPage() {
       const res = await fetch(`/api/kds/orders?view=${view}`).then((r) => r.json())
 
       if (res.success) {
-        setOrders(res.data)
+        const now = Date.now()
+        // Reconciliar con actualizaciones pendientes usando jerarquía de estados para evitar regresiones
+        const reconciledOrders = (res.data || []).map((order: KdsOrder) => ({
+          ...order,
+          items: order.items.map((it: KdsItem) => {
+            const pending = pendingItemStatusUpdatesRef.current.get(it.id)
+            if (pending) {
+              const serverRank = STATUS_RANK[it.kitchenStatus] ?? 0
+              const pendingRank = STATUS_RANK[pending.status] ?? 0
+
+              // Si el servidor ya alcanzó o superó el estado deseado, limpiar la protección
+              if (serverRank >= pendingRank) {
+                pendingItemStatusUpdatesRef.current.delete(it.id)
+                return it
+              }
+              // Si el estado local es más reciente (< 8 segundos), mantener optimista para que no regrese
+              if (now - pending.timestamp < 8000) {
+                return { ...it, kitchenStatus: pending.status as any }
+              } else {
+                pendingItemStatusUpdatesRef.current.delete(it.id)
+                return it
+              }
+            }
+            return it
+          }),
+        }))
+
+        setOrders(reconciledOrders)
         // Detectar si entraron nuevas órdenes para sonar alerta
         if (
           view === 'active' &&
@@ -195,65 +233,186 @@ export default function KdsPage() {
   useEffect(() => {
     setMounted(true)
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
   }, [])
 
-  // Polling automático cada 4 segundos y sincronización instantánea al enfocar pestaña
+  // Polling automático cada 3 segundos y sincronización instantánea por eventos de storage y custom events
   useEffect(() => {
     fetchKdsOrders()
-    const interval = setInterval(() => fetchKdsOrders(true), 4000)
+    const interval = setInterval(() => fetchKdsOrders(true), 3000)
 
     const handleFocus = () => fetchKdsOrders(true)
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') fetchKdsOrders(true)
     }
+    const handleKitchenEvent = () => fetchKdsOrders(true)
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'poscafe_kitchen_event') {
+        fetchKdsOrders(true)
+      }
+    }
 
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('poscafe:kitchen-updated', handleKitchenEvent)
+    window.addEventListener('storage', handleStorage)
 
     return () => {
       clearInterval(interval)
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('poscafe:kitchen-updated', handleKitchenEvent)
+      window.removeEventListener('storage', handleStorage)
     }
   }, [view])
 
-  // Cambiar estado individual de un platillo
+  // Cambiar estado individual de un platillo (Ciclo: PENDING -> COOKING -> READY -> SERVED)
   const handleToggleItemStatus = async (itemId: string, currentStatus: string) => {
-    let nextStatus = 'COOKING'
+    let nextStatus: 'COOKING' | 'READY' | 'SERVED' = 'COOKING'
     if (currentStatus === 'PENDING') nextStatus = 'COOKING'
     else if (currentStatus === 'COOKING') nextStatus = 'READY'
     else if (currentStatus === 'READY') nextStatus = 'SERVED'
+    else if (currentStatus === 'SERVED') nextStatus = 'COOKING'
+
+    // Registrar actualización pendiente para protegerla del polling
+    pendingItemStatusUpdatesRef.current.set(itemId, {
+      status: nextStatus,
+      timestamp: Date.now(),
+    })
+
+    // Optimistic update local inmediato
+    setOrders((prev) =>
+      prev.map((order) => ({
+        ...order,
+        items: order.items.map((it) =>
+          it.id === itemId ? { ...it, kitchenStatus: nextStatus } : it
+        ),
+      }))
+    )
+
+    // Notificar instantáneamente a Comandera de Mesas
+    try {
+      localStorage.setItem(
+        'poscafe_kitchen_event',
+        JSON.stringify({ type: 'STATUS_CHANGE', itemId, status: nextStatus, timestamp: Date.now() })
+      )
+      window.dispatchEvent(
+        new CustomEvent('poscafe:kitchen-updated', { detail: { itemId, status: nextStatus } })
+      )
+    } catch {}
 
     try {
-      // Optimistic update local
-      setOrders((prev) =>
-        prev.map((order) => ({
-          ...order,
-          items: order.items.map((it) =>
-            it.id === itemId ? { ...it, kitchenStatus: nextStatus as any } : it
-          ),
-        }))
-      )
-
-      await fetch(`/api/kds/items/${itemId}/status`, {
+      const res = await fetch(`/api/kds/items/${itemId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
       })
+      const json = await res.json()
+      if (!json.success) {
+        pendingItemStatusUpdatesRef.current.delete(itemId)
+        notify.error('Error al actualizar', json.error?.message || 'No se pudo actualizar estado')
+        fetchKdsOrders(true)
+      } else {
+        if (nextStatus === 'READY') {
+          notify.success('🔔 Platillo Listo', 'Marcado como listo para entregar al mesero')
+        }
+      }
     } catch {
+      pendingItemStatusUpdatesRef.current.delete(itemId)
       fetchKdsOrders(true)
     }
   }
 
-  // Bump de orden completa (Marcar todo Listo / Despachar)
-  const handleBumpOrder = async (orderId: string) => {
+  // Bump de orden completa (Poner en marcha / Marcar todo Listo / Despachar)
+  const handleBumpOrder = async (orderId: string, requestedStatus?: 'COOKING' | 'READY' | 'SERVED') => {
+    const targetOrder = orders.find((o) => o.id === orderId)
+    if (!targetOrder) return
+
+    const visibleItems = filterOrderItems(targetOrder.items)
+    const hasPending = visibleItems.some((it) => it.kitchenStatus === 'PENDING')
+    const hasCooking = visibleItems.some((it) => it.kitchenStatus === 'COOKING')
+    const allReady =
+      visibleItems.length > 0 &&
+      visibleItems.every((it) => it.kitchenStatus === 'READY' || it.kitchenStatus === 'SERVED')
+
+    const newTargetStatus: 'COOKING' | 'READY' | 'SERVED' =
+      requestedStatus || (allReady ? 'SERVED' : hasPending && !hasCooking ? 'COOKING' : 'READY')
+
+    const now = Date.now()
+    // Optimistic update local y registro en pending updates
+    visibleItems.forEach((it) => {
+      pendingItemStatusUpdatesRef.current.set(it.id, {
+        status: newTargetStatus,
+        timestamp: now,
+      })
+    })
+
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order
+        return {
+          ...order,
+          items: order.items.map((it) => {
+            if (newTargetStatus === 'COOKING' && it.kitchenStatus === 'PENDING') {
+              return { ...it, kitchenStatus: 'COOKING' }
+            }
+            if (
+              newTargetStatus === 'READY' &&
+              (it.kitchenStatus === 'PENDING' || it.kitchenStatus === 'COOKING')
+            ) {
+              return { ...it, kitchenStatus: 'READY' }
+            }
+            if (newTargetStatus === 'SERVED') {
+              return { ...it, kitchenStatus: 'SERVED' }
+            }
+            return it
+          }),
+        }
+      })
+    )
+
+    // Notificar instantáneamente a Comandera
+    try {
+      localStorage.setItem(
+        'poscafe_kitchen_event',
+        JSON.stringify({ type: 'ORDER_BUMP', orderId, targetStatus: newTargetStatus, timestamp: Date.now() })
+      )
+      window.dispatchEvent(
+        new CustomEvent('poscafe:kitchen-updated', { detail: { orderId, targetStatus: newTargetStatus } })
+      )
+    } catch {}
+
     try {
       const res = await fetch(`/api/kds/orders/${orderId}/bump`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newTargetStatus }),
       }).then((r) => r.json())
 
       if (res.success) {
+        if (newTargetStatus === 'READY') {
+          notify.success(
+            '🔔 ¡Comanda lista!',
+            `Comanda #${targetOrder.orderNumber.slice(-4)} lista para servir (${
+              targetOrder.waiter ? `Mesero: ${targetOrder.waiter.name}` : 'Barra'
+            })`
+          )
+        } else if (newTargetStatus === 'COOKING') {
+          notify.info(
+            '🍳 En marcha',
+            `Comanda #${targetOrder.orderNumber.slice(-4)} puesta en preparación`
+          )
+        }
+        fetchKdsOrders(true)
+      } else {
+        notify.error('Error al actualizar comanda', res.error?.message || 'No se pudo actualizar')
         fetchKdsOrders(true)
       }
     } catch {
@@ -406,19 +565,7 @@ export default function KdsPage() {
 
           <div>
             <h1 className={`text-sm font-bold flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-              <span>KDS • Pantalla de Cocina y Barra</span>
-              {branchesCount > 1 && activeBranch?.name && (
-                <span
-                  className="text-[10px] px-2 py-0.5 rounded-full font-bold border hidden sm:inline-block"
-                  style={{
-                    backgroundColor: `${themePrimary}${isLight ? '15' : '20'}`,
-                    borderColor: `${themePrimary}${isLight ? '35' : '40'}`,
-                    color: isLight ? '#5E3023' : themePrimary,
-                  }}
-                >
-                  {activeBranch.name}
-                </span>
-              )}
+              <span>Pantalla de Cocina y Barra</span>
             </h1>
             <p suppressHydrationWarning className={`text-[11px] font-mono ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
               {mounted
@@ -543,54 +690,108 @@ export default function KdsPage() {
             </button>
           </div>
 
-          {/* Sound Toggle */}
-          <button
-            type="button"
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`p-2 rounded-xl border text-xs transition-all cursor-pointer ${
-              soundEnabled
-                ? isLight
-                  ? 'bg-white border-[#DECEBD] text-[#5E3023]'
-                  : 'bg-slate-800 border-slate-700 text-slate-200'
-                : isLight
-                ? 'bg-[#E6D5C3]/50 border-[#DECEBD] text-[#A88C7D]'
-                : 'bg-slate-900 border-slate-800 text-slate-500'
-            }`}
-            title={soundEnabled ? 'Silenciar alertas' : 'Activar sonido de nuevas comandas'}
-          >
-            {soundEnabled ? (
-              <Volume2 className="w-4 h-4" style={{ color: themePrimary }} />
-            ) : (
-              <VolumeX className="w-4 h-4" />
+          {/* Menú de Opciones (⋯ Opciones): Sonido y Ampliar / Pantalla completa */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+              className={`p-2 rounded-xl border text-xs flex items-center gap-1 transition-all cursor-pointer font-bold ${
+                isLight
+                  ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
+                  : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+              }`}
+              title="Más opciones de pantalla"
+            >
+              <MoreHorizontal className="w-5 h-5" />
+              <span className="hidden sm:inline">Opciones</span>
+            </button>
+
+            {/* Dropdown flotante */}
+            {showOptionsMenu && (
+              <>
+                {/* Backdrop invisible para cerrar al hacer clic afuera */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowOptionsMenu(false)}
+                />
+                <div
+                  className={`absolute right-0 top-full mt-1.5 w-60 rounded-2xl border shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 ${
+                    isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-[#1c1715] border-[#382b25] text-slate-100'
+                  }`}
+                >
+                  {/* Botón de Sonido */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSoundEnabled(!soundEnabled)
+                    }}
+                    className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer text-left ${
+                      isLight ? 'hover:bg-[#F3E9DC] text-[#5E3023]' : 'hover:bg-[#251e1b] text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {soundEnabled ? (
+                        <Volume2 className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <VolumeX className="w-4 h-4 text-slate-400" />
+                      )}
+                      <span>Sonido de alertas</span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        soundEnabled
+                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-500'
+                          : isLight
+                          ? 'bg-slate-100 border-slate-200 text-slate-500'
+                          : 'bg-slate-800 border-slate-700 text-slate-400'
+                      }`}
+                    >
+                      {soundEnabled ? 'Activado' : 'Silenciado'}
+                    </span>
+                  </button>
+
+                  {/* Botón Ampliar / Pantalla completa */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleFullscreen()
+                      setShowOptionsMenu(false)
+                    }}
+                    className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer text-left ${
+                      isLight ? 'hover:bg-[#F3E9DC] text-[#5E3023]' : 'hover:bg-[#251e1b] text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isFullscreen ? (
+                        <Minimize2 className="w-4 h-4 text-amber-500" />
+                      ) : (
+                        <Maximize2 className="w-4 h-4 text-amber-500" />
+                      )}
+                      <span>{isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}</span>
+                    </div>
+                    <span className="text-[10px] opacity-60 font-mono">
+                      {isFullscreen ? 'Normal' : 'Ampliar'}
+                    </span>
+                  </button>
+
+                  {/* Separador */}
+                  <div className={`h-px my-1 ${isLight ? 'bg-[#DECEBD]' : 'bg-[#382b25]'}`} />
+
+                  {/* Ir a Comandera de Mesas */}
+                  <Link
+                    href="/comandera"
+                    onClick={() => setShowOptionsMenu(false)}
+                    className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer text-left ${
+                      isLight ? 'hover:bg-[#F3E9DC] text-[#5E3023]' : 'hover:bg-[#251e1b] text-slate-200'
+                    }`}
+                  >
+                    <UtensilsCrossed className="w-4 h-4 text-violet-400" />
+                    <span>Ir a Comandera de Mesas</span>
+                  </Link>
+                </div>
+              </>
             )}
-          </button>
-
-          {/* Fullscreen Button */}
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className={`p-2 rounded-xl border text-xs transition-all cursor-pointer ${
-              isLight
-                ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
-                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
-            }`}
-            title="Pantalla completa"
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-
-          {/* Ir a Comandera */}
-          <Link
-            href="/comandera"
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all hidden lg:flex items-center gap-1.5 cursor-pointer ${
-              isLight
-                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
-                : 'bg-violet-600/20 hover:bg-violet-600/30 border-violet-500/30 text-violet-300'
-            }`}
-          >
-            <UtensilsCrossed className="w-3.5 h-3.5" />
-            <span>Comandera</span>
-          </Link>
+          </div>
         </div>
       </header>
 
@@ -635,9 +836,14 @@ export default function KdsPage() {
               const isUrgent = elapsed >= 12
               const isWarning = elapsed >= 6 && elapsed < 12
 
-              const allReady = visibleItems.every(
-                (it) => it.kitchenStatus === 'READY' || it.kitchenStatus === 'SERVED'
-              )
+              const hasPending = visibleItems.some((it) => it.kitchenStatus === 'PENDING')
+              const hasCooking = visibleItems.some((it) => it.kitchenStatus === 'COOKING')
+              const allReady =
+                visibleItems.length > 0 &&
+                visibleItems.every((it) => it.kitchenStatus === 'READY' || it.kitchenStatus === 'SERVED')
+              const isAllPending =
+                visibleItems.length > 0 &&
+                visibleItems.every((it) => it.kitchenStatus === 'PENDING')
 
               const cardBg = isUrgent
                 ? isLight
@@ -711,11 +917,26 @@ export default function KdsPage() {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
                           className={`text-base font-black block tracking-tight ${
-                            isLight ? 'text-[#2B1712]' : 'text-white'
+                            order.orderType === 'TAKEAWAY'
+                              ? isLight
+                                ? 'text-emerald-950 font-black'
+                                : 'text-emerald-300 font-black'
+                              : isLight
+                              ? 'text-[#2B1712]'
+                              : 'text-white'
                           }`}
                         >
-                          {order.table ? order.table.name.toUpperCase() : '🛍️ PARA LLEVAR'}
+                          {order.orderType === 'TAKEAWAY'
+                            ? order.table
+                              ? `🥡 ${order.table.name.toUpperCase()} (LLEVAR)`
+                              : '🥡 PARA LLEVAR'
+                            : (order.table ? order.table.name.toUpperCase() : 'SALÓN')}
                         </span>
+                        {order.orderType === 'TAKEAWAY' && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white animate-pulse shadow-xs">
+                            PARA LLEVAR
+                          </span>
+                        )}
                         <span
                           className="text-[10px] px-2 py-0.5 rounded-full font-bold border"
                           style={{
@@ -746,6 +967,31 @@ export default function KdsPage() {
                           👤 Cliente: {order.customerName}
                         </span>
                       )}
+
+                      {/* Estado General de la Comanda y Notificación a Mesero */}
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        {allReady ? (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1 shadow-xs animate-pulse">
+                            🔔 ¡LISTO PARA SERVIR!
+                          </span>
+                        ) : hasCooking ? (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 flex items-center gap-1 shadow-xs">
+                            🍳 EN PREPARACIÓN
+                          </span>
+                        ) : isAllPending ? (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-600 text-white flex items-center gap-1 shadow-xs animate-pulse">
+                            ⏳ NUEVA COMANDA
+                          </span>
+                        ) : null}
+
+                        {allReady && order.waiter && (
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                            isLight ? 'bg-emerald-100 text-emerald-950 border-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          }`}>
+                            🧑‍🍳 Entregar a: {order.waiter.name}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Timer Badge */}
@@ -905,21 +1151,38 @@ export default function KdsPage() {
                     })}
                   </div>
 
-                  {/* Ticket Bottom Bump Action */}
+                  {/* Ticket Bottom Actions */}
                   <div
-                    className={`p-3 border-t shrink-0 ${
+                    className={`p-3 border-t shrink-0 flex items-center gap-2 ${
                       isLight ? 'border-[#DECEBD] bg-[#FAF6F0]' : 'border-slate-800 bg-slate-950/60'
                     }`}
                   >
+                    {/* Botón rápido "En Marcha" si hay platillos pendientes y la orden no está toda lista */}
+                    {!allReady && hasPending && (
+                      <button
+                        type="button"
+                        onClick={() => handleBumpOrder(order.id, 'COOKING')}
+                        className={`py-2.5 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
+                          isLight
+                            ? 'bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300'
+                            : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40'
+                        }`}
+                        title="Poner en preparación todos los platillos pendientes"
+                      >
+                        <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>🍳 En Marcha</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() => handleBumpOrder(order.id)}
+                      onClick={() => handleBumpOrder(order.id, allReady ? 'SERVED' : 'READY')}
                       style={
                         !allReady
                           ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF' }
                           : undefined
                       }
-                      className={`w-full py-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md active:scale-95 ${
+                      className={`flex-1 py-2.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95 ${
                         allReady
                           ? isLight
                             ? 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-emerald-700/25'
@@ -930,12 +1193,12 @@ export default function KdsPage() {
                       {allReady ? (
                         <>
                           <CheckCheck className="w-4 h-4" />
-                          <span>✓ Despachar / Servir Comanda</span>
+                          <span>✓ Despachar / Servir</span>
                         </>
                       ) : (
                         <>
                           <Sparkles className="w-4 h-4" />
-                          <span>⚡ Marcar Todo como LISTO</span>
+                          <span>⚡ Marcar Todo LISTO</span>
                         </>
                       )}
                     </button>

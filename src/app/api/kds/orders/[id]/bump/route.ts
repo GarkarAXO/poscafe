@@ -30,6 +30,9 @@ export async function POST(
       )
     }
 
+    const body = await request.json().catch(() => ({}))
+    const requestedStatus = body?.status // 'COOKING' | 'READY' | 'SERVED'
+
     const hasPendingOrCooking = order.items.some(
       (it) => it.kitchenStatus === 'PENDING' || it.kitchenStatus === 'COOKING'
     )
@@ -37,16 +40,29 @@ export async function POST(
     let newStatus = 'READY'
     let orderStatus = 'PREPARING'
 
-    if (!hasPendingOrCooking) {
+    if (requestedStatus === 'COOKING') {
+      newStatus = 'COOKING'
+      orderStatus = 'PREPARING'
+    } else if (requestedStatus === 'READY') {
+      newStatus = 'READY'
+      orderStatus = 'PREPARING'
+    } else if (requestedStatus === 'SERVED') {
+      newStatus = 'SERVED'
+      orderStatus = 'SERVED'
+    } else if (!hasPendingOrCooking) {
       // Si ya estaban todos listos, se despacha/sirve completamente
       newStatus = 'SERVED'
       orderStatus = 'SERVED'
     }
 
-    // Actualizar todos los ítems de la comanda
+    // Actualizar los ítems correspondientes según la acción
     await prisma.$transaction([
       prisma.orderItem.updateMany({
-        where: { orderId: order.id },
+        where: {
+          orderId: order.id,
+          ...(newStatus === 'COOKING' ? { kitchenStatus: 'PENDING' } : {}),
+          ...(newStatus === 'READY' ? { kitchenStatus: { in: ['PENDING', 'COOKING'] } } : {}),
+        },
         data: { kitchenStatus: newStatus },
       }),
       prisma.order.update({
@@ -58,7 +74,9 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message:
-        newStatus === 'READY'
+        newStatus === 'COOKING'
+          ? 'Comanda puesta en marcha en cocina'
+          : newStatus === 'READY'
           ? 'Todos los platillos marcados como LISTOS para entrega'
           : 'Comanda despachada / servida',
       targetStatus: newStatus,

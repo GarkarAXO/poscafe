@@ -13,10 +13,20 @@ const pool =
   globalForPrisma.pool ??
   new Pool({
     connectionString,
-    max: 20,
+    max: 15,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000,
+    connectionTimeoutMillis: 30000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+    ssl: { rejectUnauthorized: false },
   })
+
+if (!globalForPrisma.pool) {
+  pool.on('error', (err) => {
+    console.warn('Advertencia en pool de Postgres (inactivo/reconexión):', err.message)
+  })
+}
+
 const adapter = new PrismaPg(pool)
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter })

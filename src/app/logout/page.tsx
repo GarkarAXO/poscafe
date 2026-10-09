@@ -87,12 +87,47 @@ export default function LogoutPage() {
         return
       }
 
-      // Redirigir según los permisos del usuario
-      if (result.data?.user?.permissions?.canAccessPOS) {
-        router.push('/pos')
-      } else {
-        router.push('/dashboard')
+      // Redirigir según el rol y permisos específicos del usuario
+      const user = result.data?.user
+      const userRoles: string[] = user?.roleCodes || []
+      const permissions = user?.permissions || {}
+      const isOwnerOrAdmin =
+        userRoles.includes('ADMIN') ||
+        userRoles.includes('BRANCH_MANAGER') ||
+        userRoles.includes('SUPERADMIN')
+      const hasManagementPermission =
+        permissions.canManageSettings ||
+        permissions.canManageUsers ||
+        permissions.canManageCatalog ||
+        permissions.canViewReports ||
+        permissions.canManageInventory
+
+      // 1. Los meseros operan estrictamente en la Comandera de Mesas
+      if (userRoles.includes('WAITER') && !isOwnerOrAdmin) {
+        router.push('/comandera')
+        return
       }
+
+      // 2. Personal de cocina / barra
+      if (userRoles.includes('CHEF') || userRoles.includes('KITCHEN')) {
+        router.push('/kds')
+        return
+      }
+
+      // 3. Administradores o personal con permisos de gestión
+      if (isOwnerOrAdmin || hasManagementPermission) {
+        router.push('/dashboard')
+        return
+      }
+
+      // 4. Cajeros o usuarios habilitados para Terminal POS
+      if (permissions.canAccessPOS || userRoles.includes('CASHIER')) {
+        router.push('/pos')
+        return
+      }
+
+      // 5. Por defecto
+      router.push('/login')
     } catch {
       setError('Error al conectar con el servidor')
       setLoading(false)

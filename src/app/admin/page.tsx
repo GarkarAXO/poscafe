@@ -23,7 +23,8 @@ export default async function AdminPlatformPage() {
     include: {
       settings: true,
       branches: {
-        select: { id: true },
+        select: { id: true, name: true, code: true, maxStaff: true },
+        where: { deletedAt: null },
       },
       users: {
         select: { id: true, name: true, email: true },
@@ -76,6 +77,12 @@ export default async function AdminPlatformPage() {
     active: b.active,
     createdAt: b.createdAt.toISOString(),
     branchesCount: b.branches.length,
+    branches: b.branches.map((br) => ({
+      id: br.id,
+      name: br.name,
+      code: br.code,
+      maxStaff: br.maxStaff ?? 10,
+    })),
     usersCount: b._count.users,
     productsCount: b._count.products,
     settings: b.settings

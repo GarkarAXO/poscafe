@@ -115,6 +115,7 @@ export async function GET(request: Request) {
           customerName: order.customerName,
           orderType: order.orderType,
           status: order.status,
+          notes: order.notes,
           subtotal: Number(order.subtotal),
           total: Number(order.total),
           openedAt: order.openedAt,

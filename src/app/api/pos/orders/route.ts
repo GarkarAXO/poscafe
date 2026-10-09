@@ -425,6 +425,8 @@ export async function POST(request: Request) {
         // 1. Bolsas
         const bagQty = takeawayPackaging?.bags !== undefined
           ? Number(takeawayPackaging.bags)
+          : takeawayPackaging?.includeBag !== undefined
+          ? (takeawayPackaging.includeBag ? 1 : 0)
           : (settings?.takeawayBagItemId ? 1 : 0)
         if (settings?.takeawayBagItemId && bagQty > 0) {
           await deductPackaging(settings.takeawayBagItemId, bagQty, 'Bolsa')
@@ -435,17 +437,41 @@ export async function POST(request: Request) {
         const defaultTrays = totalItemsCount >= 2 ? 1 : 0
         const trayQty = takeawayPackaging?.cupTrays !== undefined
           ? Number(takeawayPackaging.cupTrays)
+          : takeawayPackaging?.includeTray !== undefined
+          ? (takeawayPackaging.includeTray ? 1 : 0)
           : defaultTrays
         if (settings?.takeawayTrayItemId && trayQty > 0) {
           await deductPackaging(settings.takeawayTrayItemId, trayQty, 'Charola portavasos')
         }
 
-        // 3. Cubiertos desechables
+        // 3. Charolas / Contenedores de Comida
+        const foodTrayQty = takeawayPackaging?.foodTrays !== undefined
+          ? Number(takeawayPackaging.foodTrays)
+          : takeawayPackaging?.includeFoodTray !== undefined
+          ? (takeawayPackaging.includeFoodTray ? 1 : 0)
+          : (settings?.takeawayFoodTrayItemId ? 1 : 0)
+        if (settings?.takeawayFoodTrayItemId && foodTrayQty > 0) {
+          await deductPackaging(settings.takeawayFoodTrayItemId, foodTrayQty, 'Charola de comida')
+        }
+
+        // 4. Cubiertos desechables
         const cutleryQty = takeawayPackaging?.cutlerySets !== undefined
           ? Number(takeawayPackaging.cutlerySets)
+          : takeawayPackaging?.includeCutlery !== undefined
+          ? (takeawayPackaging.includeCutlery ? 1 : 0)
           : 0
         if (settings?.takeawayCutleryItemId && cutleryQty > 0) {
           await deductPackaging(settings.takeawayCutleryItemId, cutleryQty, 'Cubiertos')
+        }
+
+        // 5. Popotes desechables / biodegradables
+        const strawQty = takeawayPackaging?.straws !== undefined
+          ? Number(takeawayPackaging.straws)
+          : takeawayPackaging?.includeStraw !== undefined
+          ? (takeawayPackaging.includeStraw ? 1 : 0)
+          : (settings?.takeawayStrawItemId ? 1 : 0)
+        if (settings?.takeawayStrawItemId && strawQty > 0) {
+          await deductPackaging(settings.takeawayStrawItemId, strawQty, 'Popotes')
         }
       }
 

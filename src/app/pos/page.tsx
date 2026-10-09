@@ -62,6 +62,8 @@ interface Table {
     id: string
     orderNumber: string
     customerName: string | null
+    orderType?: string
+    notes?: string | null
     subtotal: number
     total: number
     waiter: { id: string; name: string } | null
@@ -175,6 +177,23 @@ export default function PosTerminalPage() {
   const [unlocking, setUnlocking] = useState(false)
   const [welcomeOverlayUser, setWelcomeOverlayUser] = useState<any>(null)
 
+  // Bloqueo de salida al Dashboard con PIN de Administrador
+  const [isDashboardLocked, setIsDashboardLocked] = useState<boolean>(false)
+  const [showAdminUnlockDashboardModal, setShowAdminUnlockDashboardModal] = useState(false)
+  const [adminUnlockPin, setAdminUnlockPin] = useState('')
+  const [adminUnlockError, setAdminUnlockError] = useState<string | null>(null)
+  const [verifyingAdminUnlockPin, setVerifyingAdminUnlockPin] = useState(false)
+
+  // Cargar estado inicial de bloqueo de dashboard desde localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('poscafe_pos_dashboard_locked')
+      if (saved !== null) {
+        setIsDashboardLocked(saved === 'true')
+      }
+    }
+  }, [])
+
   // Terminal Device / Branch Binding State
   const [terminalDevice, setTerminalDevice] = useState<TerminalDeviceConfig | null>(null)
   const [showDeviceConfigModal, setShowDeviceConfigModal] = useState(false)
@@ -219,6 +238,143 @@ export default function PosTerminalPage() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isTerminalLocked, unlockPin, activeBranch, terminalDevice])
+
+  // Escucha de teclado físico para el modal de desbloqueo con PIN de Administrador
+  useEffect(() => {
+    if (!showAdminUnlockDashboardModal) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key >= '0' && e.key <= '9') {
+        if (adminUnlockPin.length < 4) {
+          const next = adminUnlockPin + e.key
+          setAdminUnlockPin(next)
+          setAdminUnlockError(null)
+          if (next.length === 4) {
+            handleConfirmAdminUnlock('exit_to_dashboard', next)
+          }
+        }
+      } else if (e.key === 'Backspace') {
+        setAdminUnlockPin((prev) => prev.slice(0, -1))
+        setAdminUnlockError(null)
+      } else if (e.key === 'Escape') {
+        setShowAdminUnlockDashboardModal(false)
+        setAdminUnlockPin('')
+        setAdminUnlockError(null)
+      } else if (e.key === 'Enter' && adminUnlockPin.length === 4) {
+        handleConfirmAdminUnlock('exit_to_dashboard')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showAdminUnlockDashboardModal, adminUnlockPin])
+
+  const handleKeypadPressAdminUnlock = (val: string) => {
+    if (val === 'C') {
+      setAdminUnlockPin('')
+      setAdminUnlockError(null)
+    } else if (val === 'DEL') {
+      setAdminUnlockPin((prev) => prev.slice(0, -1))
+      setAdminUnlockError(null)
+    } else {
+      if (adminUnlockPin.length < 4) {
+        const next = adminUnlockPin + val
+        setAdminUnlockPin(next)
+        setAdminUnlockError(null)
+        if (next.length === 4) {
+          handleConfirmAdminUnlock('exit_to_dashboard', next)
+        }
+      }
+    }
+  }
+
+  const handleToggleDashboardLock = () => {
+    if (isDashboardLocked) {
+      setAdminUnlockPin('')
+      setAdminUnlockError(null)
+      setShowAdminUnlockDashboardModal(true)
+    } else {
+      setIsDashboardLocked(true)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('poscafe_pos_dashboard_locked', 'true')
+      }
+      notify.success(
+        'Terminal Asegurada',
+        'El acceso al Dashboard ha quedado bloqueado. Se requerirá PIN de Administrador para salir.'
+      )
+    }
+  }
+
+  const handleDashboardNavigation = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const isOwnerOrAdmin =
+      sessionUser?.roleCodes?.includes('ADMIN') ||
+      sessionUser?.roleCodes?.includes('SUPERADMIN') ||
+      sessionUser?.roleCodes?.includes('BRANCH_MANAGER')
+
+    // Si la terminal está bloqueada o el usuario en caja no es administrador
+    if (isDashboardLocked || !isOwnerOrAdmin) {
+      setAdminUnlockPin('')
+      setAdminUnlockError(null)
+      setShowAdminUnlockDashboardModal(true)
+      return
+    }
+
+    window.location.href = '/dashboard'
+  }
+
+  const handleConfirmAdminUnlock = async (
+    action: 'exit_to_dashboard' | 'disable_lock',
+    overridePin?: string
+  ) => {
+    const pinToSubmit = overridePin || adminUnlockPin
+    if (!pinToSubmit || pinToSubmit.length < 4) {
+      setAdminUnlockError('Ingresa los 4 dígitos del PIN de Administrador')
+      return
+    }
+
+    setVerifyingAdminUnlockPin(true)
+    setAdminUnlockError(null)
+
+    try {
+      const res = await fetch('/api/auth/authorize-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin: pinToSubmit,
+          requireAdmin: true,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!data.success) {
+        setAdminUnlockError(data.error?.message || 'PIN inválido o el usuario no es Administrador')
+        setVerifyingAdminUnlockPin(false)
+        return
+      }
+
+      notify.success('Autorizado', `Acceso concedido por ${data.data?.name || 'Administrador'}`)
+      setShowAdminUnlockDashboardModal(false)
+      setAdminUnlockPin('')
+
+      if (action === 'disable_lock') {
+        setIsDashboardLocked(false)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('poscafe_pos_dashboard_locked', 'false')
+        }
+        notify.info('Bloqueo Desactivado', 'La terminal ya permite volver al Dashboard libremente.')
+      } else {
+        window.location.href = '/dashboard'
+      }
+    } catch {
+      setAdminUnlockError('Error al validar PIN con el servidor')
+    } finally {
+      setVerifyingAdminUnlockPin(false)
+    }
+  }
 
   const handleSaveDeviceBinding = () => {
     if (!activeBranch) {
@@ -294,6 +450,18 @@ export default function PosTerminalPage() {
       }
 
       const newUser = json.data.user
+      const isNewUserAdmin =
+        newUser.roleCodes?.includes('ADMIN') ||
+        newUser.roleCodes?.includes('SUPERADMIN') ||
+        newUser.roleCodes?.includes('BRANCH_MANAGER')
+
+      // Los meseros operan desde la Comandera de Mesas y no pueden operar esta terminal
+      if (newUser.roleCodes?.includes('WAITER') && !isNewUserAdmin) {
+        setUnlockError('Acceso denegado: Los meseros operan desde la Comandera de Mesas.')
+        setUnlockPin('')
+        return
+      }
+
       setSessionUser((prev: any) => ({
         ...prev,
         ...newUser,
@@ -453,13 +621,14 @@ export default function PosTerminalPage() {
 
         const isStrictWaiter =
           !isOwnerOrAdmin &&
-          !Boolean(user.permissions?.canAccessPOS) &&
-          !Boolean(user.permissions?.canManageCashRegisters) &&
-          !user.roleCodes?.includes('CASHIER')
+          (user.roleCodes?.includes('WAITER') ||
+            (!Boolean(user.permissions?.canAccessPOS) &&
+              !Boolean(user.permissions?.canManageCashRegisters) &&
+              !user.roleCodes?.includes('CASHIER')))
 
         if (isStrictWaiter) {
           setAccessDenied(true)
-          notify.warning('Terminal de Cobro', 'Los meseros operan desde la Comandera. Redirigiendo...')
+          notify.warning('Terminal de Cobro', 'Los meseros operan desde la Comandera de Mesas. Redirigiendo...')
           setTimeout(() => {
             window.location.href = '/comandera'
           }, 2200)
@@ -572,8 +741,19 @@ export default function PosTerminalPage() {
 
     setCart(loadedCart)
     setSelectedTableId(table.id)
-    setOrderType('DINE_IN')
+    const loadedOrderType = (table.activeOrder.orderType as any) || 'DINE_IN'
+    setOrderType(loadedOrderType)
     setCustomerName(table.activeOrder.customerName || '')
+
+    // Si la comanda de la mesa es para llevar, sincronizar opciones de empaque
+    if (loadedOrderType !== 'DINE_IN') {
+      const orderNotes = (table.activeOrder as any).notes || ''
+      setTakeawayPackaging({
+        includeBag: !orderNotes.includes('Sin Bolsa'),
+        includeTray: orderNotes.includes('Portavasos') || orderNotes.includes('Charola') || loadedCart.length >= 2,
+        includeCutlery: orderNotes.includes('Cubiertos'),
+      })
+    }
     setShowPendingTablesModal(false)
 
     notify.success(
@@ -951,26 +1131,34 @@ export default function PosTerminalPage() {
         }}
       >
         <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="p-1.5 rounded-lg border transition-all text-xs flex items-center gap-1 cursor-pointer"
-            style={
-              isLight
-                ? {
-                    backgroundColor: '#FFFFFF',
-                    borderColor: '#DECEBD',
-                    color: '#5E3023',
-                  }
-                : {
-                    backgroundColor: `${themeSecondary}40`,
-                    borderColor: `${themeSecondary}70`,
-                    color: '#DECEBD',
-                  }
+          {/* Botón Volver al Dashboard (protegido con PIN de Administrador si está bloqueado o usuario no es admin) */}
+          <button
+            type="button"
+            onClick={handleDashboardNavigation}
+            className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl border transition-all text-xs flex items-center gap-1.5 cursor-pointer font-bold ${
+              isDashboardLocked
+                ? isLight
+                  ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-800 shadow-xs'
+                  : 'bg-rose-950/50 hover:bg-rose-950/80 border-rose-500/40 text-rose-300'
+                : isLight
+                ? 'bg-white hover:bg-[#F3E9DC] text-[#5E3023] border-[#DECEBD]'
+                : 'bg-[#251e1b] hover:bg-[#332924] border-[#382b25] text-slate-300'
+            }`}
+            title={
+              isDashboardLocked
+                ? 'Salida al Dashboard protegida con PIN de Administrador'
+                : 'Volver al Dashboard'
             }
-            title="Volver al Dashboard"
           >
-            <ArrowLeft className="w-4 h-4" style={{ color: themePrimary }} />
-          </Link>
+            {isDashboardLocked ? (
+              <Lock className="w-4 h-4 text-rose-500" />
+            ) : (
+              <ArrowLeft className="w-4 h-4" style={{ color: themePrimary }} />
+            )}
+            <span className="hidden sm:inline">
+              {isDashboardLocked ? 'Dashboard Protegido' : 'Dashboard'}
+            </span>
+          </button>
 
           {/* Isologo / Isotipo de la Sucursal (libre y sin encerrar) */}
           {activeBranch?.isotypeUrl || activeBranch?.logoUrl ? (
@@ -1084,6 +1272,40 @@ export default function PosTerminalPage() {
           >
             <Banknote className="w-3.5 h-3.5" />
             <span>Arqueo / Corte</span>
+          </button>
+
+          {/* Botón para Bloquear Salida al Dashboard con PIN de Administrador */}
+          <button
+            type="button"
+            onClick={handleToggleDashboardLock}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+              isDashboardLocked
+                ? isLight
+                  ? 'bg-rose-100 hover:bg-rose-200 border-rose-300 text-rose-900 shadow-xs'
+                  : 'bg-rose-950/60 hover:bg-rose-950/80 border-rose-500/40 text-rose-300'
+                : isLight
+                ? 'bg-white hover:bg-[#F3E9DC] border-[#DECEBD] text-[#5E3023]'
+                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+            }`}
+            title={
+              isDashboardLocked
+                ? 'Dashboard bloqueado. Haz clic para desactivar con PIN de Administrador.'
+                : 'Bloquear salida al Dashboard con PIN de Administrador'
+            }
+          >
+            {isDashboardLocked ? (
+              <>
+                <Lock className="w-3.5 h-3.5 text-rose-500" />
+                <span className="hidden lg:inline text-rose-600 dark:text-rose-400 font-bold">Dashboard Bloqueado</span>
+                <span className="lg:hidden text-rose-600 dark:text-rose-400 font-bold">Bloqueado</span>
+              </>
+            ) : (
+              <>
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+                <span className="hidden lg:inline">Bloquear Dashboard</span>
+                <span className="lg:hidden">Bloquear</span>
+              </>
+            )}
           </button>
 
           <button
@@ -2881,6 +3103,158 @@ export default function PosTerminalPage() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DESBLOQUEO DE DASHBOARD CON PIN DE ADMINISTRADOR */}
+      {showAdminUnlockDashboardModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white overflow-y-auto">
+          <div
+            className={`w-full max-w-sm rounded-3xl p-6 sm:p-7 space-y-4 shadow-2xl text-center relative animate-in zoom-in-95 border ${
+              isLight
+                ? 'bg-white border-[#E6D5C3] text-[#5E3023] shadow-[#5E3023]/15'
+                : 'bg-[#19110E] border-[#3E221A] text-[#F3E9DC] shadow-black/60'
+            }`}
+          >
+            <div className="flex justify-between items-start">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-500 flex items-center justify-center mx-auto shadow-md">
+                <Lock className="w-6 h-6" />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdminUnlockDashboardModal(false)
+                  setAdminUnlockPin('')
+                  setAdminUnlockError(null)
+                }}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold cursor-pointer transition-colors absolute right-4 top-4 ${
+                  isLight
+                    ? 'bg-[#F3E9DC] hover:bg-[#DECEBD] text-[#5E3023]'
+                    : 'bg-[#251e1b] hover:bg-[#332924] text-slate-400 hover:text-white'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold mb-1.5 border bg-rose-500/10 border-rose-500/30 text-rose-500">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Seguridad de Terminal</span>
+              </div>
+              <h2
+                className={`text-xl font-extrabold tracking-tight ${
+                  isLight ? 'text-[#5E3023]' : 'text-[#F3E9DC]'
+                }`}
+              >
+                Acceso al Dashboard Protegido
+              </h2>
+              <p
+                className={`text-xs font-medium mt-1 ${
+                  isLight ? 'text-[#895737]' : 'text-[#A88C7D]'
+                }`}
+              >
+                Ingresa el PIN de 4 dígitos de un Administrador o Gerente para continuar
+              </p>
+            </div>
+
+            {/* Error */}
+            {adminUnlockError && (
+              <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-medium text-center animate-in fade-in">
+                {adminUnlockError}
+              </div>
+            )}
+
+            {/* PIN indicators */}
+            <div className="flex justify-center gap-3 my-2">
+              {[0, 1, 2, 3].map((idx) => (
+                <div
+                  key={idx}
+                  className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all ${
+                    adminUnlockPin.length > idx
+                      ? 'border-rose-500 bg-rose-500/15 text-rose-500 shadow-md shadow-rose-500/20'
+                      : isLight
+                      ? 'border-[#DECEBD] bg-[#FDFBF9] text-[#A88C7D]'
+                      : 'border-[#3E221A] bg-[#221612] text-slate-500'
+                  }`}
+                >
+                  {adminUnlockPin.length > idx ? '•' : ''}
+                </div>
+              ))}
+            </div>
+
+            {/* Keypad */}
+            <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => handleKeypadPressAdminUnlock(val)}
+                  disabled={verifyingAdminUnlockPin}
+                  className={`h-12 rounded-2xl text-base font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center select-none active:scale-95 disabled:opacity-50 ${
+                    val === 'C'
+                      ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 text-xs'
+                      : val === 'DEL'
+                      ? isLight
+                        ? 'bg-[#FDFBF9] hover:bg-[#F3E9DC] border border-[#DECEBD] text-[#895737] text-xs'
+                        : 'bg-[#221612] hover:bg-[#2e1d18] border border-[#3E221A] text-slate-400 text-xs'
+                      : isLight
+                      ? 'bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border border-[#DECEBD] text-[#5E3023]'
+                      : 'bg-[#221612] hover:bg-[#2e1d18] active:bg-[#3d241d] border border-[#3E221A] text-[#F3E9DC]'
+                  }`}
+                >
+                  {val === 'DEL' ? '⌫' : val}
+                </button>
+              ))}
+            </div>
+
+            {/* Botones de Acción */}
+            <div className="pt-2 space-y-2">
+              <button
+                type="button"
+                onClick={() => handleConfirmAdminUnlock('exit_to_dashboard')}
+                disabled={verifyingAdminUnlockPin || adminUnlockPin.length < 4}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition-all disabled:opacity-50 cursor-pointer active:scale-95"
+              >
+                {verifyingAdminUnlockPin ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4" />
+                )}
+                <span>Desbloquear y Volver al Dashboard</span>
+              </button>
+
+              {isDashboardLocked && (
+                <button
+                  type="button"
+                  onClick={() => handleConfirmAdminUnlock('disable_lock')}
+                  disabled={verifyingAdminUnlockPin || adminUnlockPin.length < 4}
+                  className={`w-full py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    isLight
+                      ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                      : 'bg-[#221612] hover:bg-[#2e1d18] border-[#3E221A] text-slate-300'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Desactivar Bloqueo de Terminal</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdminUnlockDashboardModal(false)
+                  setAdminUnlockPin('')
+                  setAdminUnlockError(null)
+                }}
+                className={`w-full py-2 text-xs font-medium cursor-pointer transition-colors ${
+                  isLight ? 'text-[#895737] hover:text-[#5E3023]' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Cancelar y Continuar en POS
+              </button>
             </div>
           </div>
         </div>

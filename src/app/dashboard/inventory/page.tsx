@@ -575,8 +575,11 @@ export default function InventoryDashboardPage() {
                         </span>
                       </td>
 
-                      <td className={`p-4 font-mono font-medium ${classes.textMuted}`}>
-                        ${Number(item.costPerUnit).toFixed(4)} <span className={`text-[10px] ${classes.textSub}`}>/{unitSymbol}</span>
+                      <td
+                        className={`p-4 font-mono font-medium ${classes.textMuted}`}
+                        title={`Costo matemático exacto: $${Number(item.costPerUnit)} MXN / ${unitSymbol}`}
+                      >
+                        ${Number(item.costPerUnit).toFixed(2)} <span className={`text-[10px] ${classes.textSub}`}>/{unitSymbol}</span>
                       </td>
 
                       <td className="p-4">

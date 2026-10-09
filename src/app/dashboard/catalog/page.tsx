@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
+import { notify } from '@/lib/notify'
 
 interface InventoryItem {
   id: string
@@ -130,7 +131,9 @@ export default function CatalogManagerPage() {
   const [takeawaySettings, setTakeawaySettings] = useState({
     takeawayBagItemId: '',
     takeawayTrayItemId: '',
+    takeawayFoodTrayItemId: '',
     takeawayCutleryItemId: '',
+    takeawayStrawItemId: '',
   })
   const [businessSettings, setBusinessSettings] = useState<{ recipesEnabled: boolean }>({
     recipesEnabled: true,
@@ -235,7 +238,9 @@ export default function CatalogManagerPage() {
         setTakeawaySettings({
           takeawayBagItemId: resSettings.data.settings.takeawayBagItemId || '',
           takeawayTrayItemId: resSettings.data.settings.takeawayTrayItemId || '',
+          takeawayFoodTrayItemId: resSettings.data.settings.takeawayFoodTrayItemId || '',
           takeawayCutleryItemId: resSettings.data.settings.takeawayCutleryItemId || '',
+          takeawayStrawItemId: resSettings.data.settings.takeawayStrawItemId || '',
         })
       }
     } catch {
@@ -297,32 +302,45 @@ export default function CatalogManagerPage() {
       const json = await res.json()
 
       if (json.success) {
+        notify.success(
+          editingCupSizeId ? 'Tamaño actualizado' : 'Tamaño creado',
+          `"${cupSizeForm.name}" guardado exitosamente`
+        )
         setShowCupSizeModal(false)
         setEditingCupSizeId(null)
         fetchData()
       } else {
+        notify.error('Error al guardar', json.error?.message || 'Error al guardar tamaño de vaso')
         setError(json.error?.message || 'Error al guardar tamaño de vaso')
       }
     } catch {
+      notify.error('Error de red', 'Error de red al guardar tamaño de vaso')
       setError('Error de red al guardar tamaño de vaso')
     } finally {
       setSubmittingCupSize(false)
     }
   }
 
-  const handleDeleteCupSize = async (id: string, name: string) => {
-    if (!confirm(`¿Deseas eliminar el tamaño de vaso "${name}"?`)) return
-    try {
-      const res = await fetch(`/api/cup-sizes/${id}`, { method: 'DELETE' })
-      const json = await res.json()
-      if (json.success) {
-        fetchData()
-      } else {
-        alert(json.error?.message || 'No se pudo eliminar el tamaño de vaso')
-      }
-    } catch {
-      alert('Error de red al eliminar tamaño de vaso')
-    }
+  const handleDeleteCupSize = (id: string, name: string) => {
+    notify.action({
+      title: `¿Eliminar "${name}"?`,
+      description: 'El tamaño de vaso se marcará como inactivo.',
+      buttonText: 'Confirmar y Eliminar',
+      onAction: async () => {
+        try {
+          const res = await fetch(`/api/cup-sizes/${id}`, { method: 'DELETE' })
+          const json = await res.json()
+          if (json.success) {
+            notify.success('Tamaño eliminado', `Se eliminó "${name}"`)
+            fetchData()
+          } else {
+            notify.error('Error al eliminar', json.error?.message || 'No se pudo eliminar el tamaño de vaso')
+          }
+        } catch {
+          notify.error('Error de red', 'Falla al eliminar tamaño de vaso')
+        }
+      },
+    })
   }
 
   const handleSaveTakeawaySettings = async (e: React.FormEvent) => {
@@ -336,13 +354,13 @@ export default function CatalogManagerPage() {
       })
       const json = await res.json()
       if (json.success) {
-        alert('Configuración de empaques para llevar guardada exitosamente')
+        notify.success('Empaques guardados', 'Configuración de empaques para llevar guardada exitosamente')
         fetchData()
       } else {
-        alert(json.error?.message || 'Error al guardar empaques para llevar')
+        notify.error('Error al guardar', json.error?.message || 'Error al guardar empaques para llevar')
       }
     } catch {
-      alert('Error de red al guardar empaques')
+      notify.error('Error de red', 'Falla de red al guardar empaques')
     } finally {
       setSavingPackagingSettings(false)
     }
@@ -515,13 +533,14 @@ export default function CatalogManagerPage() {
       })
       const json = await res.json()
       if (json.success) {
+        notify.success('Opción agregada', `Se agregó "${text}"`)
         setQuickOptionInputs((prev) => ({ ...prev, [groupId]: '' }))
         fetchData()
       } else {
-        alert(json.error?.message || 'Error al agregar opción')
+        notify.error('Error al agregar', json.error?.message || 'Error al agregar opción')
       }
     } catch {
-      alert('Error de red al agregar opción')
+      notify.error('Error de red', 'Error de red al agregar opción')
     } finally {
       setSavingQuickOption(null)
     }
@@ -737,19 +756,26 @@ export default function CatalogManagerPage() {
   }
 
   // Eliminar producto
-  const handleDeleteProduct = async (id: string, name: string) => {
-    if (!confirm(`¿Deseas archivar el producto "${name}"?`)) return
-    try {
-      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
-      const json = await res.json()
-      if (json.success) {
-        fetchData()
-      } else {
-        alert(json.error?.message || 'No se pudo eliminar el producto')
-      }
-    } catch {
-      alert('Error de red al eliminar producto')
-    }
+  const handleDeleteProduct = (id: string, name: string) => {
+    notify.action({
+      title: `¿Archivar "${name}"?`,
+      description: 'El producto se marcará como inactivo en el catálogo.',
+      buttonText: 'Confirmar y Archivar',
+      onAction: async () => {
+        try {
+          const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
+          const json = await res.json()
+          if (json.success) {
+            notify.success('Producto archivado', `"${name}" fue archivado exitosamente`)
+            fetchData()
+          } else {
+            notify.error('Error al archivar', json.error?.message || 'No se pudo eliminar el producto')
+          }
+        } catch {
+          notify.error('Error de red', 'Falla de red al archivar producto')
+        }
+      },
+    })
   }
 
   // Submit Insumo
@@ -900,19 +926,26 @@ export default function CatalogManagerPage() {
     }
   }
 
-  const handleDeleteModGroup = async (id: string, name: string) => {
-    if (!confirm(`¿Deseas eliminar el grupo "${name}" y todos sus sabores/extras?`)) return
-    try {
-      const res = await fetch(`/api/modifier-groups/${id}`, { method: 'DELETE' })
-      const json = await res.json()
-      if (json.success) {
-        fetchData()
-      } else {
-        alert(json.error?.message || 'No se pudo eliminar el grupo')
-      }
-    } catch {
-      alert('Error de red al eliminar grupo')
-    }
+  const handleDeleteModGroup = (id: string, name: string) => {
+    notify.action({
+      title: `¿Eliminar "${name}"?`,
+      description: 'Se eliminarán sus opciones asociadas.',
+      buttonText: 'Confirmar y Eliminar',
+      onAction: async () => {
+        try {
+          const res = await fetch(`/api/modifier-groups/${id}`, { method: 'DELETE' })
+          const json = await res.json()
+          if (json.success) {
+            notify.success('Grupo eliminado', `"${name}" fue eliminado`)
+            fetchData()
+          } else {
+            notify.error('Error al eliminar', json.error?.message || 'No se pudo eliminar el grupo')
+          }
+        } catch {
+          notify.error('Error de red', 'Falla de red al eliminar grupo')
+        }
+      },
+    })
   }
 
   const addModifierRow = () => {
@@ -1501,7 +1534,49 @@ export default function CatalogManagerPage() {
                   </select>
                 </div>
 
-                <div className="md:col-span-3 flex justify-end pt-2 border-t border-dashed border-white/10">
+                <div>
+                  <label className={`block font-semibold mb-1 text-xs ${classes.textMain}`}>
+                    🍱 Charola / Contenedor para Comida
+                  </label>
+                  <p className={`text-[10px] mb-1.5 ${classes.textSub}`}>
+                    Charola térmica o caja de comida para platillos y alimentos
+                  </p>
+                  <select
+                    value={takeawaySettings.takeawayFoodTrayItemId}
+                    onChange={(e) => setTakeawaySettings({ ...takeawaySettings, takeawayFoodTrayItemId: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border text-xs ${classes.input}`}
+                  >
+                    <option value="">Ninguno (No descontar charola de comida)</option>
+                    {ingredients.map((ing) => (
+                      <option key={ing.id} value={ing.id}>
+                        {ing.name} ({formatUnitSymbol(ing.baseUnit)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`block font-semibold mb-1 text-xs ${classes.textMain}`}>
+                    🥤 Popotes / Pajillas Desechables
+                  </label>
+                  <p className={`text-[10px] mb-1.5 ${classes.textSub}`}>
+                    Popotes biodegradables o de papel para bebidas para llevar
+                  </p>
+                  <select
+                    value={takeawaySettings.takeawayStrawItemId}
+                    onChange={(e) => setTakeawaySettings({ ...takeawaySettings, takeawayStrawItemId: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border text-xs ${classes.input}`}
+                  >
+                    <option value="">Ninguno (No descontar popotes)</option>
+                    {ingredients.map((ing) => (
+                      <option key={ing.id} value={ing.id}>
+                        {ing.name} ({formatUnitSymbol(ing.baseUnit)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-2 lg:col-span-3 flex justify-end pt-2 border-t border-dashed border-white/10">
                   <button
                     type="submit"
                     disabled={savingPackagingSettings}
@@ -1555,8 +1630,11 @@ export default function CatalogManagerPage() {
                           {formatUnitFull(item.baseUnit)}
                         </span>
                       </td>
-                      <td className={`p-3.5 font-medium ${classes.textMuted}`}>
-                        ${Number(item.costPerUnit).toFixed(4)} / {formatUnitSymbol(item.baseUnit)}
+                      <td
+                        className={`p-3.5 font-medium ${classes.textMuted}`}
+                        title={`Costo matemático exacto: $${Number(item.costPerUnit)} MXN / ${formatUnitSymbol(item.baseUnit)}`}
+                      >
+                        ${Number(item.costPerUnit).toFixed(2)} / {formatUnitSymbol(item.baseUnit)}
                       </td>
                       <td className="p-3.5">
                         {item.presentations.length > 0 ? (
@@ -2289,7 +2367,7 @@ export default function CatalogManagerPage() {
                                   >
                                     {ingredients.map((ing) => (
                                       <option key={ing.id} value={ing.id}>
-                                        {ing.name} ({formatUnitName(ing.baseUnit)}) — ${Number(ing.costPerUnit).toFixed(4)}/{formatUnitSymbol(ing.baseUnit)}
+                                        {ing.name} ({formatUnitName(ing.baseUnit)}) — ${Number(ing.costPerUnit).toFixed(2)}/{formatUnitSymbol(ing.baseUnit)}
                                       </option>
                                     ))}
                                   </select>
