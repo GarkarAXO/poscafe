@@ -530,6 +530,8 @@ model Product {
   code           String?
   description    String?
   imageUrl       String?
+  isNew          Boolean         @default(false)
+  isSeasonal     Boolean         @default(false)
   hasVariants    Boolean         @default(false)
   inventoryPolicy InventoryPolicy @default(NONE)
   active         Boolean         @default(true)

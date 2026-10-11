@@ -70,6 +70,18 @@ export default async function DisplayPage(props: DisplayPageProps) {
             where: { active: true, deletedAt: null },
             orderBy: { sortOrder: 'asc' },
           },
+          modifierGroups: {
+            include: {
+              modifierGroup: {
+                include: {
+                  modifiers: {
+                    where: { active: true },
+                    orderBy: { name: 'asc' },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -90,6 +102,20 @@ export default async function DisplayPage(props: DisplayPageProps) {
         }))
 
         const minPrice = variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : 0
+        const maxPrice = variants.length > 0 ? Math.max(...variants.map((v) => v.price)) : 0
+
+        const modifierGroups = p.modifierGroups.map((pmg) => ({
+          id: pmg.modifierGroup.id,
+          name: pmg.modifierGroup.name,
+          minSelect: pmg.modifierGroup.minSelect,
+          maxSelect: pmg.modifierGroup.maxSelect,
+          isRequired: pmg.modifierGroup.isRequired,
+          modifiers: pmg.modifierGroup.modifiers.map((m) => ({
+            id: m.id,
+            name: m.name,
+            extraPrice: Number(m.extraPrice),
+          })),
+        }))
 
         return {
           id: p.id,
@@ -97,9 +123,13 @@ export default async function DisplayPage(props: DisplayPageProps) {
           code: p.code,
           description: p.description,
           imageUrl: p.imageUrl,
+          isNew: p.isNew,
+          isSeasonal: p.isSeasonal,
           hasVariants: p.hasVariants,
           minPrice,
+          maxPrice,
           variants,
+          modifierGroups,
         }
       }),
     }))

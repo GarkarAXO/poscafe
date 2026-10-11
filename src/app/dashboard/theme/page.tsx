@@ -45,7 +45,7 @@ import {
   Bell,
   BookOpen,
 } from 'lucide-react'
-import BookMenu from '@/components/book-menu'
+import ElegantMenu from '@/components/elegant-menu'
 import { notify } from '@/lib/notify'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
@@ -2090,6 +2090,7 @@ export default function ThemeCustomizerPage() {
                       hasVariants: false,
                       minPrice: 42,
                       variants: [{ id: 'v1', name: 'Doble (60ml)', price: 42 }],
+                      ingredients: ['Café Arábica de Altura 100%', 'Agua Filtrada'],
                       isAvailable: true,
                     },
                     {
@@ -2105,6 +2106,22 @@ export default function ThemeCustomizerPage() {
                         { id: 'v2-2', name: 'Mediano (12oz)', price: 65 },
                         { id: 'v2-3', name: 'Grande (16oz)', price: 75 },
                       ],
+                      ingredients: ['Espresso Artesanal', 'Leche Cremada', 'Vainilla Natural'],
+                      modifierGroups: [
+                        {
+                          id: 'mg-milk',
+                          name: 'Tipo de Leche',
+                          minSelect: 0,
+                          maxSelect: 1,
+                          isRequired: false,
+                          modifiers: [
+                            { id: 'm1', name: 'Leche Entera', extraPrice: 0 },
+                            { id: 'm2', name: 'Leche Deslactosada', extraPrice: 0 },
+                            { id: 'm3', name: 'Leche de Almendra', extraPrice: 12 },
+                            { id: 'm4', name: 'Leche de Avena', extraPrice: 15 },
+                          ],
+                        },
+                      ],
                       isAvailable: true,
                     },
                     {
@@ -2116,6 +2133,7 @@ export default function ThemeCustomizerPage() {
                       hasVariants: false,
                       minPrice: 60,
                       variants: [{ id: 'v3', name: 'Estándar', price: 60 }],
+                      ingredients: ['Café Espresso', 'Espuma de Leche', 'Canela Ceilán'],
                       isAvailable: true,
                     },
                   ],
@@ -2135,6 +2153,7 @@ export default function ThemeCustomizerPage() {
                       hasVariants: false,
                       minPrice: 68,
                       variants: [{ id: 'v4', name: '16oz', price: 68 }],
+                      ingredients: ['Concentrado Cold Brew 18h', 'Cacao Puro de Tabasco', 'Hielo Purificado'],
                       isAvailable: true,
                     },
                     {
@@ -2148,6 +2167,21 @@ export default function ThemeCustomizerPage() {
                       variants: [
                         { id: 'v5-1', name: 'Mediano (16oz)', price: 72 },
                         { id: 'v5-2', name: 'Grande (20oz)', price: 85 },
+                      ],
+                      ingredients: ['Espresso Doble', 'Jarabe de Caramelo Salado', 'Crema Batida'],
+                      modifierGroups: [
+                        {
+                          id: 'mg-toppings',
+                          name: 'Sabores & Jarabes',
+                          minSelect: 0,
+                          maxSelect: 2,
+                          isRequired: false,
+                          modifiers: [
+                            { id: 't1', name: 'Caramelo Artesanal', extraPrice: 0 },
+                            { id: 't2', name: 'Chispas de Chocolate', extraPrice: 8 },
+                            { id: 't3', name: 'Extra Shot Espresso', extraPrice: 15 },
+                          ],
+                        },
                       ],
                       isAvailable: true,
                     },
@@ -2168,6 +2202,7 @@ export default function ThemeCustomizerPage() {
                       hasVariants: false,
                       minPrice: 48,
                       variants: [{ id: 'v6', name: 'Pieza', price: 48 }],
+                      ingredients: ['Harina de Trigo', 'Mantequilla Pura de Vaca', 'Almendra Fileteada', 'Azúcar Glass'],
                       isAvailable: true,
                     },
                     {
@@ -2179,6 +2214,7 @@ export default function ThemeCustomizerPage() {
                       hasVariants: false,
                       minPrice: 65,
                       variants: [{ id: 'v7', name: 'Rebanada', price: 65 }],
+                      ingredients: ['Queso Crema', 'Base de Galleta Mantequilla', 'Compota de Frutos Rojos Silvestres'],
                       isAvailable: true,
                     },
                   ],
@@ -2187,7 +2223,7 @@ export default function ThemeCustomizerPage() {
 
               return (
                 <div
-                  className="rounded-3xl border p-4 sm:p-6 shadow-xl space-y-4 relative overflow-hidden transition-all duration-300"
+                  className="rounded-3xl border p-3 sm:p-5 shadow-xl space-y-3 relative transition-all duration-300 flex flex-col"
                   style={{
                     backgroundColor: themeData.bgColor,
                     borderColor: `${themeData.primaryColor}40`,
@@ -2196,24 +2232,34 @@ export default function ThemeCustomizerPage() {
                   <div className="flex items-center justify-between text-xs border-b pb-2 text-white/70">
                     <span className="font-bold flex items-center gap-1.5 text-amber-400">
                       <BookOpen className="w-4 h-4" />
-                      Previsualización: Carta Menú Digital (1 Categoría por Página)
+                      Previsualización en Vivo: Carta Menú Editorial (Cubierta & Papel)
                     </span>
                     <span className="text-[11px] opacity-75">
-                      Prueba pasar las páginas o tocar los productos
+                      Haz scroll vertical dentro del visor para explorar toda la carta
                     </span>
                   </div>
 
-                  <BookMenu
-                    business={{
-                      name: selectedBranch?.name || 'Café Katela',
-                      logoUrl: themeData.logoUrl || selectedBranch?.logoUrl || null,
-                      isotypeUrl: themeData.isotypeUrl || selectedBranch?.isotypeUrl || null,
-                      currency: 'MXN',
-                      theme: {
-                        primaryColor: themeData.primaryColor,
-                        secondaryColor: themeData.secondaryColor,
-                        buttonColor: themeData.buttonColor,
-                        darkMode: !isLightBg,
+                  {/* VISOR SCROLLEABLE DE LA CARTA MENÚ */}
+                  <div className="h-[650px] sm:h-[720px] max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10 shadow-2xl relative scroll-smooth overscroll-contain bg-black/20">
+                    <ElegantMenu
+                      business={{
+                        name: selectedBranch?.name || 'Café Katela',
+                        logoUrl: themeData.logoUrl || selectedBranch?.logoUrl || null,
+                        isotypeUrl: themeData.isotypeUrl || selectedBranch?.isotypeUrl || null,
+                        currency: 'MXN',
+                        theme: {
+                          menuCoverColor: themeData.menuCoverColor,
+                          menuPaperColor: themeData.menuPaperColor,
+                          menuTextColor: themeData.menuTextColor,
+                          menuAccentColor: themeData.menuAccentColor,
+                          menuCoverTitle: themeData.menuCoverTitle,
+                          menuCoverSubtitle: themeData.menuCoverSubtitle,
+                          businessHours: themeData.businessHours,
+                        },
+                      }}
+                      categories={previewCategories}
+                      table={{ id: 'mesa-4', name: 'Mesa 4', area: 'Terraza' }}
+                      customColors={{
                         menuCoverColor: themeData.menuCoverColor,
                         menuPaperColor: themeData.menuPaperColor,
                         menuTextColor: themeData.menuTextColor,
@@ -2221,25 +2267,10 @@ export default function ThemeCustomizerPage() {
                         menuCoverTitle: themeData.menuCoverTitle,
                         menuCoverSubtitle: themeData.menuCoverSubtitle,
                         businessHours: themeData.businessHours,
-                      },
-                    }}
-                    categories={previewCategories}
-                    table={{ name: 'Mesa 4', area: 'Terraza' }}
-                    customColors={{
-                      primaryColor: themeData.primaryColor,
-                      secondaryColor: themeData.secondaryColor,
-                      buttonColor: themeData.buttonColor,
-                      bgColor: themeData.bgColor,
-                      darkMode: !isLightBg,
-                      menuCoverColor: themeData.menuCoverColor,
-                      menuPaperColor: themeData.menuPaperColor,
-                      menuTextColor: themeData.menuTextColor,
-                      menuAccentColor: themeData.menuAccentColor,
-                      menuCoverTitle: themeData.menuCoverTitle,
-                      menuCoverSubtitle: themeData.menuCoverSubtitle,
-                      businessHours: themeData.businessHours,
-                    }}
-                  />
+                      }}
+                      isPreview={true}
+                    />
+                  </div>
                 </div>
               )
             }

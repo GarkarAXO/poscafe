@@ -20,6 +20,10 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Info,
+  Image as ImageIcon,
+  Upload,
+  X,
+  Flame,
 } from 'lucide-react'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
@@ -85,6 +89,9 @@ interface Product {
   name: string
   code: string
   description: string | null
+  imageUrl?: string | null
+  isNew?: boolean
+  isSeasonal?: boolean
   inventoryPolicy: 'NONE' | 'DIRECT' | 'RECIPE'
   hasVariants?: boolean
   category: { id: string; name: string }
@@ -170,6 +177,9 @@ export default function CatalogManagerPage() {
     name: '',
     code: '',
     description: '',
+    imageUrl: '',
+    isNew: false,
+    isSeasonal: false,
     price: '',
     inventoryPolicy: 'RECIPE' as 'NONE' | 'DIRECT' | 'RECIPE',
     directItemId: '',
@@ -184,6 +194,22 @@ export default function CatalogManagerPage() {
   const [quickOptionInputs, setQuickOptionInputs] = useState<Record<string, string>>({})
   const [savingQuickOption, setSavingQuickOption] = useState<string | null>(null)
   const [submittingProduct, setSubmittingProduct] = useState(false)
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 3 * 1024 * 1024) {
+      notify.error('Imagen muy grande', 'Por favor selecciona una imagen menor a 3MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setProdForm((prev) => ({ ...prev, imageUrl: reader.result as string }))
+      }
+    }
+    reader.readAsDataURL(file)
+  }
 
   // Ingredient Form state
   const [itemForm, setItemForm] = useState({
@@ -556,6 +582,9 @@ export default function CatalogManagerPage() {
       name: '',
       code: '',
       description: '',
+      imageUrl: '',
+      isNew: false,
+      isSeasonal: false,
       price: '',
       inventoryPolicy: 'RECIPE',
       directItemId: '',
@@ -645,6 +674,9 @@ export default function CatalogManagerPage() {
       name: prod.name,
       code: prod.code,
       description: prod.description || '',
+      imageUrl: prod.imageUrl || '',
+      isNew: Boolean(prod.isNew),
+      isSeasonal: Boolean(prod.isSeasonal),
       price: firstVariant ? firstVariant.price.toString() : '0',
       inventoryPolicy: prod.inventoryPolicy,
       directItemId: firstVariant?.directItemId || '',
@@ -681,6 +713,9 @@ export default function CatalogManagerPage() {
         name: prodForm.name,
         code: prodForm.code,
         description: prodForm.description,
+        imageUrl: prodForm.imageUrl.trim() || null,
+        isNew: prodForm.isNew,
+        isSeasonal: prodForm.isSeasonal,
         inventoryPolicy: prodForm.inventoryPolicy,
         modifierGroupIds: prodForm.modifierGroupIds,
         ownFlavors: prodForm.ownFlavors.map((f) => ({
@@ -1169,12 +1204,35 @@ export default function CatalogManagerPage() {
                   className={`rounded-3xl border p-5 space-y-4 transition-all flex flex-col justify-between ${classes.card}`}
                 >
                   <div className="space-y-3">
+                    {p.imageUrl && (
+                      <div className="w-full h-36 rounded-2xl overflow-hidden bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-800 relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+
                     <div className="flex items-start justify-between">
                       <div>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${classes.badge}`}>
-                          {p.category.name}
-                        </span>
-                        <h3 className={`text-base font-bold mt-1 ${classes.textMain}`}>{p.name}</h3>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${classes.badge}`}>
+                            {p.category.name}
+                          </span>
+                          {p.isNew && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                              ✨ Nuevo
+                            </span>
+                          )}
+                          {p.isSeasonal && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                              🍁 Temporada
+                            </span>
+                          )}
+                        </div>
+                        <h3 className={`text-base font-bold mt-1.5 ${classes.textMain}`}>{p.name}</h3>
                         <span className={`text-[10px] font-mono ${classes.textSub}`}>{p.code}</span>
                       </div>
 
@@ -1955,6 +2013,102 @@ export default function CatalogManagerPage() {
                   placeholder="Notas para el menú público o detalles de preparación..."
                   className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                 />
+              </div>
+
+              {/* FOTOGRAFÍA DEL PRODUCTO */}
+              <div className={`p-4 rounded-2xl border space-y-3 ${classes.subCard}`}>
+                <div>
+                  <span className={`font-semibold flex items-center gap-1.5 ${classes.textMain}`}>
+                    <ImageIcon className="w-3.5 h-3.5 text-amber-500" />
+                    Fotografía del Producto (Menú Digital y Pantalla)
+                  </span>
+                  <p className={`text-[11px] ${classes.textMuted}`}>
+                    Sube una foto desde tu equipo o escribe una URL web para lucir el producto.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  {prodForm.imageUrl ? (
+                    <div className="relative w-24 h-24 rounded-2xl overflow-hidden border border-amber-500/30 shrink-0 group shadow-sm bg-neutral-100 dark:bg-neutral-800">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={prodForm.imageUrl}
+                        alt="Vista previa"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setProdForm((prev) => ({ ...prev, imageUrl: '' }))}
+                        className="absolute top-1 right-1 p-1 rounded-full bg-rose-600/90 text-white opacity-90 hover:opacity-100 transition-opacity cursor-pointer shadow"
+                        title="Eliminar imagen"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center p-2 shrink-0 opacity-60">
+                      <ImageIcon className="w-6 h-6 mb-1 opacity-50" />
+                      <span className="text-[9px]">Sin foto</span>
+                    </div>
+                  )}
+
+                  <div className="flex-1 w-full space-y-2">
+                    <label className="block cursor-pointer">
+                      <span className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}>
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Subir desde dispositivo</span>
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <input
+                      type="url"
+                      value={prodForm.imageUrl.startsWith('data:') ? '' : prodForm.imageUrl}
+                      onChange={(e) => setProdForm({ ...prodForm, imageUrl: e.target.value })}
+                      placeholder="O pega una URL de imagen (https://...)"
+                      className={`w-full px-3 py-1.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* DESTACADOS: NUEVO Y DE TEMPORADA */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${prodForm.isNew ? 'bg-amber-500/10 border-amber-500/40 text-amber-900 dark:text-amber-200' : classes.card}`}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-base">✨</span>
+                    <div>
+                      <p className={`font-semibold text-xs ${classes.textMain}`}>Producto Nuevo</p>
+                      <p className={`text-[10px] ${classes.textMuted}`}>Destacar en menú y pantalla</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={prodForm.isNew}
+                    onChange={(e) => setProdForm({ ...prodForm, isNew: e.target.checked })}
+                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                </label>
+
+                <label className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${prodForm.isSeasonal ? 'bg-rose-500/10 border-rose-500/40 text-rose-900 dark:text-rose-200' : classes.card}`}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-base">🍁</span>
+                    <div>
+                      <p className={`font-semibold text-xs ${classes.textMain}`}>De Temporada</p>
+                      <p className={`text-[10px] ${classes.textMuted}`}>Vitrina de temporada</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={prodForm.isSeasonal}
+                    onChange={(e) => setProdForm({ ...prodForm, isSeasonal: e.target.checked })}
+                    className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                  />
+                </label>
               </div>
 
               {/* SABORES PROPIOS DEL PRODUCTO (DIRECTO EN EL MODAL) */}

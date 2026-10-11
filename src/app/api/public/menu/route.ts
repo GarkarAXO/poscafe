@@ -81,6 +81,20 @@ export async function GET(request: Request) {
             variants: {
               where: { active: true, deletedAt: null },
               orderBy: { sortOrder: 'asc' },
+              include: {
+                recipe: {
+                  include: {
+                    items: {
+                      where: { onlyTakeaway: false },
+                      include: {
+                        inventoryItem: {
+                          select: { name: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
             modifierGroups: {
               include: {
@@ -132,17 +146,33 @@ export async function GET(request: Request) {
             })),
           }))
 
+          // Recopilar nombres únicos de ingredientes desde las recetas del producto
+          const ingredientsSet = new Set<string>()
+          p.variants.forEach((v: any) => {
+            if (v.recipe?.items) {
+              v.recipe.items.forEach((item: any) => {
+                if (item.inventoryItem?.name) {
+                  ingredientsSet.add(item.inventoryItem.name.trim())
+                }
+              })
+            }
+          })
+          const ingredients = Array.from(ingredientsSet)
+
           return {
             id: p.id,
             name: p.name,
             code: p.code,
             description: p.description,
             imageUrl: p.imageUrl,
+            isNew: p.isNew,
+            isSeasonal: p.isSeasonal,
             hasVariants: p.hasVariants,
             minPrice,
             maxPrice,
             variants,
             modifierGroups,
+            ingredients,
             isAvailable: true,
           }
         }),
