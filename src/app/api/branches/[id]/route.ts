@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -162,6 +164,46 @@ export async function PUT(
         ...(menuCoverSubtitle !== undefined && { menuCoverSubtitle: menuCoverSubtitle?.trim() || null }),
       },
     })
+
+    // Sincronizar centralmente con BusinessSetting para que Display, Menú y Dashboard global reflejen la identidad
+    try {
+      await prisma.businessSetting.upsert({
+        where: { businessId: session.businessId },
+        create: {
+          businessId: session.businessId,
+          primaryColor: primaryColor?.trim() || '#C08552',
+          secondaryColor: secondaryColor?.trim() || '#5E3023',
+          accentColor: buttonColor?.trim() || primaryColor?.trim() || '#C08552',
+          sidebarTheme: sidebarTheme?.trim() || 'DARK',
+          logoUrl: logoUrl !== undefined ? (logoUrl?.trim() || null) : undefined,
+          isotypeUrl: isotypeUrl !== undefined ? (isotypeUrl?.trim() || null) : undefined,
+          businessHours: businessHours?.trim() || 'Lunes a Domingo: 8:00 AM - 10:00 PM',
+          menuCoverColor: menuCoverColor?.trim() || '#18120F',
+          menuPaperColor: menuPaperColor?.trim() || '#FDFBF7',
+          menuTextColor: menuTextColor?.trim() || '#2C1810',
+          menuAccentColor: menuAccentColor?.trim() || '#D4AF37',
+          menuCoverTitle: menuCoverTitle?.trim() || 'CARTA DE ESPECIALIDADES',
+          menuCoverSubtitle: menuCoverSubtitle?.trim() || 'Café de especialidad y gastronomía artesanal',
+        },
+        update: {
+          ...(primaryColor !== undefined && { primaryColor: primaryColor?.trim() || null }),
+          ...(secondaryColor !== undefined && { secondaryColor: secondaryColor?.trim() || null }),
+          ...(buttonColor !== undefined && { accentColor: buttonColor?.trim() || null }),
+          ...(sidebarTheme !== undefined && { sidebarTheme: sidebarTheme?.trim() || 'DARK' }),
+          ...(logoUrl !== undefined && { logoUrl: logoUrl?.trim() || null }),
+          ...(isotypeUrl !== undefined && { isotypeUrl: isotypeUrl?.trim() || null }),
+          ...(businessHours !== undefined && { businessHours: businessHours?.trim() || null }),
+          ...(menuCoverColor !== undefined && { menuCoverColor: menuCoverColor?.trim() || null }),
+          ...(menuPaperColor !== undefined && { menuPaperColor: menuPaperColor?.trim() || null }),
+          ...(menuTextColor !== undefined && { menuTextColor: menuTextColor?.trim() || null }),
+          ...(menuAccentColor !== undefined && { menuAccentColor: menuAccentColor?.trim() || null }),
+          ...(menuCoverTitle !== undefined && { menuCoverTitle: menuCoverTitle?.trim() || null }),
+          ...(menuCoverSubtitle !== undefined && { menuCoverSubtitle: menuCoverSubtitle?.trim() || null }),
+        },
+      })
+    } catch (syncError) {
+      console.warn('Advertencia al sincronizar businessSetting:', syncError)
+    }
 
     return NextResponse.json({
       success: true,

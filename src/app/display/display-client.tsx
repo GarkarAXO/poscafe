@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -19,15 +19,24 @@ import {
   Play,
   Layers,
   UtensilsCrossed,
+  Palette,
+  Check,
+  Star,
+  Tag,
 } from 'lucide-react'
+import {
+  MokaPotIcon,
+  ColdDrinkIcon,
+  CoffeeBranchVector,
+} from '@/components/menu-dividers'
 
-interface Modifier {
+export interface Modifier {
   id: string
   name: string
   extraPrice: number
 }
 
-interface ModifierGroup {
+export interface ModifierGroup {
   id: string
   name: string
   minSelect: number
@@ -36,13 +45,13 @@ interface ModifierGroup {
   modifiers: Modifier[]
 }
 
-interface Variant {
+export interface Variant {
   id: string
   name: string
   price: number
 }
 
-interface Product {
+export interface Product {
   id: string
   name: string
   code: string | null
@@ -57,7 +66,7 @@ interface Product {
   modifierGroups?: ModifierGroup[]
 }
 
-interface Category {
+export interface Category {
   id: string
   name: string
   slug: string
@@ -65,11 +74,12 @@ interface Category {
   products: Product[]
 }
 
-interface BusinessData {
+export interface BusinessData {
   id: string
   name: string
   legalName?: string | null
   logoUrl?: string | null
+  isotypeUrl?: string | null
   currency: string
   timezone: string
   theme: {
@@ -80,12 +90,134 @@ interface BusinessData {
   }
 }
 
-interface DisplayClientProps {
+export interface DisplayClientProps {
   initialBusiness: BusinessData
   initialCategories: Category[]
 }
 
-type ScreenMode = 'ROTATING' | 'FEATURED' | 'DRINKS' | 'FOOD' | 'ALL_STATIC'
+export type ScreenMode = 'ROTATING' | 'FEATURED' | 'DRINKS' | 'FOOD' | 'ALL_STATIC'
+
+export interface DisplayThemeConfig {
+  id: string
+  name: string
+  tag: string
+  bg: string
+  glow1: string
+  glow2: string
+  headerBg: string
+  cardBg: string
+  cardBorder: string
+  primaryColor: string
+  secondaryColor: string
+  accentColor: string
+  textColor: string
+  mutedColor: string
+  priceColor: string
+  badgeBg: string
+  badgeText: string
+  isLight?: boolean
+}
+
+export const DISPLAY_THEMES: Record<string, DisplayThemeConfig> = {
+  'cinepolis-gold': {
+    id: 'cinepolis-gold',
+    name: 'Cinépolis Dark Gold',
+    tag: 'Cine & Gala',
+    bg: '#0A0807',
+    glow1: '#F59E0B',
+    glow2: '#B45309',
+    headerBg: 'rgba(0, 0, 0, 0.75)',
+    cardBg: 'rgba(255, 255, 255, 0.04)',
+    cardBorder: 'rgba(245, 158, 11, 0.25)',
+    primaryColor: '#F59E0B',
+    secondaryColor: '#B45309',
+    accentColor: '#FBBF24',
+    textColor: '#FFFFFF',
+    mutedColor: '#E2D9D2',
+    priceColor: '#F59E0B',
+    badgeBg: 'rgba(245, 158, 11, 0.15)',
+    badgeText: '#FCD34D',
+  },
+  'specialty-coffee': {
+    id: 'specialty-coffee',
+    name: 'Café de Especialidad',
+    tag: 'Artesanal Tostado',
+    bg: '#0F0B08',
+    glow1: '#C08552',
+    glow2: '#5E3023',
+    headerBg: 'rgba(15, 11, 8, 0.85)',
+    cardBg: 'rgba(192, 133, 82, 0.08)',
+    cardBorder: 'rgba(192, 133, 82, 0.35)',
+    primaryColor: '#C08552',
+    secondaryColor: '#5E3023',
+    accentColor: '#D4A373',
+    textColor: '#FDFBF7',
+    mutedColor: '#D7CCC8',
+    priceColor: '#E0A96D',
+    badgeBg: 'rgba(192, 133, 82, 0.2)',
+    badgeText: '#E6CCB2',
+  },
+  'matcha-emerald': {
+    id: 'matcha-emerald',
+    name: 'Matcha & Esmeralda',
+    tag: 'Bistro Botánico',
+    bg: '#06130D',
+    glow1: '#10B981',
+    glow2: '#064E3B',
+    headerBg: 'rgba(6, 19, 13, 0.85)',
+    cardBg: 'rgba(16, 185, 129, 0.07)',
+    cardBorder: 'rgba(16, 185, 129, 0.28)',
+    primaryColor: '#10B981',
+    secondaryColor: '#064E3B',
+    accentColor: '#34D399',
+    textColor: '#ECFDF5',
+    mutedColor: '#A7F3D0',
+    priceColor: '#34D399',
+    badgeBg: 'rgba(16, 185, 129, 0.18)',
+    badgeText: '#6EE7B7',
+  },
+  'midnight-neon': {
+    id: 'midnight-neon',
+    name: 'Midnight Neón',
+    tag: 'Boutique Urbana',
+    bg: '#090814',
+    glow1: '#EC4899',
+    glow2: '#8B5CF6',
+    headerBg: 'rgba(9, 8, 20, 0.85)',
+    cardBg: 'rgba(139, 92, 246, 0.09)',
+    cardBorder: 'rgba(236, 72, 153, 0.32)',
+    primaryColor: '#EC4899',
+    secondaryColor: '#8B5CF6',
+    accentColor: '#F472B6',
+    textColor: '#FAF5FF',
+    mutedColor: '#DDD6FE',
+    priceColor: '#F472B6',
+    badgeBg: 'rgba(236, 72, 153, 0.2)',
+    badgeText: '#FBCFE8',
+  },
+  'clean-marble': {
+    id: 'clean-marble',
+    name: 'Mármol Blanco (Modo Día)',
+    tag: 'Luz Natural',
+    bg: '#F8F6F0',
+    glow1: '#E2D9D2',
+    glow2: '#D7CCC8',
+    headerBg: 'rgba(255, 255, 255, 0.95)',
+    cardBg: '#FFFFFF',
+    cardBorder: 'rgba(43, 23, 18, 0.12)',
+    primaryColor: '#C08552',
+    secondaryColor: '#8C5338',
+    accentColor: '#B45309',
+    textColor: '#24140E',
+    mutedColor: '#6B5E55',
+    priceColor: '#B45309',
+    badgeBg: 'rgba(192, 133, 82, 0.12)',
+    badgeText: '#78350F',
+    isLight: true,
+  },
+}
+
+
 
 export default function DisplayClient({
   initialBusiness,
@@ -93,22 +225,47 @@ export default function DisplayClient({
 }: DisplayClientProps) {
   const [business] = useState<BusinessData>(initialBusiness)
   const [categories, setCategories] = useState<Category[]>(initialCategories)
-  const [currentTime, setCurrentTime] = useState<string>('')
-  const [currentDate, setCurrentDate] = useState<string>('')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   // Configuración de pantalla
   const [screenMode, setScreenMode] = useState<ScreenMode>('ROTATING')
+  const [selectedThemeId, setSelectedThemeId] = useState<string>('cinepolis-gold')
   const [isPaused, setIsPaused] = useState(false)
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
   const [showConfigMenu, setShowConfigMenu] = useState(false)
   const [slideDuration, setSlideDuration] = useState(12) // segundos por slide
   const [progress, setProgress] = useState(0)
 
-  const primaryColor = business.theme?.primaryColor || '#C08552'
-  const secondaryColor = business.theme?.secondaryColor || '#5E3023'
+  // Tema activo resuelto
+  const activeTheme: DisplayThemeConfig = useMemo(() => {
+    if (selectedThemeId === 'brand-theme') {
+      const pColor = business.theme?.primaryColor || '#C08552'
+      const sColor = business.theme?.secondaryColor || '#5E3023'
+      const aColor = business.theme?.accentColor || '#C08552'
+      return {
+        id: 'brand-theme',
+        name: 'Identidad de Marca',
+        tag: 'Personalizado',
+        bg: '#0D0A08',
+        glow1: pColor,
+        glow2: sColor,
+        headerBg: 'rgba(13, 10, 8, 0.85)',
+        cardBg: 'rgba(255, 255, 255, 0.05)',
+        cardBorder: `${pColor}40`,
+        primaryColor: pColor,
+        secondaryColor: sColor,
+        accentColor: aColor,
+        textColor: '#FFFFFF',
+        mutedColor: '#D1C7BD',
+        priceColor: aColor,
+        badgeBg: `${pColor}25`,
+        badgeText: aColor,
+      }
+    }
+    return DISPLAY_THEMES[selectedThemeId] || DISPLAY_THEMES['cinepolis-gold']
+  }, [selectedThemeId, business.theme])
 
   // Identificar productos destacados (Nuevos o De Temporada)
   const featuredProducts = useMemo(() => {
@@ -146,16 +303,25 @@ export default function DisplayClient({
     return categories.filter((c) => !drinkCategories.some((dc) => dc.id === c.id))
   }, [categories, drinkCategories])
 
-  // Cargar modo preferido desde localStorage o URL
+  // Cargar modo y tema desde localStorage o URL
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       const urlMode = params.get('mode') as ScreenMode | null
+      const urlTheme = params.get('theme') as string | null
       const savedMode = localStorage.getItem('poscafe_display_mode') as ScreenMode | null
+      const savedTheme = localStorage.getItem('poscafe_display_theme')
+
       if (urlMode) {
         setScreenMode(urlMode)
       } else if (savedMode) {
         setScreenMode(savedMode)
+      }
+
+      if (urlTheme && (DISPLAY_THEMES[urlTheme] || urlTheme === 'brand-theme')) {
+        setSelectedThemeId(urlTheme)
+      } else if (savedTheme && (DISPLAY_THEMES[savedTheme] || savedTheme === 'brand-theme')) {
+        setSelectedThemeId(savedTheme)
       }
     }
   }, [])
@@ -169,26 +335,69 @@ export default function DisplayClient({
     }
   }
 
-  // Generar lista de slides a rotar según el modo
+  const handleThemeChange = (themeId: string) => {
+    setSelectedThemeId(themeId)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('poscafe_display_theme', themeId)
+    }
+  }
+
+  // Generar lista de slides a rotar según el modo.
+  // Paginación inteligente: si una categoría tiene más de 4 productos, la dividimos en páginas de hasta 4
+  // para que cada producto conserve FOTOS GRANDES, TÍTULOS GRANDES y SABORES EN LISTA sin amontonarse.
   const slides = useMemo(() => {
+    const ITEMS_PER_SLIDE = 4
+
+    const createCategorySlides = (cats: Category[]) => {
+      const catSlides: Array<{
+        type: 'category'
+        title: string
+        category: Category
+        products: Product[]
+        pageNumber: number
+        totalPages: number
+      }> = []
+
+      cats.forEach((cat) => {
+        const totalItems = cat.products.length
+        if (totalItems <= ITEMS_PER_SLIDE) {
+          catSlides.push({
+            type: 'category',
+            title: cat.name,
+            category: cat,
+            products: cat.products,
+            pageNumber: 1,
+            totalPages: 1,
+          })
+        } else {
+          const totalPages = Math.ceil(totalItems / ITEMS_PER_SLIDE)
+          for (let p = 0; p < totalPages; p++) {
+            const pageProducts = cat.products.slice(p * ITEMS_PER_SLIDE, (p + 1) * ITEMS_PER_SLIDE)
+            catSlides.push({
+              type: 'category',
+              title: `${cat.name} (${p + 1}/${totalPages})`,
+              category: cat,
+              products: pageProducts,
+              pageNumber: p + 1,
+              totalPages,
+            })
+          }
+        }
+      })
+
+      return catSlides
+    }
+
     if (screenMode === 'FEATURED') {
       return [{ type: 'featured' as const, title: 'Especialidades & Novedades', data: featuredProducts }]
     }
 
     if (screenMode === 'DRINKS') {
-      return drinkCategories.map((cat) => ({
-        type: 'category' as const,
-        title: cat.name,
-        category: cat,
-      }))
+      return createCategorySlides(drinkCategories)
     }
 
     if (screenMode === 'FOOD') {
-      return foodCategories.map((cat) => ({
-        type: 'category' as const,
-        title: cat.name,
-        category: cat,
-      }))
+      return createCategorySlides(foodCategories)
     }
 
     if (screenMode === 'ALL_STATIC') {
@@ -196,10 +405,16 @@ export default function DisplayClient({
     }
 
     // MODO ROTATING (Cinépolis):
-    // Si hay productos destacados, el Slide 0 es la Vitrina Cinépolis
     const list: Array<
       | { type: 'featured'; title: string; data: Product[] }
-      | { type: 'category'; title: string; category: Category }
+      | {
+          type: 'category'
+          title: string
+          category: Category
+          products: Product[]
+          pageNumber: number
+          totalPages: number
+        }
     > = []
 
     if (featuredProducts.length > 0) {
@@ -210,14 +425,9 @@ export default function DisplayClient({
       })
     }
 
-    // Dividir categorías en slides
-    categories.forEach((cat) => {
-      list.push({
-        type: 'category',
-        title: cat.name,
-        category: cat,
-      })
-    })
+    // Diapositivas de categorías con paginación amplia
+    const categorySlides = createCategorySlides(categories)
+    categorySlides.forEach((cs) => list.push(cs))
 
     return list.length > 0 ? list : [{ type: 'all_static' as const, title: 'Menú' }]
   }, [screenMode, featuredProducts, categories, drinkCategories, foodCategories])
@@ -245,32 +455,9 @@ export default function DisplayClient({
     return () => clearInterval(timer)
   }, [slides.length, isPaused, slideDuration, screenMode])
 
-  // Reloj digital en vivo
+  // Montaje en cliente
   useEffect(() => {
     setMounted(true)
-    const updateClock = () => {
-      const now = new Date()
-      setCurrentTime(
-        now.toLocaleTimeString('es-MX', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true,
-        })
-      )
-      setCurrentDate(
-        now.toLocaleDateString('es-MX', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
-      )
-    }
-
-    updateClock()
-    const timer = setInterval(updateClock, 1000)
-    return () => clearInterval(timer)
   }, [])
 
   // Auto-refresco en segundo plano cada 60 segundos
@@ -319,224 +506,350 @@ export default function DisplayClient({
 
   const currentSlide = slides[currentSlideIndex] || slides[0]
 
+  // Alternancia dinámica del logo superior (Esquina izquierda ↔ Esquina derecha según la diapositiva)
+  const isLogoTopLeft = currentSlideIndex % 2 === 0
+  const isLogoTopRight = !isLogoTopLeft
+
+  // Renderizar logo grande, libre y adaptado en la parte superior
+  const renderBrandLogo = (extraClass = '', sizeClass = 'h-14 sm:h-18 lg:h-20 xl:h-24') => {
+    return (
+      <motion.div
+        key={`top-logo-${isLogoTopLeft ? 'left' : 'right'}`}
+        initial={{ opacity: 0, scale: 0.9, x: isLogoTopLeft ? -15 : 15 }}
+        animate={{ opacity: 1, scale: 1, x: 0 }}
+        exit={{ opacity: 0, scale: 0.9, x: isLogoTopLeft ? -15 : 15 }}
+        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+        className={`flex items-center shrink-0 select-none ${extraClass}`}
+      >
+        {business.logoUrl ? (
+          <img
+            src={business.logoUrl}
+            alt={business.name}
+            className={`${sizeClass} w-auto max-w-[220px] sm:max-w-[280px] lg:max-w-[340px] object-contain drop-shadow-[0_12px_32px_rgba(0,0,0,0.7)] select-none`}
+          />
+        ) : business.isotypeUrl ? (
+          <img
+            src={business.isotypeUrl}
+            alt={business.name}
+            className={`${sizeClass} w-auto object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.6)] select-none`}
+          />
+        ) : (
+          <div className="flex items-center gap-3">
+            <Coffee
+              className="w-10 h-10 sm:w-14 sm:h-14 drop-shadow-[0_8px_24px_rgba(0,0,0,0.5)]"
+              style={{ color: activeTheme.accentColor }}
+            />
+            <span
+              className="text-xl sm:text-2xl lg:text-3xl font-black uppercase tracking-wider drop-shadow-md"
+              style={{ color: activeTheme.textColor }}
+            >
+              {business.name}
+            </span>
+          </div>
+        )}
+      </motion.div>
+    )
+  }
+
+  // Renderizar ícono barista de placeholder para productos sin foto
+  const renderProductPlaceholder = (catName?: string) => {
+    const lower = (catName || '').toLowerCase()
+    if (lower.includes('fría') || lower.includes('fria') || lower.includes('cold') || lower.includes('frapp')) {
+      return <ColdDrinkIcon className="w-14 h-14 opacity-50" color={activeTheme.accentColor} />
+    }
+    if (lower.includes('café') || lower.includes('cafe') || lower.includes('espresso') || lower.includes('latte')) {
+      return <MokaPotIcon className="w-14 h-14 opacity-50" color={activeTheme.accentColor} />
+    }
+    if (lower.includes('té') || lower.includes('te') || lower.includes('tisana')) {
+      return <CoffeeBranchVector className="w-14 h-14 opacity-50" color={activeTheme.accentColor} />
+    }
+    return <Coffee className="w-14 h-14 opacity-50" style={{ color: activeTheme.accentColor }} />
+  }
+
   return (
-    <div className="h-screen w-screen bg-[#0A0807] text-[#F3E9DC] overflow-hidden flex flex-col justify-between selection:bg-[#C08552] selection:text-white select-none relative font-sans">
+    <div
+      className="h-screen w-screen overflow-hidden flex flex-col justify-between select-none relative font-sans transition-colors duration-500"
+      style={{
+        backgroundColor: activeTheme.bg,
+        color: activeTheme.textColor,
+      }}
+    >
       {/* GLOWS CINEMATOGRÁFICOS DE AMBIENTACIÓN */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div
-          className="absolute -top-40 left-1/4 w-[750px] h-[750px] rounded-full blur-[200px] opacity-25"
-          style={{ backgroundColor: primaryColor }}
+          className="absolute -top-40 left-1/4 w-[750px] h-[750px] rounded-full blur-[220px] opacity-25 transition-all duration-700"
+          style={{ backgroundColor: activeTheme.glow1 }}
         />
         <div
-          className="absolute -bottom-40 right-1/4 w-[750px] h-[750px] rounded-full blur-[220px] opacity-20"
-          style={{ backgroundColor: secondaryColor }}
+          className="absolute -bottom-40 right-1/4 w-[750px] h-[750px] rounded-full blur-[240px] opacity-20 transition-all duration-700"
+          style={{ backgroundColor: activeTheme.glow2 }}
         />
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] opacity-40 pointer-events-none" />
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px] opacity-40 pointer-events-none" />
       </div>
 
       {/* BARRA DE PROGRESO DE ROTACIÓN SUPERIOR (ESTILO CINÉPOLIS) */}
       {slides.length > 1 && screenMode !== 'ALL_STATIC' && (
         <div className="absolute top-0 left-0 w-full h-1.5 bg-white/10 z-50">
           <div
-            className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-200 transition-all duration-100 ease-linear shadow-[0_0_12px_rgba(245,158,11,0.8)]"
-            style={{ width: `${progress}%` }}
+            className="h-full transition-all duration-100 ease-linear shadow-lg"
+            style={{
+              width: `${progress}%`,
+              background: `linear-gradient(to right, ${activeTheme.primaryColor}, ${activeTheme.accentColor})`,
+              boxShadow: `0 0 12px ${activeTheme.accentColor}80`,
+            }}
           />
         </div>
       )}
 
-      {/* HEADER DE LA PANTALLA TV */}
-      <header className="relative z-20 px-8 py-4 border-b border-white/10 flex items-center justify-between backdrop-blur-xl bg-black/60 shadow-lg">
-        <div className="flex items-center gap-4">
-          {business.logoUrl ? (
-            <div className="relative w-14 h-14 rounded-2xl overflow-hidden shadow-2xl border border-white/20 bg-white shrink-0">
-              <Image
-                src={business.logoUrl}
-                alt={business.name}
-                fill
-                unoptimized
-                className="object-contain p-1.5"
-              />
-            </div>
-          ) : (
-            <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-2xl shrink-0 border border-white/20"
-              style={{ backgroundColor: primaryColor }}
-            >
-              <Coffee className="w-8 h-8" />
-            </div>
-          )}
-
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-400/10 border border-amber-400/30 text-amber-300 mb-0.5">
-              <Sparkles className="w-3 h-3 text-amber-400" />
-              <span>
-                {screenMode === 'FEATURED'
-                  ? 'Cartelera de Especialidades'
-                  : screenMode === 'DRINKS'
-                  ? 'Barra de Bebidas'
-                  : screenMode === 'FOOD'
-                  ? 'Cocina & Panadería'
-                  : 'Tablero Digital'}
-              </span>
-            </div>
-            <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-white uppercase drop-shadow-md">
-              {business.name}
-            </h1>
-          </div>
+      {/* INDICADOR INFERIOR DE SLIDES (PUNTITOS DISCRETOS SI HAY ROTACIÓN) */}
+      {slides.length > 1 && screenMode !== 'ALL_STATIC' && (
+        <div
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-1.5 rounded-full border backdrop-blur-md shadow-2xl transition-all"
+          style={{
+            backgroundColor: activeTheme.isLight ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.65)',
+            borderColor: activeTheme.cardBorder,
+          }}
+        >
+          {slides.map((s, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => {
+                setCurrentSlideIndex(idx)
+                setProgress(0)
+              }}
+              className={`transition-all rounded-full cursor-pointer ${
+                currentSlideIndex === idx
+                  ? 'w-7 h-2 shadow-sm'
+                  : 'w-2 h-2 opacity-30 hover:opacity-60'
+              }`}
+              style={{
+                backgroundColor: currentSlideIndex === idx ? activeTheme.accentColor : activeTheme.textColor,
+                boxShadow: currentSlideIndex === idx ? `0 0 8px ${activeTheme.accentColor}` : 'none',
+              }}
+              title={s.title}
+            />
+          ))}
+          <span
+            className="text-[11px] font-mono ml-1 font-bold"
+            style={{ color: activeTheme.mutedColor }}
+          >
+            {currentSlideIndex + 1}/{slides.length}
+          </span>
         </div>
+      )}
 
-        {/* INDICADOR DEL SLIDE ACTUAL (SI HAY ROTACIÓN) */}
+      {/* CONTROLES FLOTANTES DISCRETOS DE PANTALLA TV (OCULTOS / SUTILES) */}
+      <div className="fixed bottom-4 right-6 z-50 flex items-center gap-1.5 opacity-20 hover:opacity-100 transition-all duration-300 p-1.5 rounded-2xl backdrop-blur-xl bg-black/50 border border-white/10 shadow-2xl">
+        {/* Botón Pausa / Reproducir rotación */}
         {slides.length > 1 && screenMode !== 'ALL_STATIC' && (
-          <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
-            {slides.map((s, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  setCurrentSlideIndex(idx)
-                  setProgress(0)
-                }}
-                className={`transition-all rounded-full cursor-pointer ${
-                  currentSlideIndex === idx
-                    ? 'w-8 h-2 bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]'
-                    : 'w-2 h-2 bg-white/20 hover:bg-white/40'
-                }`}
-                title={s.title}
-              />
-            ))}
-            <span className="text-[11px] font-mono text-white/60 ml-2">
-              {currentSlideIndex + 1}/{slides.length}
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsPaused(!isPaused)}
+            className="w-8 h-8 rounded-xl border transition-all flex items-center justify-center cursor-pointer"
+            style={{
+              backgroundColor: activeTheme.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.08)',
+              borderColor: activeTheme.cardBorder,
+              color: activeTheme.textColor,
+            }}
+            title={isPaused ? 'Reanudar rotación' : 'Pausar rotación'}
+          >
+            {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-400" /> : <Pause className="w-3.5 h-3.5" />}
+          </button>
         )}
 
-        {/* RELOJ DIGITAL, CONTROLES DE PANTALLA Y MENÚ DE CONFIGURACIÓN */}
-        <div className="flex items-center gap-5">
-          <div className="text-right">
-            <p
-              className="text-2xl lg:text-3xl font-mono font-black text-amber-400 tracking-wider drop-shadow-sm"
-              suppressHydrationWarning
+        {/* Configuración de Pantalla y Tema */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowConfigMenu(!showConfigMenu)}
+            className="w-8 h-8 rounded-xl border transition-all flex items-center justify-center cursor-pointer"
+            style={{
+              backgroundColor: showConfigMenu
+                ? `${activeTheme.primaryColor}30`
+                : activeTheme.isLight
+                ? '#FFFFFF'
+                : 'rgba(255,255,255,0.08)',
+              borderColor: showConfigMenu ? activeTheme.primaryColor : activeTheme.cardBorder,
+              color: showConfigMenu ? activeTheme.accentColor : activeTheme.textColor,
+            }}
+            title="Configuración de Pantalla & Tema"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Menú Desplegable de Configuración de Pantalla */}
+          {showConfigMenu && (
+            <div
+              className="absolute right-0 bottom-12 w-80 rounded-3xl border shadow-2xl backdrop-blur-2xl p-4 z-50 space-y-4"
+              style={{
+                backgroundColor: activeTheme.isLight ? '#FFFFFFFA' : '#14100EFA',
+                borderColor: activeTheme.cardBorder,
+                color: activeTheme.textColor,
+              }}
             >
-              {mounted ? currentTime : '--:--:--'}
-            </p>
-            <p
-              className="text-[11px] uppercase tracking-widest text-amber-200/60 font-semibold capitalize mt-0.5"
-              suppressHydrationWarning
-            >
-              {mounted ? currentDate : ''}
-            </p>
-          </div>
+              <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: activeTheme.cardBorder }}>
+                <div className="flex items-center gap-2">
+                  <Tv className="w-4 h-4" style={{ color: activeTheme.accentColor }} />
+                  <span className="text-xs font-bold uppercase tracking-wider">Ajustes de Pantalla TV</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConfigMenu(false)}
+                  className="text-xs cursor-pointer opacity-60 hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Botón Pausa / Reproducir rotación */}
-            {slides.length > 1 && screenMode !== 'ALL_STATIC' && (
-              <button
-                type="button"
-                onClick={() => setIsPaused(!isPaused)}
-                className="w-10 h-10 rounded-2xl bg-white/5 border border-white/15 text-white/80 hover:text-white hover:bg-white/15 transition-all flex items-center justify-center cursor-pointer shadow-lg"
-                title={isPaused ? 'Reanudar rotación' : 'Pausar rotación'}
-              >
-                {isPaused ? <Play className="w-4 h-4 text-emerald-400" /> : <Pause className="w-4 h-4" />}
-              </button>
-            )}
+              {/* MODOS DE PANTALLA */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-60 block">
+                  Rol de esta Pantalla
+                </span>
+                {[
+                  { id: 'ROTATING' as ScreenMode, label: '🎬 Rotación Cinépolis', desc: 'Destacados y categorías con fotos grandes' },
+                  { id: 'FEATURED' as ScreenMode, label: '✨ Solo Vitrina Estelar', desc: 'Novedades y platillos de temporada' },
+                  { id: 'DRINKS' as ScreenMode, label: '☕ Solo Bebidas & Café', desc: 'Especial para TV sobre barra / cafetera' },
+                  { id: 'FOOD' as ScreenMode, label: '🥐 Solo Pan & Alimentos', desc: 'Especial para TV sobre vitrina de postres' },
+                  { id: 'ALL_STATIC' as ScreenMode, label: '📋 Vista Completa Fija', desc: 'Todas las categorías simultáneas' },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      handleModeChange(opt.id)
+                    }}
+                    className={`w-full text-left p-2 rounded-2xl border text-xs transition-all flex flex-col cursor-pointer ${
+                      screenMode === opt.id ? 'ring-1 font-bold' : 'opacity-80 hover:opacity-100'
+                    }`}
+                    style={{
+                      backgroundColor:
+                        screenMode === opt.id
+                          ? `${activeTheme.primaryColor}25`
+                          : activeTheme.isLight
+                          ? '#00000005'
+                          : 'rgba(255,255,255,0.04)',
+                      borderColor: screenMode === opt.id ? activeTheme.primaryColor : activeTheme.cardBorder,
+                      color: screenMode === opt.id ? activeTheme.accentColor : activeTheme.textColor,
+                    }}
+                  >
+                    <span>{opt.label}</span>
+                    <span className="text-[10px] opacity-60 font-normal">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
 
-            {/* Configuración de Pantalla */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowConfigMenu(!showConfigMenu)}
-                className={`w-10 h-10 rounded-2xl border transition-all flex items-center justify-center cursor-pointer shadow-lg ${
-                  showConfigMenu
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-400'
-                    : 'bg-white/5 border-white/15 text-white/80 hover:text-white hover:bg-white/15'
-                }`}
-                title="Configuración de Pantalla (Rol de TV)"
-              >
-                <Settings2 className="w-4 h-4" />
-              </button>
+              {/* TEMAS VISUALES DE PANTALLA */}
+              <div className="pt-2 border-t space-y-1.5" style={{ borderColor: activeTheme.cardBorder }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-widest opacity-60 flex items-center gap-1.5">
+                    <Palette className="w-3 h-3" style={{ color: activeTheme.accentColor }} />
+                    Tema de Color TV
+                  </span>
+                </div>
 
-              {/* Menú Desplegable de Configuración de Pantalla */}
-              {showConfigMenu && (
-                <div className="absolute right-0 mt-3 w-72 rounded-3xl bg-[#181412]/95 border border-white/20 shadow-2xl backdrop-blur-xl p-4 z-50 space-y-3">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Tv className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">Rol de esta Pantalla</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowConfigMenu(false)}
-                      className="text-white/50 hover:text-white text-xs"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {[
-                      { id: 'ROTATING' as ScreenMode, label: '🎬 Rotación Cinépolis', desc: 'Destacados y categorías alternando' },
-                      { id: 'FEATURED' as ScreenMode, label: '✨ Solo Vitrina Estelar', desc: 'Productos Nuevos y de Temporada' },
-                      { id: 'DRINKS' as ScreenMode, label: '☕ Solo Bebidas & Café', desc: 'Especial para TV sobre cafetera' },
-                      { id: 'FOOD' as ScreenMode, label: '🥐 Solo Pan & Alimentos', desc: 'Especial para TV de vitrina' },
-                      { id: 'ALL_STATIC' as ScreenMode, label: '📋 Vista Completa Fija', desc: 'Todas las categorías simultáneas' },
-                    ].map((opt) => (
+                <div className="grid grid-cols-2 gap-1.5">
+                  {Object.values(DISPLAY_THEMES).map((th) => {
+                    const isCurrent = selectedThemeId === th.id
+                    return (
                       <button
-                        key={opt.id}
+                        key={th.id}
                         type="button"
-                        onClick={() => {
-                          handleModeChange(opt.id)
-                          setShowConfigMenu(false)
-                        }}
-                        className={`w-full text-left p-2.5 rounded-2xl border text-xs transition-all flex flex-col cursor-pointer ${
-                          screenMode === opt.id
-                            ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
-                            : 'bg-white/5 border-white/10 text-white/80 hover:bg-white/10'
+                        onClick={() => handleThemeChange(th.id)}
+                        className={`p-2 rounded-xl border text-left text-xs transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                          isCurrent ? 'ring-2' : 'opacity-75 hover:opacity-100'
                         }`}
+                        style={{
+                          backgroundColor: th.bg,
+                          borderColor: isCurrent ? th.accentColor : 'rgba(255,255,255,0.15)',
+                          color: th.textColor,
+                        }}
                       >
-                        <span>{opt.label}</span>
-                        <span className="text-[10px] text-white/50 font-normal">{opt.desc}</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold truncate">{th.name}</span>
+                          {isCurrent && <Check className="w-3 h-3 text-emerald-400 shrink-0" />}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: th.primaryColor }} />
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: th.accentColor }} />
+                          <span className="text-[9px] opacity-60 ml-auto">{th.tag}</span>
+                        </div>
                       </button>
-                    ))}
-                  </div>
+                    )
+                  })}
 
-                  {/* Duración de transición */}
-                  {screenMode === 'ROTATING' && (
-                    <div className="pt-2 border-t border-white/10">
-                      <label className="text-[10px] font-semibold text-white/60 block mb-1">
-                        Segundos por Pantalla ({slideDuration}s)
-                      </label>
-                      <input
-                        type="range"
-                        min="6"
-                        max="30"
-                        step="2"
-                        value={slideDuration}
-                        onChange={(e) => setSlideDuration(Number(e.target.value))}
-                        className="w-full accent-amber-500 cursor-pointer"
-                      />
+                  {/* Opción tema personalizado de la marca */}
+                  <button
+                    type="button"
+                    onClick={() => handleThemeChange('brand-theme')}
+                    className={`p-2 rounded-xl border text-left text-xs transition-all cursor-pointer flex flex-col justify-between gap-1 col-span-2 ${
+                      selectedThemeId === 'brand-theme' ? 'ring-2' : 'opacity-75 hover:opacity-100'
+                    }`}
+                    style={{
+                      backgroundColor: '#0D0A08',
+                      borderColor:
+                        selectedThemeId === 'brand-theme'
+                          ? business.theme?.accentColor || '#C08552'
+                          : 'rgba(255,255,255,0.15)',
+                      color: '#FFFFFF',
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold">Tema del Negocio</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-white/15">SaaS Custom</span>
                     </div>
-                  )}
+                    <span className="text-[9px] opacity-60">Usa colores de {business.name}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Duración de transición */}
+              {screenMode === 'ROTATING' && (
+                <div className="pt-2 border-t" style={{ borderColor: activeTheme.cardBorder }}>
+                  <div className="flex items-center justify-between text-[10px] font-semibold opacity-70 mb-1">
+                    <span>Segundos por diapositiva</span>
+                    <span className="font-mono font-bold" style={{ color: activeTheme.accentColor }}>
+                      {slideDuration}s
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="6"
+                    max="30"
+                    step="2"
+                    value={slideDuration}
+                    onChange={(e) => setSlideDuration(Number(e.target.value))}
+                    className="w-full cursor-pointer accent-amber-500"
+                  />
                 </div>
               )}
             </div>
-
-            {/* Botón Pantalla Completa */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="w-10 h-10 rounded-2xl bg-white/5 border border-white/15 text-white/80 hover:text-white hover:bg-white/15 transition-all flex items-center justify-center cursor-pointer shadow-lg"
-              title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa (TV)'}
-            >
-              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-            </button>
-          </div>
+          )}
         </div>
-      </header>
 
-      {/* CONTENIDO PRINCIPAL: ANIMACIÓN ENTRE SLIDES */}
-      <main className="flex-1 relative z-10 px-8 py-5 overflow-hidden flex flex-col justify-center">
+        {/* Botón Pantalla Completa */}
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="w-8 h-8 rounded-xl border transition-all flex items-center justify-center cursor-pointer"
+          style={{
+            backgroundColor: activeTheme.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.08)',
+            borderColor: activeTheme.cardBorder,
+            color: activeTheme.textColor,
+          }}
+          title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa (TV)'}
+        >
+          {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+
+      {/* CONTENIDO PRINCIPAL A PANTALLA COMPLETA: ANIMACIÓN ENTRE SLIDES */}
+      <main className="flex-1 min-h-0 relative z-10 px-6 sm:px-10 lg:px-12 py-4 sm:py-5 overflow-hidden flex flex-col justify-between h-full">
         <AnimatePresence mode="wait">
-          {/* SLIDE: VITRINA DESTACADOS / CARTELERA CINÉPOLIS */}
+          {/* ======================================================== */}
+          {/* SLIDE: VITRINA DESTACADOS / CARTELERA CINÉPOLIS          */}
+          {/* ======================================================== */}
           {currentSlide.type === 'featured' && (
             <motion.div
               key="featured-slide"
@@ -546,242 +859,276 @@ export default function DisplayClient({
               transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
               className="h-full w-full flex flex-col justify-between"
             >
-              {/* TÍTULO DE VITRINA */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full bg-amber-400 animate-pulse shadow-[0_0_12px_rgba(245,158,11,1)]" />
-                  <h2 className="text-2xl lg:text-4xl font-black text-white tracking-wider uppercase flex items-center gap-3">
-                    <span>Cartelera de Temporada & Novedades</span>
-                    <span className="text-sm font-bold px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-lg">
-                      Edición Especial
-                    </span>
-                  </h2>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-mono text-amber-300">
-                  <Flame className="w-4 h-4 text-rose-500" />
-                  <span>Lo más recomendado por nuestros baristas</span>
-                </div>
-              </div>
-
-              {/* GRID DE PRODUCTOS DESTACADOS TIPO CINÉPOLIS (MÁX 3 O 4 CARDS GRANDES) */}
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[calc(100vh-190px)]">
-                {currentSlide.data.slice(0, 3).map((product, pIdx) => (
-                  <div
-                    key={product.id}
-                    className="relative rounded-3xl bg-gradient-to-b from-white/[0.08] to-white/[0.02] border border-white/20 p-6 flex flex-col justify-between shadow-2xl backdrop-blur-xl overflow-hidden group hover:border-amber-400/50 transition-all duration-300"
-                  >
-                    {/* Glow cálido en tarjeta */}
-                    <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
-                    <div>
-                      {/* IMAGEN DE IMPACTO */}
-                      <div className="relative w-full h-48 lg:h-56 rounded-2xl overflow-hidden mb-4 border border-white/10 bg-black/40 shadow-inner flex items-center justify-center">
-                        {product.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center opacity-40">
-                            <Coffee className="w-16 h-16 text-amber-400 mb-2" />
-                            <span className="text-xs uppercase tracking-widest font-mono">Bebida Insignia</span>
-                          </div>
-                        )}
-
-                        {/* BADGES EN ESQUINA SUPERIOR DE LA IMAGEN */}
-                        <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
-                          {product.isNew && (
-                            <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-400 text-black shadow-lg">
-                              ✨ NUEVO
+              {/* TÍTULO DE VITRINA ADAPTADO SEGÚN ESQUINA SUPERIOR DEL LOGO */}
+              <div className="flex items-center justify-between mb-4 gap-6 shrink-0">
+                {isLogoTopLeft ? (
+                  <>
+                    <div className="flex items-center gap-5 min-w-0">
+                      {renderBrandLogo()}
+                      <div className="h-12 w-px bg-white/15 hidden md:block shrink-0" />
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-3.5 h-3.5 rounded-full animate-pulse shadow-md shrink-0"
+                          style={{
+                            backgroundColor: activeTheme.accentColor,
+                            boxShadow: `0 0 14px ${activeTheme.accentColor}`,
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <h2
+                            className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-wider uppercase flex items-center gap-3 truncate"
+                            style={{ color: activeTheme.textColor }}
+                          >
+                            <span>Cartelera de Temporada</span>
+                            <span
+                              className="text-xs lg:text-sm font-bold px-3 py-1 rounded-full text-white shadow-lg shrink-0"
+                              style={{
+                                background: `linear-gradient(to right, ${activeTheme.primaryColor}, ${activeTheme.accentColor})`,
+                              }}
+                            >
+                              Edición Especial
                             </span>
-                          )}
-                          {product.isSeasonal && (
-                            <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-rose-500 text-white shadow-lg">
-                              🍁 TEMPORADA
-                            </span>
-                          )}
+                          </h2>
                         </div>
                       </div>
-
-                      {/* NOMBRE Y DESCRIPCIÓN */}
-                      <h3 className="text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight">
-                        {product.name}
-                      </h3>
-                      {product.description && (
-                        <p className="text-xs lg:text-sm text-neutral-300 line-clamp-2 mt-2 leading-relaxed">
-                          {product.description}
-                        </p>
-                      )}
                     </div>
-
-                    {/* SECCIÓN DE TAMAÑOS / PRECIOS Y SABORES */}
-                    <div className="pt-4 border-t border-white/10 mt-4 space-y-3">
-                      {/* TAMAÑOS DESGLOSADOS */}
-                      {product.variants.length > 1 ? (
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300/80 block mb-1.5">
-                            Tamaños Disponibles
-                          </span>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {product.variants.map((v) => (
-                              <div
-                                key={v.id}
-                                className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-1.5 text-center flex flex-col justify-center"
-                              >
-                                <span className="text-[10px] text-white/60 uppercase font-semibold truncate">
-                                  {v.name}
-                                </span>
-                                <strong className="text-base font-black text-amber-400">
-                                  ${v.price.toFixed(0)}
-                                </strong>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-white/60">Precio</span>
-                          <strong className="text-3xl font-black text-amber-400">
-                            ${product.minPrice.toFixed(2)}
-                          </strong>
-                        </div>
-                      )}
-
-                      {/* SABORES DISPONIBLES */}
-                      {product.modifierGroups && product.modifierGroups.length > 0 && (
-                        <div className="pt-2 border-t border-white/5">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block mb-1">
-                            Sabores & Opciones:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {product.modifierGroups.flatMap((mg) => mg.modifiers).slice(0, 4).map((mod) => (
-                              <span
-                                key={mod.id}
-                                className="text-[10px] px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-neutral-300 font-medium"
-                              >
-                                {mod.name}
-                                {mod.extraPrice > 0 && ` +$${mod.extraPrice}`}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                    <div
+                      className="hidden md:flex items-center gap-2 text-xs font-mono font-bold shrink-0"
+                      style={{ color: activeTheme.accentColor }}
+                    >
+                      <Flame className="w-4 h-4 text-rose-500" />
+                      <span>Lo más recomendado por nuestros baristas</span>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {/* SLIDE: CATEGORÍA DETALLADA CON TAMAÑOS Y SABORES */}
-          {currentSlide.type === 'category' && currentSlide.category && (
-            <motion.div
-              key={currentSlide.category.id}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-              className="h-full w-full flex flex-col justify-between"
-            >
-              {/* ENCABEZADO DE CATEGORÍA */}
-              <div className="border-b border-white/15 pb-4 mb-5 flex items-center justify-between">
-                <div className="flex items-center gap-3.5">
-                  <div
-                    className="w-4 h-4 rounded-full shadow-[0_0_12px_rgba(192,133,82,0.8)]"
-                    style={{ backgroundColor: primaryColor }}
-                  />
-                  <div>
-                    <h2 className="text-3xl lg:text-4xl font-black text-white tracking-wide uppercase drop-shadow-sm">
-                      {currentSlide.category.name}
-                    </h2>
-                    <p className="text-xs text-amber-300/80 uppercase tracking-widest font-semibold mt-0.5">
-                      Preparado artesanalmente al momento
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-3 py-1.5 rounded-full border border-amber-400/30 font-mono">
-                    {currentSlide.category.products.length} Ítems en esta sección
-                  </span>
-                </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-3.5 h-3.5 rounded-full animate-pulse shadow-md shrink-0"
+                          style={{
+                            backgroundColor: activeTheme.accentColor,
+                            boxShadow: `0 0 14px ${activeTheme.accentColor}`,
+                          }}
+                        />
+                        <h2
+                          className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-wider uppercase flex items-center gap-3 truncate"
+                          style={{ color: activeTheme.textColor }}
+                        >
+                          <span>Cartelera de Temporada</span>
+                          <span
+                            className="text-xs lg:text-sm font-bold px-3 py-1 rounded-full text-white shadow-lg shrink-0"
+                            style={{
+                              background: `linear-gradient(to right, ${activeTheme.primaryColor}, ${activeTheme.accentColor})`,
+                            }}
+                          >
+                            Edición Especial
+                          </span>
+                        </h2>
+                      </div>
+                      <div
+                        className="flex items-center gap-2 text-xs font-mono font-bold mt-1 ml-6.5"
+                        style={{ color: activeTheme.accentColor }}
+                      >
+                        <Flame className="w-3.5 h-3.5 text-rose-500" />
+                        <span>Lo más recomendado por nuestros baristas</span>
+                      </div>
+                    </div>
+                    {renderBrandLogo()}
+                  </>
+                )}
               </div>
 
-              {/* LISTA DE PRODUCTOS CON TABLERO MODERNO */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-5 overflow-hidden content-start">
-                {currentSlide.category.products.map((product) => {
-                  const hasMultiSizes = product.variants.length > 1
+              {/* GRID DE PRODUCTOS DESTACADOS CON FOTOS GRANDES Y SABORES DEBAJO DEL TÍTULO */}
+              <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6 overflow-hidden">
+                {currentSlide.data.slice(0, 3).map((product) => {
                   const allModifiers = product.modifierGroups?.flatMap((mg) => mg.modifiers) || []
 
                   return (
                     <div
                       key={product.id}
-                      className="group border-b border-white/10 pb-3 flex flex-col justify-between"
+                      className="relative rounded-3xl border p-4 sm:p-5 flex flex-col justify-between shadow-2xl backdrop-blur-xl overflow-hidden group transition-all duration-300 min-h-0"
+                      style={{
+                        backgroundColor: activeTheme.cardBg,
+                        borderColor: activeTheme.cardBorder,
+                      }}
                     >
-                      <div className="flex items-baseline justify-between gap-3">
-                        {/* Nombre del producto + badges */}
-                        <div className="flex items-center gap-2 flex-wrap min-w-0">
-                          <span className="text-lg lg:text-xl font-black text-white tracking-tight">
-                            {product.name}
-                          </span>
-                          {product.isNew && (
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-black">
-                              NUEVO
-                            </span>
-                          )}
-                          {product.isSeasonal && (
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500 text-white">
-                              TEMPORADA
-                            </span>
-                          )}
-                        </div>
+                      {/* Glow cálido en tarjeta */}
+                      <div
+                        className="absolute top-0 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none opacity-20"
+                        style={{ backgroundColor: activeTheme.primaryColor }}
+                      />
 
-                        {/* Línea punteada de tablero */}
-                        <div className="flex-1 border-b border-dotted border-white/25 mx-2 translate-y-[-4px]" />
-
-                        {/* Precios (Variantes completas o único) */}
-                        <div className="shrink-0 text-right">
-                          {hasMultiSizes ? (
-                            <div className="flex items-center gap-2 font-extrabold text-amber-400">
-                              {product.variants.map((v) => (
-                                <span
-                                  key={v.id}
-                                  className="inline-flex items-center gap-1 bg-white/5 px-2.5 py-1 rounded-xl border border-white/10 shadow-sm"
-                                >
-                                  <span className="text-[10px] text-white/50 uppercase font-semibold">
-                                    {v.name.slice(0, 4)}
-                                  </span>
-                                  <span className="text-sm lg:text-base font-black">
-                                    ${v.price.toFixed(0)}
-                                  </span>
-                                </span>
-                              ))}
-                            </div>
+                      <div className="min-h-0">
+                        {/* FOTO GRANDE DE IMPACTO */}
+                        <div
+                          className="relative w-full h-36 sm:h-44 lg:h-48 rounded-2xl overflow-hidden mb-3 border shadow-inner flex items-center justify-center bg-black/30 shrink-0"
+                          style={{ borderColor: activeTheme.cardBorder }}
+                        >
+                          {product.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                            />
                           ) : (
-                            <span className="text-xl lg:text-2xl font-black text-amber-400">
-                              ${product.minPrice.toFixed(2)}
-                            </span>
+                            <div className="flex flex-col items-center justify-center p-4">
+                              {renderProductPlaceholder()}
+                              <span
+                                className="text-[10px] uppercase tracking-widest font-mono mt-2 font-bold"
+                                style={{ color: activeTheme.mutedColor }}
+                              >
+                                Especialidad de la Casa
+                              </span>
+                            </div>
                           )}
-                        </div>
-                      </div>
 
-                      {/* Descripción y Sabores/Modificadores */}
-                      <div className="mt-1 flex items-center justify-between gap-4 text-xs text-neutral-400">
+                          {/* BADGES EN ESQUINA SUPERIOR DE LA IMAGEN */}
+                          <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
+                            {product.isNew && (
+                              <span
+                                className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider shadow-lg"
+                                style={{
+                                  backgroundColor: activeTheme.accentColor,
+                                  color: activeTheme.isLight ? '#FFFFFF' : '#000000',
+                                }}
+                              >
+                                ✨ NUEVO
+                              </span>
+                            )}
+                            {product.isSeasonal && (
+                              <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-rose-600 text-white shadow-lg">
+                                🍁 TEMPORADA
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* NOMBRE DEL PRODUCTO */}
+                        <h3
+                          className="text-2xl lg:text-3xl font-black tracking-tight leading-tight uppercase"
+                          style={{ color: activeTheme.textColor }}
+                        >
+                          {product.name}
+                        </h3>
+
+                        {/* DESCRIPCIÓN DEL PRODUCTO */}
                         {product.description && (
-                          <p className="line-clamp-1 italic text-white/70">
+                          <p
+                            className="text-xs lg:text-sm line-clamp-2 mt-1 leading-relaxed italic"
+                            style={{ color: activeTheme.mutedColor }}
+                          >
                             {product.description}
                           </p>
                         )}
 
-                        {allModifiers.length > 0 && (
-                          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                            <span className="text-[10px] text-amber-400/80 font-bold uppercase">Sabores:</span>
-                            <span className="text-[10px] text-white/60">
-                              {allModifiers.slice(0, 3).map((m) => m.name).join(', ')}
-                              {allModifiers.length > 3 && ` +${allModifiers.length - 3}`}
+                        {/* ======================================================== */}
+                        {/* SABORES EN LISTA DIRECTAMENTE DEBAJO DEL TÍTULO          */}
+                        {/* ======================================================== */}
+                        {product.modifierGroups && product.modifierGroups.length > 0 && (
+                          <div
+                            className="mt-3 p-3 rounded-2xl border space-y-2"
+                            style={{
+                              backgroundColor: activeTheme.isLight ? '#00000005' : 'rgba(255,255,255,0.04)',
+                              borderColor: activeTheme.cardBorder,
+                            }}
+                          >
+                            {product.modifierGroups.map((group) => (
+                              <div key={group.id} className="space-y-1">
+                                <span
+                                  className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5"
+                                  style={{ color: activeTheme.accentColor }}
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  {group.name}:
+                                </span>
+                                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                  {group.modifiers.map((mod) => (
+                                    <span
+                                      key={mod.id}
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-xl border shadow-xs"
+                                      style={{
+                                        backgroundColor: activeTheme.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
+                                        borderColor: activeTheme.cardBorder,
+                                        color: activeTheme.textColor,
+                                      }}
+                                    >
+                                      <span
+                                        className="w-1.5 h-1.5 rounded-full"
+                                        style={{ backgroundColor: activeTheme.accentColor }}
+                                      />
+                                      <span>{mod.name}</span>
+                                      {mod.extraPrice > 0 && (
+                                        <span
+                                          className="font-bold text-[10px]"
+                                          style={{ color: activeTheme.accentColor }}
+                                        >
+                                          (+${mod.extraPrice.toFixed(0)})
+                                        </span>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SECCIÓN DE TAMAÑOS / PRECIOS */}
+                      <div
+                        className="pt-3 border-t mt-3 space-y-2"
+                        style={{ borderColor: activeTheme.cardBorder }}
+                      >
+                        {product.variants.length > 1 ? (
+                          <div>
+                            <span
+                              className="text-[10px] font-bold uppercase tracking-wider block mb-1.5"
+                              style={{ color: activeTheme.accentColor }}
+                            >
+                              Tamaños Disponibles
                             </span>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {product.variants.map((v) => (
+                                <div
+                                  key={v.id}
+                                  className="border rounded-xl px-2.5 py-1.5 text-center flex flex-col justify-center shadow-sm"
+                                  style={{
+                                    backgroundColor: activeTheme.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.05)',
+                                    borderColor: activeTheme.cardBorder,
+                                  }}
+                                >
+                                  <span
+                                    className="text-[10px] uppercase font-semibold truncate"
+                                    style={{ color: activeTheme.mutedColor }}
+                                  >
+                                    {v.name}
+                                  </span>
+                                  <strong
+                                    className="text-base font-black"
+                                    style={{ color: activeTheme.priceColor }}
+                                  >
+                                    ${v.price.toFixed(0)}
+                                  </strong>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-baseline justify-between">
+                            <span
+                              className="text-xs font-bold uppercase tracking-wider"
+                              style={{ color: activeTheme.mutedColor }}
+                            >
+                              Precio
+                            </span>
+                            <strong
+                              className="text-3xl font-black"
+                              style={{ color: activeTheme.priceColor }}
+                            >
+                              ${product.minPrice.toFixed(2)}
+                            </strong>
                           </div>
                         )}
                       </div>
@@ -792,74 +1139,479 @@ export default function DisplayClient({
             </motion.div>
           )}
 
-          {/* SLIDE: MENÚ COMPLETO ESTÁTICO (TODAS LAS CATEGORÍAS EN 3 COLUMNAS) */}
+          {/* ======================================================== */}
+          {/* SLIDE: CATEGORÍA DETALLADA (FOTOS GRANDES, SABORES Y TAMAÑOS) */}
+          {/* ======================================================== */}
+          {currentSlide.type === 'category' && currentSlide.category && (
+            <motion.div
+              key={`${currentSlide.category.id}-p${currentSlide.pageNumber}`}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+              className="h-full w-full flex flex-col justify-between"
+            >
+              {/* ENCABEZADO DE CATEGORÍA ADAPTADO SEGÚN ESQUINA DEL LOGO */}
+              <div
+                className="border-b pb-3 mb-4 flex items-center justify-between gap-6 shrink-0"
+                style={{ borderColor: activeTheme.cardBorder }}
+              >
+                {isLogoTopLeft ? (
+                  <>
+                    <div className="flex items-center gap-5 min-w-0">
+                      {renderBrandLogo()}
+                      <div className="h-12 w-px bg-white/15 hidden md:block shrink-0" />
+                      <div className="min-w-0">
+                        <h2
+                          className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-wide uppercase drop-shadow-sm flex items-center gap-3 truncate"
+                          style={{ color: activeTheme.textColor }}
+                        >
+                          <span>{currentSlide.category.name}</span>
+                          {currentSlide.totalPages > 1 && (
+                            <span
+                              className="text-xs font-bold px-2.5 py-0.5 rounded-full border shrink-0"
+                              style={{
+                                backgroundColor: activeTheme.badgeBg,
+                                color: activeTheme.badgeText,
+                                borderColor: activeTheme.cardBorder,
+                              }}
+                            >
+                              Pág {currentSlide.pageNumber}/{currentSlide.totalPages}
+                            </span>
+                          )}
+                        </h2>
+                        <p
+                          className="text-xs uppercase tracking-widest font-semibold mt-0.5 truncate"
+                          style={{ color: activeTheme.mutedColor }}
+                        >
+                          Elaborado artesanalmente con ingredientes selectos
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-3">
+                      <span
+                        className="text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border font-mono"
+                        style={{
+                          backgroundColor: activeTheme.badgeBg,
+                          color: activeTheme.badgeText,
+                          borderColor: activeTheme.cardBorder,
+                        }}
+                      >
+                        {currentSlide.category.products.length} {currentSlide.category.products.length === 1 ? 'Especialidad' : 'Especialidades'}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-3.5 h-3.5 rounded-full shadow-md shrink-0"
+                          style={{
+                            backgroundColor: activeTheme.primaryColor,
+                            boxShadow: `0 0 14px ${activeTheme.primaryColor}`,
+                          }}
+                        />
+                        <h2
+                          className="text-2xl lg:text-3xl xl:text-4xl font-black tracking-wide uppercase drop-shadow-sm flex items-center gap-3 truncate"
+                          style={{ color: activeTheme.textColor }}
+                        >
+                          <span>{currentSlide.category.name}</span>
+                          {currentSlide.totalPages > 1 && (
+                            <span
+                              className="text-xs font-bold px-2.5 py-0.5 rounded-full border shrink-0"
+                              style={{
+                                backgroundColor: activeTheme.badgeBg,
+                                color: activeTheme.badgeText,
+                                borderColor: activeTheme.cardBorder,
+                              }}
+                            >
+                              Pág {currentSlide.pageNumber}/{currentSlide.totalPages}
+                            </span>
+                          )}
+                        </h2>
+                        <span
+                          className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border font-mono shrink-0 ml-2"
+                          style={{
+                            backgroundColor: activeTheme.badgeBg,
+                            color: activeTheme.badgeText,
+                            borderColor: activeTheme.cardBorder,
+                          }}
+                        >
+                          {currentSlide.category.products.length} {currentSlide.category.products.length === 1 ? 'Especialidad' : 'Especialidades'}
+                        </span>
+                      </div>
+                      <p
+                        className="text-xs uppercase tracking-widest font-semibold mt-1 ml-6.5"
+                        style={{ color: activeTheme.mutedColor }}
+                      >
+                        Elaborado artesanalmente con ingredientes selectos
+                      </p>
+                    </div>
+                    {renderBrandLogo()}
+                  </>
+                )}
+              </div>
+
+              {/* LISTA DE PRODUCTOS EN GRID 2X2 DE ALTO IMPACTO (FOTOS GRANDES, SABORES DEBAJO DEL TÍTULO Y TAMAÑOS) */}
+              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 overflow-hidden content-start">
+                {currentSlide.products.map((product) => {
+                  const hasMultiSizes = product.variants.length > 1
+                  const allModifiers = product.modifierGroups?.flatMap((mg) => mg.modifiers) || []
+
+                  return (
+                    <div
+                      key={product.id}
+                      className="rounded-3xl border p-4 sm:p-5 flex items-start sm:items-stretch gap-4 sm:gap-6 shadow-xl backdrop-blur-md relative overflow-hidden group transition-all duration-300"
+                      style={{
+                        backgroundColor: activeTheme.cardBg,
+                        borderColor: activeTheme.cardBorder,
+                      }}
+                    >
+                      {/* FOTOGRAFÍA GRANDE DEL PRODUCTO */}
+                      <div
+                        className="relative w-28 h-28 sm:w-36 sm:h-36 lg:w-40 lg:h-40 shrink-0 rounded-2xl sm:rounded-3xl overflow-hidden border shadow-lg bg-black/30 flex items-center justify-center group-hover:scale-102 transition-transform duration-500"
+                        style={{ borderColor: activeTheme.cardBorder }}
+                      >
+                        {product.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-2 text-center">
+                            {renderProductPlaceholder(currentSlide.category.name)}
+                            <span
+                              className="text-[9px] uppercase font-mono mt-1 font-bold"
+                              style={{ color: activeTheme.mutedColor }}
+                            >
+                              Artesanal
+                            </span>
+                          </div>
+                        )}
+
+                        {/* BADGES SOBRE LA FOTO */}
+                        {(product.isNew || product.isSeasonal) && (
+                          <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                            {product.isNew && (
+                              <span
+                                className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded shadow-md"
+                                style={{
+                                  backgroundColor: activeTheme.accentColor,
+                                  color: activeTheme.isLight ? '#FFFFFF' : '#000000',
+                                }}
+                              >
+                                NUEVO
+                              </span>
+                            )}
+                            {product.isSeasonal && (
+                              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded shadow-md bg-rose-600 text-white">
+                                TEMPORADA
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* CONTENIDO DEL PRODUCTO: TÍTULO GRANDE, SABORES EN LISTA Y TAMAÑOS */}
+                      <div className="flex-1 flex flex-col justify-between min-w-0">
+                        <div>
+                          {/* TÍTULO MÁS GRANDE Y CLARO */}
+                          <div className="flex items-start justify-between gap-2">
+                            <h3
+                              className="text-xl sm:text-2xl font-black uppercase tracking-tight leading-snug line-clamp-2"
+                              style={{ color: activeTheme.textColor }}
+                            >
+                              {product.name}
+                            </h3>
+
+                            {/* Precio único en la esquina si no tiene variantes */}
+                            {!hasMultiSizes && (
+                              <span
+                                className="text-xl sm:text-2xl font-black shrink-0"
+                                style={{ color: activeTheme.priceColor }}
+                              >
+                                ${product.minPrice.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* DESCRIPCIÓN */}
+                          {product.description && (
+                            <p
+                              className="text-xs sm:text-sm line-clamp-2 mt-1 italic leading-relaxed"
+                              style={{ color: activeTheme.mutedColor }}
+                            >
+                              {product.description}
+                            </p>
+                          )}
+
+                          {/* ======================================================== */}
+                          {/* LOS SABORES EN LISTA DEBAJO DE CADA TÍTULO               */}
+                          {/* ======================================================== */}
+                          {product.modifierGroups && product.modifierGroups.length > 0 && (
+                            <div className="mt-2 space-y-1.5">
+                              {product.modifierGroups.map((group) => (
+                                <div key={group.id} className="space-y-0.5">
+                                  <span
+                                    className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider flex items-center gap-1"
+                                    style={{ color: activeTheme.accentColor }}
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                    {group.name}:
+                                  </span>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {group.modifiers.map((mod) => (
+                                      <span
+                                        key={mod.id}
+                                        className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold px-2.5 py-0.5 rounded-xl border shadow-2xs"
+                                        style={{
+                                          backgroundColor: activeTheme.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.06)',
+                                          borderColor: activeTheme.cardBorder,
+                                          color: activeTheme.textColor,
+                                        }}
+                                      >
+                                        <span
+                                          className="w-1.5 h-1.5 rounded-full"
+                                          style={{ backgroundColor: activeTheme.accentColor }}
+                                        />
+                                        <span>{mod.name}</span>
+                                        {mod.extraPrice > 0 && (
+                                          <span
+                                            className="font-bold text-[10px]"
+                                            style={{ color: activeTheme.accentColor }}
+                                          >
+                                            (+${mod.extraPrice.toFixed(0)})
+                                          </span>
+                                        )}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* DESGLOSE DE TAMAÑOS CON PRECIOS */}
+                        {hasMultiSizes && (
+                          <div className="mt-3 pt-2 border-t" style={{ borderColor: activeTheme.cardBorder }}>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {product.variants.map((v) => (
+                                <div
+                                  key={v.id}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border shadow-xs"
+                                  style={{
+                                    backgroundColor: activeTheme.isLight ? '#FFFFFF' : 'rgba(255,255,255,0.05)',
+                                    borderColor: activeTheme.cardBorder,
+                                  }}
+                                >
+                                  <span
+                                    className="text-[10px] font-bold uppercase tracking-wider opacity-70"
+                                    style={{ color: activeTheme.mutedColor }}
+                                  >
+                                    {v.name}
+                                  </span>
+                                  <span
+                                    className="text-sm sm:text-base font-black"
+                                    style={{ color: activeTheme.priceColor }}
+                                  >
+                                    ${v.price.toFixed(0)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ======================================================== */}
+          {/* SLIDE: MENÚ COMPLETO ESTÁTICO (TODAS LAS CATEGORÍAS)     */}
+          {/* ======================================================== */}
           {currentSlide.type === 'all_static' && (
             <motion.div
               key="all-static"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="h-full w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+              className="h-full w-full flex flex-col justify-between"
             >
-              {categories.slice(0, 3).map((cat) => (
+              {/* ENCABEZADO ADAPTATIVO EN MODO ESTÁTICO */}
+              <div className="flex items-center justify-between mb-4 gap-6 shrink-0">
+                {isLogoTopLeft ? (
+                  <div className="flex items-center gap-5">
+                    {renderBrandLogo()}
+                    <div className="h-12 w-px bg-white/15 hidden md:block" />
+                    <h2 className="text-2xl lg:text-3xl font-black uppercase tracking-wider" style={{ color: activeTheme.textColor }}>
+                      Menú Completo de Especialidades
+                    </h2>
+                  </div>
+                ) : (
+                  <>
+                    <h2 className="text-2xl lg:text-3xl font-black uppercase tracking-wider" style={{ color: activeTheme.textColor }}>
+                      Menú Completo de Especialidades
+                    </h2>
+                    {renderBrandLogo()}
+                  </>
+                )}
+              </div>
+
+              <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-hidden">
+                {categories.slice(0, 3).map((cat) => (
                 <div
                   key={cat.id}
-                  className="bg-[#181412]/80 border border-white/10 rounded-3xl p-6 flex flex-col h-full shadow-2xl backdrop-blur-md overflow-hidden"
+                  className="border rounded-3xl p-5 flex flex-col h-full shadow-2xl backdrop-blur-md overflow-hidden"
+                  style={{
+                    backgroundColor: activeTheme.cardBg,
+                    borderColor: activeTheme.cardBorder,
+                  }}
                 >
-                  <div className="border-b border-white/15 pb-3 mb-4 flex items-center justify-between">
-                    <h3 className="text-xl font-black text-white uppercase">{cat.name}</h3>
-                    <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+                  <div
+                    className="border-b pb-3 mb-3 flex items-center justify-between"
+                    style={{ borderColor: activeTheme.cardBorder }}
+                  >
+                    <h3
+                      className="text-xl font-black uppercase"
+                      style={{ color: activeTheme.textColor }}
+                    >
+                      {cat.name}
+                    </h3>
+                    <span
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
+                      style={{
+                        backgroundColor: activeTheme.badgeBg,
+                        color: activeTheme.badgeText,
+                        borderColor: activeTheme.cardBorder,
+                      }}
+                    >
                       {cat.products.length} ítems
                     </span>
                   </div>
-                  <div className="flex-1 overflow-hidden space-y-3.5">
-                    {cat.products.slice(0, 8).map((p) => (
-                      <div key={p.id}>
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="text-base font-bold text-white shrink-0">{p.name}</span>
-                          <div className="flex-1 border-b border-dotted border-white/20 mx-1 translate-y-[-4px]" />
-                          <div className="shrink-0 text-right">
-                            {p.variants.length > 1 ? (
-                              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
-                                {p.variants.slice(0, 3).map((v) => (
-                                  <span key={v.id} className="bg-white/5 px-1.5 py-0.5 rounded border border-white/10 text-[11px]">
-                                    ${v.price.toFixed(0)}
+
+                  <div className="flex-1 overflow-hidden space-y-3">
+                    {cat.products.slice(0, 6).map((p) => {
+                      const allModifiers = p.modifierGroups?.flatMap((mg) => mg.modifiers) || []
+
+                      return (
+                        <div
+                          key={p.id}
+                          className="flex items-start gap-3 border-b pb-2.5 last:border-0"
+                          style={{ borderColor: activeTheme.cardBorder }}
+                        >
+                          {/* Miniatura de foto */}
+                          <div
+                            className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border bg-black/30 flex items-center justify-center"
+                            style={{ borderColor: activeTheme.cardBorder }}
+                          >
+                            {p.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Coffee className="w-5 h-5 opacity-40" style={{ color: activeTheme.accentColor }} />
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline justify-between gap-1">
+                              <span
+                                className="text-sm font-bold truncate uppercase"
+                                style={{ color: activeTheme.textColor }}
+                              >
+                                {p.name}
+                              </span>
+                              <div className="shrink-0 text-right">
+                                {p.variants.length > 1 ? (
+                                  <div className="flex items-center gap-1 text-[11px] font-bold flex-wrap justify-end">
+                                    {p.variants.map((v) => (
+                                      <span
+                                        key={v.id}
+                                        className="px-1.5 py-0.5 rounded border"
+                                        style={{
+                                          borderColor: activeTheme.cardBorder,
+                                          color: activeTheme.priceColor,
+                                        }}
+                                      >
+                                        ${v.price.toFixed(0)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span
+                                    className="text-sm font-black"
+                                    style={{ color: activeTheme.priceColor }}
+                                  >
+                                    ${p.minPrice.toFixed(2)}
                                   </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Sabores y modificadores en detalle completo debajo del título */}
+                            {p.modifierGroups && p.modifierGroups.length > 0 && (
+                              <div className="mt-1 space-y-0.5 text-[10px]">
+                                {p.modifierGroups.map((group) => (
+                                  <div key={group.id} className="flex items-baseline gap-1 flex-wrap">
+                                    <span className="font-bold shrink-0" style={{ color: activeTheme.accentColor }}>
+                                      {group.name}:
+                                    </span>
+                                    <span className="opacity-85">
+                                      {group.modifiers
+                                        .map((m) => `${m.name}${m.extraPrice > 0 ? ` (+$${m.extraPrice.toFixed(0)})` : ''}`)
+                                        .join(', ')}
+                                    </span>
+                                  </div>
                                 ))}
                               </div>
-                            ) : (
-                              <span className="text-base font-black text-amber-400">${p.minPrice.toFixed(2)}</span>
                             )}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
       {/* FOOTER / TICKER DE PROMOCIONES Y CORTESÍAS */}
-      <footer className="relative z-20 px-8 py-3.5 border-t border-white/10 bg-black/60 backdrop-blur-xl flex items-center justify-between text-xs text-[#DECEBD]">
+      <footer
+        className="relative z-20 px-6 sm:px-10 py-2.5 sm:py-3 border-t backdrop-blur-xl flex items-center justify-between text-xs transition-colors duration-500 shrink-0"
+        style={{
+          backgroundColor: activeTheme.headerBg,
+          borderColor: activeTheme.cardBorder,
+          color: activeTheme.mutedColor,
+        }}
+      >
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 font-bold text-amber-400">
+          <div
+            className="flex items-center gap-2 font-bold"
+            style={{ color: activeTheme.accentColor }}
+          >
             <Sparkles className="w-4 h-4" />
             <span>Café de Especialidad 100% Mexicano</span>
           </div>
-          <span className="hidden sm:inline text-white/20">•</span>
-          <div className="hidden sm:flex items-center gap-2 font-medium text-white/70">
-            <Clock className="w-3.5 h-3.5 text-[#C08552]" />
+          <span className="hidden sm:inline opacity-30">•</span>
+          <div className="hidden sm:flex items-center gap-2 font-medium">
+            <Clock className="w-3.5 h-3.5" style={{ color: activeTheme.primaryColor }} />
             <span>Tostado artesanal y baristas certificados</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-5 text-[11px] font-semibold text-white/60">
+        <div className="flex items-center gap-5 text-[11px] font-semibold">
           <span>Precios en {business.currency} con IVA incluido</span>
           {isUpdating && (
-            <span className="flex items-center gap-1.5 text-amber-400">
+            <span className="flex items-center gap-1.5" style={{ color: activeTheme.accentColor }}>
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
               <span>Sincronizando...</span>
             </span>

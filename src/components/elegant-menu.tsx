@@ -916,48 +916,44 @@ export default function ElegantMenu({
                               </div>
                             )}
 
-                            {/* SABORES & OPCIONES: Mostrados a modo de lista directamente en el platillo */}
+                            {/* SABORES, VARIEDADES Y MODIFICADORES EN DETALLE COMPLETO (SIN LIMITAR) */}
                             {product.modifierGroups && product.modifierGroups.length > 0 && (
-                              <div className="pt-1.5 space-y-1.5">
-                                <span
-                                  className="text-[10px] font-mono uppercase tracking-widest font-black block"
-                                  style={{ color: accentColor }}
-                                >
-                                  Sabores & Variedades:
-                                </span>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  {product.modifierGroups
-                                    .flatMap((g) => g.modifiers)
-                                    .slice(0, 6)
-                                    .map((mod) => (
-                                      <span
-                                        key={mod.id}
-                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-medium border transition-all"
-                                        style={{
-                                          backgroundColor: isCoverLight
-                                            ? '#FFFFFF80'
-                                            : 'rgba(255, 255, 255, 0.05)',
-                                          borderColor: `${accentColor}30`,
-                                          color: isCoverLight ? '#2B1712' : '#F3E9DC',
-                                        }}
-                                      >
-                                        <span>{mod.name}</span>
-                                        {mod.extraPrice > 0 && (
-                                          <span
-                                            className="font-bold opacity-80"
-                                            style={{ color: accentColor }}
-                                          >
-                                            +${mod.extraPrice.toFixed(0)}
-                                          </span>
-                                        )}
-                                      </span>
-                                    ))}
-                                  {product.modifierGroups.flatMap((g) => g.modifiers).length > 6 && (
-                                    <span className="text-[10px] font-mono opacity-50 px-1">
-                                      +{product.modifierGroups.flatMap((g) => g.modifiers).length - 6} más
+                              <div className="pt-2 space-y-2">
+                                {product.modifierGroups.map((group) => (
+                                  <div key={group.id} className="space-y-1">
+                                    <span
+                                      className="text-[10px] font-mono uppercase tracking-widest font-black block"
+                                      style={{ color: accentColor }}
+                                    >
+                                      {group.name}:
                                     </span>
-                                  )}
-                                </div>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {group.modifiers.map((mod) => (
+                                        <span
+                                          key={mod.id}
+                                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-medium border transition-all"
+                                          style={{
+                                            backgroundColor: isCoverLight
+                                              ? '#FFFFFF80'
+                                              : 'rgba(255, 255, 255, 0.05)',
+                                            borderColor: `${accentColor}30`,
+                                            color: isCoverLight ? '#2B1712' : '#F3E9DC',
+                                          }}
+                                        >
+                                          <span>{mod.name}</span>
+                                          {mod.extraPrice > 0 && (
+                                            <span
+                                              className="font-bold opacity-80"
+                                              style={{ color: accentColor }}
+                                            >
+                                              +${mod.extraPrice.toFixed(0)}
+                                            </span>
+                                          )}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>

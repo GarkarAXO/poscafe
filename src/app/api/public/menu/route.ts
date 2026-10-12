@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -15,7 +17,7 @@ export async function GET(request: Request) {
         where: { id: businessIdParam, active: true },
         include: {
           settings: true,
-          branches: { where: { active: true }, take: 1 },
+          branches: { where: { active: true }, orderBy: { createdAt: 'asc' }, take: 1 },
         },
       })
     }
@@ -25,7 +27,7 @@ export async function GET(request: Request) {
         where: { active: true },
         include: {
           settings: true,
-          branches: { where: { active: true }, take: 1 },
+          branches: { where: { active: true }, orderBy: { createdAt: 'asc' }, take: 1 },
         },
       })
     }

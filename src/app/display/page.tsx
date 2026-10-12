@@ -22,14 +22,20 @@ export default async function DisplayPage(props: DisplayPageProps) {
   if (businessIdParam) {
     business = await prisma.business.findUnique({
       where: { id: businessIdParam, active: true },
-      include: { settings: true },
+      include: {
+        settings: true,
+        branches: { where: { active: true }, orderBy: { createdAt: 'asc' }, take: 1 },
+      },
     })
   }
 
   if (!business) {
     business = await prisma.business.findFirst({
       where: { active: true },
-      include: { settings: true },
+      include: {
+        settings: true,
+        branches: { where: { active: true }, orderBy: { createdAt: 'asc' }, take: 1 },
+      },
     })
   }
 
@@ -134,17 +140,20 @@ export default async function DisplayPage(props: DisplayPageProps) {
       }),
     }))
 
+  const activeBranch = business.branches?.[0] || null
+
   const businessData = {
     id: business.id,
     name: business.name,
     legalName: business.legalName,
-    logoUrl: settings?.logoUrl || null,
+    logoUrl: activeBranch?.logoUrl || settings?.logoUrl || null,
+    isotypeUrl: activeBranch?.isotypeUrl || settings?.isotypeUrl || null,
     currency: business.currencyCode || 'MXN',
     timezone: business.timezone || 'America/Mexico_City',
     theme: {
-      primaryColor: settings?.primaryColor || '#C08552',
-      secondaryColor: settings?.secondaryColor || '#5E3023',
-      accentColor: settings?.accentColor || '#C08552',
+      primaryColor: activeBranch?.primaryColor || settings?.primaryColor || '#C08552',
+      secondaryColor: activeBranch?.secondaryColor || settings?.secondaryColor || '#5E3023',
+      accentColor: activeBranch?.buttonColor || settings?.accentColor || '#C08552',
       darkMode: settings?.darkMode || false,
     },
   }

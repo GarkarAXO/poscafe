@@ -44,8 +44,11 @@ import {
   ShoppingBag,
   Bell,
   BookOpen,
+  Tv,
+  ExternalLink,
 } from 'lucide-react'
 import ElegantMenu from '@/components/elegant-menu'
+import { DISPLAY_THEMES } from '@/app/display/display-client'
 import { notify } from '@/lib/notify'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
@@ -242,8 +245,10 @@ export default function ThemeCustomizerPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [previewTab, setPreviewTab] = useState<
-    'comandera' | 'pos' | 'kds' | 'dashboard' | 'tables' | 'catalog' | 'menu' | 'sidebar'
+    'comandera' | 'pos' | 'kds' | 'dashboard' | 'tables' | 'catalog' | 'menu' | 'sidebar' | 'display'
   >('comandera')
+  const [displayThemeId, setDisplayThemeId] = useState<string>('cinepolis-gold')
+  const [displayPreviewSlide, setDisplayPreviewSlide] = useState<'category' | 'featured'>('category')
 
   // Colores y ajustes visuales para la sucursal seleccionada
   const [themeData, setThemeData] = useState({
@@ -268,7 +273,7 @@ export default function ThemeCustomizerPage() {
   const fetchBranches = async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/branches')
+      const res = await fetch('/api/branches', { cache: 'no-store' })
       const json = await res.json()
       if (json.success && json.data.branches?.length > 0) {
         setBranches(json.data.branches)
@@ -300,6 +305,12 @@ export default function ThemeCustomizerPage() {
 
   useEffect(() => {
     fetchBranches()
+    if (typeof window !== 'undefined') {
+      const savedDisplayTheme = localStorage.getItem('poscafe_display_theme')
+      if (savedDisplayTheme) {
+        setDisplayThemeId(savedDisplayTheme)
+      }
+    }
   }, [])
 
   // Cambiar sucursal activa en el selector
@@ -381,9 +392,16 @@ export default function ThemeCustomizerPage() {
 
       const json = await res.json()
       if (json.success) {
+        // Guardar también el tema de pantalla digital TV en localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('poscafe_display_theme', displayThemeId)
+          } catch {}
+        }
+
         notify.success(
-          'Guardado',
-          'Guardado y aplicando en lo que se recarga el sistema...'
+          'Guardado exitoso',
+          'El tema ha sido guardado en la base de datos y aplicado al sistema.'
         )
         // Actualizar lista local
         setBranches((prev) =>
@@ -393,19 +411,23 @@ export default function ThemeCustomizerPage() {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
             new CustomEvent('poscafe:theme-updated', {
-              detail: { branchId: selectedBranchId, ...themeData },
+              detail: { branchId: selectedBranchId, ...themeData, displayThemeId },
             })
           )
           try {
             localStorage.setItem(
               'poscafe_theme_event',
-              JSON.stringify({ branchId: selectedBranchId, ...themeData, timestamp: Date.now() })
+              JSON.stringify({ branchId: selectedBranchId, ...themeData, displayThemeId, timestamp: Date.now() })
             )
+          } catch {}
+          // Revalidar rutas Next.js para invalidar Client Router Cache
+          try {
+            router.refresh()
           } catch {}
           // Recargar automáticamente para aplicar el nuevo tema a todo el sistema
           setTimeout(() => {
             window.location.reload()
-          }, 600)
+          }, 700)
         }
       } else {
         notify.error('Error al guardar', json.error?.message || 'No se pudo actualizar el tema')
@@ -1095,6 +1117,114 @@ export default function ThemeCustomizerPage() {
               </div>
             </div>
 
+            {/* SECCIÓN DEDICADA: PERSONALIZACIÓN DE LA PANTALLA DIGITAL TV (DISPLAY MENUBOARD) */}
+            <div className={`p-4 sm:p-5 rounded-2xl border space-y-4 ${classes.subCard}`}>
+              <div className={`flex items-center justify-between pb-2 border-b ${classes.divider}`}>
+                <div className="flex items-center gap-2">
+                  <Tv className="w-4 h-4 text-amber-500" />
+                  <h4 className={`text-xs font-black uppercase tracking-wider ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Pantalla Digital TV (Menuboard)
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('display')}
+                    className="text-[11px] font-bold text-amber-500 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>Ver TV</span>
+                  </button>
+                  <Link
+                    href="/display"
+                    target="_blank"
+                    className="text-[11px] font-bold opacity-70 hover:opacity-100 flex items-center gap-1"
+                    title="Abrir en pantalla completa en una nueva pestaña"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Abrir</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Selector de Temas Visuales de Pantalla TV */}
+              <div className="space-y-1.5">
+                <span className={`text-[11px] font-bold ${classes.textMain}`}>
+                  Estilo de Pantalla Digital TV
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {Object.values(DISPLAY_THEMES).map((th) => {
+                    const isCurrent = displayThemeId === th.id
+                    return (
+                      <button
+                        key={th.id}
+                        type="button"
+                        onClick={() => {
+                          setDisplayThemeId(th.id)
+                          setPreviewTab('display')
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 select-none ${
+                          isCurrent
+                            ? 'ring-2 ring-amber-500 border-amber-500 shadow-sm'
+                            : 'border-slate-300/40 opacity-85 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: th.bg,
+                          color: th.textColor,
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black">{th.name}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/20 font-bold">
+                            {th.tag}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <div
+                            className="w-3.5 h-3.5 rounded-full border border-white/30"
+                            style={{ backgroundColor: th.primaryColor }}
+                            title="Color Primario"
+                          />
+                          <div
+                            className="w-3.5 h-3.5 rounded-full border border-white/30"
+                            style={{ backgroundColor: th.accentColor }}
+                            title="Acento / Precios"
+                          />
+                          {isCurrent && (
+                            <span className="text-[10px] font-bold text-amber-400 ml-auto flex items-center gap-0.5">
+                              <Check className="w-3 h-3" /> Activo
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Guía de Múltiples Pantallas TV */}
+              <div className={`p-3 rounded-xl border text-[11px] space-y-1.5 ${classes.card}`}>
+                <span className="font-bold flex items-center gap-1 text-amber-500">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  ¿Tienes varias pantallas en tu cafetería?
+                </span>
+                <p className={`text-[10px] ${classes.textMuted} leading-relaxed`}>
+                  Puedes configurar cada televisor según su rol con parámetros en la URL:
+                </p>
+                <div className="space-y-1 font-mono text-[9px] opacity-80 pt-1">
+                  <div className="p-1 rounded bg-black/10 dark:bg-white/5 truncate">
+                    <code>/display?mode=DRINKS</code> (Barra de café)
+                  </div>
+                  <div className="p-1 rounded bg-black/10 dark:bg-white/5 truncate">
+                    <code>/display?mode=FOOD</code> (Vitrina de repostería)
+                  </div>
+                  <div className="p-1 rounded bg-black/10 dark:bg-white/5 truncate">
+                    <code>/display?mode=FEATURED</code> (Vitrina de temporada)
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={handleSaveTheme}
@@ -1126,6 +1256,7 @@ export default function ThemeCustomizerPage() {
                 { id: 'tables', label: 'Mesas', icon: LayoutGrid },
                 { id: 'catalog', label: 'Catálogo', icon: Package },
                 { id: 'menu', label: 'Carta Menú (Libro)', icon: BookOpen },
+                { id: 'display', label: 'Pantalla TV (Display)', icon: Tv },
                 { id: 'sidebar', label: 'Sidebar & Logos', icon: Layers },
               ].map((tab) => {
                 const TabIcon = tab.icon
@@ -2275,7 +2406,361 @@ export default function ThemeCustomizerPage() {
               )
             }
 
-            // VISTA 8: BARRA LATERAL & LOGOS (CON LOS 8 TEMAS)
+            // VISTA 8: PANTALLA DIGITAL TV / MENUBOARD (CON FOTOS GRANDES, SABORES EN LISTA Y TEMAS)
+            if (previewTab === 'display') {
+              const tvTheme = DISPLAY_THEMES[displayThemeId] || DISPLAY_THEMES['cinepolis-gold']
+              const isCatMode = displayPreviewSlide === 'category'
+
+              return (
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-black/40 border border-white/10 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Tv className="w-4 h-4 text-amber-400" />
+                      <span className="font-bold text-white">
+                        Previsualización TV: {tvTheme.name}
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-amber-300 font-mono">
+                        {tvTheme.tag}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Alternar vista de previsualización */}
+                      <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setDisplayPreviewSlide('category')}
+                          className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                            isCatMode ? 'bg-amber-500 text-black shadow' : 'text-white/70 hover:text-white'
+                          }`}
+                        >
+                          Categoría (Fotos & Sabores)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDisplayPreviewSlide('featured')}
+                          className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                            !isCatMode ? 'bg-amber-500 text-black shadow' : 'text-white/70 hover:text-white'
+                          }`}
+                        >
+                          Vitrina Novedades
+                        </button>
+                      </div>
+
+                      <Link
+                        href="/display"
+                        target="_blank"
+                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Abrir en Vivo</span>
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* MARCO DE TELEVISIÓN 16:9 */}
+                  <div
+                    className="rounded-3xl border shadow-2xl overflow-hidden relative flex flex-col justify-between p-4 sm:p-6 transition-all duration-500 min-h-[580px] max-h-[750px] overflow-y-auto select-none"
+                    style={{
+                      backgroundColor: tvTheme.bg,
+                      borderColor: tvTheme.cardBorder,
+                      color: tvTheme.textColor,
+                    }}
+                  >
+                    {/* Glow ambiental */}
+                    <div
+                      className="absolute top-0 right-1/4 w-72 h-72 rounded-full blur-[120px] opacity-25 pointer-events-none"
+                      style={{ backgroundColor: tvTheme.glow1 }}
+                    />
+                    <div
+                      className="absolute bottom-0 left-1/4 w-72 h-72 rounded-full blur-[120px] opacity-20 pointer-events-none"
+                      style={{ backgroundColor: tvTheme.glow2 }}
+                    />
+
+                    {/* ENCABEZADO ADAPTATIVO CON LOGO DE MARCA */}
+                    <div
+                      className="border-b pb-3 mb-3 flex items-center justify-between gap-4 relative z-10 shrink-0"
+                      style={{ borderColor: tvTheme.cardBorder }}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        {themeData.logoUrl || selectedBranch?.logoUrl ? (
+                          <img
+                            src={themeData.logoUrl || selectedBranch?.logoUrl || ''}
+                            alt={selectedBranch?.name || 'Logo'}
+                            className="h-10 sm:h-12 w-auto max-w-[150px] object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.7)] select-none shrink-0"
+                          />
+                        ) : themeData.isotypeUrl || selectedBranch?.isotypeUrl ? (
+                          <img
+                            src={themeData.isotypeUrl || selectedBranch?.isotypeUrl || ''}
+                            alt={selectedBranch?.name || 'Isotipo'}
+                            className="h-9 sm:h-11 w-auto object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)] select-none shrink-0"
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Coffee className="w-6 h-6 drop-shadow" style={{ color: tvTheme.accentColor }} />
+                            <span className="font-black text-xs sm:text-sm uppercase tracking-tight">
+                              {selectedBranch?.name || 'PosCafé'}
+                            </span>
+                          </div>
+                        )}
+                        <div className="h-7 w-px bg-white/15 hidden sm:block shrink-0" />
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: tvTheme.primaryColor }}
+                          />
+                          <h5 className="font-black text-sm sm:text-base uppercase tracking-wider truncate">
+                            {isCatMode ? 'Cafés de Especialidad & Calientes' : 'Cartelera de Temporada'}
+                          </h5>
+                        </div>
+                      </div>
+
+                      <span
+                        className="text-[10px] font-bold px-2.5 py-1 rounded-full border shrink-0 font-mono"
+                        style={{
+                          backgroundColor: tvTheme.badgeBg,
+                          color: tvTheme.badgeText,
+                          borderColor: tvTheme.cardBorder,
+                        }}
+                      >
+                        {isCatMode ? '4 Especialidades' : 'Edición Especial'}
+                      </span>
+                    </div>
+
+                    {/* Contenido según diapositiva seleccionada */}
+                    <div className="relative z-10 flex-1 flex flex-col justify-center">
+                      {isCatMode ? (
+                        <div className="space-y-3">
+                          {/* Grid 2x2 de productos con fotos grandes, sabores en lista y tamaños */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            {[
+                              {
+                                id: 'dp1',
+                                name: 'Espresso Doble Especialidad',
+                                desc: 'Extracción calibrada a 9 bares con notas a chocolate amargo y avellana.',
+                                price: 42,
+                                isNew: true,
+                                sizes: [
+                                  { name: 'Sencillo', price: 35 },
+                                  { name: 'Doble', price: 42 },
+                                ],
+                                flavors: ['Cacao Puro', 'Canela Ceilán', 'Shot Extra', 'Miel de Agave'],
+                              },
+                              {
+                                id: 'dp2',
+                                name: 'Latte Vainilla & Canela',
+                                desc: 'Espresso con leche cremada al punto dulce natural y vainilla de Papantla.',
+                                price: 55,
+                                isNew: false,
+                                isSeasonal: true,
+                                sizes: [
+                                  { name: 'Chico (8oz)', price: 48 },
+                                  { name: 'Mediano (12oz)', price: 55 },
+                                  { name: 'Grande (16oz)', price: 65 },
+                                ],
+                                flavors: ['Vainilla Francesa', 'Caramelo Salado', 'Avellana Tostada', 'Moka Blanco', 'Chai'],
+                              },
+                              {
+                                id: 'dp3',
+                                name: 'Cappuccino Moka Artesanal',
+                                desc: 'Espuma aterciopelada con cobertura de chocolate semiamargo 70%.',
+                                price: 58,
+                                isNew: false,
+                                sizes: [
+                                  { name: '12oz', price: 58 },
+                                  { name: '16oz', price: 68 },
+                                ],
+                                flavors: ['Moka Blanco', 'Chocolate Oscuro', 'Canela en Polvo', 'Cacao Criollo'],
+                              },
+                              {
+                                id: 'dp4',
+                                name: 'Caramel Macchiato Silvestre',
+                                desc: 'Vainilla suave, leche manchada con espresso doble y rejilla de caramelo.',
+                                price: 62,
+                                isNew: true,
+                                sizes: [
+                                  { name: 'Mediano', price: 62 },
+                                  { name: 'Grande', price: 74 },
+                                ],
+                                flavors: ['Caramelo Tostado', 'Toffee Salado', 'Vainilla Madagascar', 'Drizzle Moka'],
+                              },
+                            ].map((prod) => (
+                              <div
+                                key={prod.id}
+                                className="rounded-2xl border p-3 flex gap-3 shadow-md backdrop-blur-md"
+                                style={{
+                                  backgroundColor: tvTheme.cardBg,
+                                  borderColor: tvTheme.cardBorder,
+                                }}
+                              >
+                                {/* Foto grande de autor */}
+                                <div
+                                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shrink-0 border bg-black/40 flex flex-col items-center justify-center p-2 relative shadow"
+                                  style={{ borderColor: tvTheme.cardBorder }}
+                                >
+                                  <Coffee className="w-8 h-8 opacity-60" style={{ color: tvTheme.accentColor }} />
+                                  <span className="text-[8px] uppercase font-mono font-bold mt-1 opacity-70">
+                                    Artesanal
+                                  </span>
+                                  {prod.isNew && (
+                                    <span
+                                      className="absolute top-1 left-1 text-[8px] font-black uppercase px-1.5 py-0.2 rounded shadow"
+                                      style={{ backgroundColor: tvTheme.accentColor, color: '#000' }}
+                                    >
+                                      NUEVO
+                                    </span>
+                                  )}
+                                  {prod.isSeasonal && (
+                                    <span className="absolute top-1 left-1 text-[8px] font-black uppercase px-1.5 py-0.2 rounded shadow bg-rose-600 text-white">
+                                      TEMPORADA
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Contenido del producto */}
+                                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                  <div>
+                                    <h6 className="font-black text-sm uppercase tracking-tight truncate">
+                                      {prod.name}
+                                    </h6>
+                                    <p className="text-[10px] opacity-75 line-clamp-1 italic mt-0.5">
+                                      {prod.desc}
+                                    </p>
+
+                                    {/* SABORES EN LISTA DEBAJO DEL TÍTULO */}
+                                    <div className="mt-1.5 space-y-0.5">
+                                      <span
+                                        className="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1"
+                                        style={{ color: tvTheme.accentColor }}
+                                      >
+                                        <Sparkles className="w-2.5 h-2.5" />
+                                        Sabores:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {prod.flavors.map((flv, idx) => (
+                                          <span
+                                            key={idx}
+                                            className="text-[9px] font-semibold px-2 py-0.5 rounded-lg border bg-white/5 shadow-2xs"
+                                            style={{ borderColor: tvTheme.cardBorder }}
+                                          >
+                                            • {flv}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Tamaños con precios */}
+                                  <div className="mt-2 pt-1 border-t flex items-center gap-1.5 flex-wrap" style={{ borderColor: tvTheme.cardBorder }}>
+                                    {prod.sizes.map((sz, sIdx) => (
+                                      <div
+                                        key={sIdx}
+                                        className="text-[9px] px-2 py-0.5 rounded-lg border bg-white/5 flex items-center gap-1"
+                                        style={{ borderColor: tvTheme.cardBorder }}
+                                      >
+                                        <span className="opacity-70">{sz.name}</span>
+                                        <strong className="font-black" style={{ color: tvTheme.priceColor }}>
+                                          ${sz.price}
+                                        </strong>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        /* Vitrina Novedades / Temporada */
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {[
+                            {
+                              name: 'Cold Brew Moka 18h',
+                              tag: '✨ NUEVO',
+                              tagBg: tvTheme.accentColor,
+                              price: '$68.00',
+                              flavors: ['Cacao Tabasco', 'Vainilla'],
+                            },
+                            {
+                              name: 'Latte Calabaza & Especias',
+                              tag: '🍁 TEMPORADA',
+                              tagBg: '#E11D48',
+                              price: '$72.00',
+                              flavors: ['Canela', 'Jengibre', 'Nuez Moscada'],
+                            },
+                            {
+                              name: 'Cheesecake Frutos Rojos',
+                              tag: '★ ESPECIALIDAD',
+                              tagBg: tvTheme.primaryColor,
+                              price: '$65.00',
+                              flavors: ['Zarzamora', 'Fresa Silvestre'],
+                            },
+                          ].map((feat, fIdx) => (
+                            <div
+                              key={fIdx}
+                              className="rounded-2xl border p-3 flex flex-col justify-between shadow-md"
+                              style={{
+                                backgroundColor: tvTheme.cardBg,
+                                borderColor: tvTheme.cardBorder,
+                              }}
+                            >
+                              <div>
+                                <div
+                                  className="w-full h-28 rounded-xl border mb-2 bg-black/40 flex flex-col items-center justify-center relative shadow"
+                                  style={{ borderColor: tvTheme.cardBorder }}
+                                >
+                                  <Flame className="w-8 h-8 opacity-60" style={{ color: tvTheme.accentColor }} />
+                                  <span
+                                    className="absolute top-1.5 left-1.5 text-[8px] font-black uppercase px-2 py-0.5 rounded shadow text-black"
+                                    style={{ backgroundColor: feat.tagBg }}
+                                  >
+                                    {feat.tag}
+                                  </span>
+                                </div>
+                                <h6 className="font-black text-sm uppercase">{feat.name}</h6>
+                                <div className="mt-1.5 space-y-0.5">
+                                  <span className="text-[9px] font-bold uppercase" style={{ color: tvTheme.accentColor }}>
+                                    Sabores disponibles:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {feat.flavors.map((flv, idx) => (
+                                      <span key={idx} className="text-[9px] px-1.5 py-0.2 rounded border bg-white/5">
+                                        • {flv}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 pt-2 border-t flex items-baseline justify-between" style={{ borderColor: tvTheme.cardBorder }}>
+                                <span className="text-[9px] uppercase font-bold opacity-70">Precio</span>
+                                <strong className="text-lg font-black" style={{ color: tvTheme.priceColor }}>
+                                  {feat.price}
+                                </strong>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer de la TV */}
+                    <div
+                      className="pt-2 border-t flex items-center justify-between text-[10px] opacity-70 relative z-10 font-medium"
+                      style={{ borderColor: tvTheme.cardBorder }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-3 h-3 text-amber-400" />
+                        <span>Café de Especialidad 100% Mexicano • Tostado Artesanal</span>
+                      </div>
+                      <span>Precios con IVA incluido</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+
+            // VISTA 9: BARRA LATERAL & LOGOS (CON LOS 8 TEMAS)
             return (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. Sidebar Expandido con Logo Grande y Nombre debajo */}

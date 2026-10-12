@@ -26,7 +26,7 @@ export default async function PublicMenuPage(props: MenuPageProps) {
       where: { id: businessIdParam, active: true },
       include: {
         settings: true,
-        branches: { where: { active: true }, take: 1 },
+        branches: { where: { active: true }, orderBy: { createdAt: 'asc' }, take: 1 },
       },
     })
   }
@@ -36,7 +36,7 @@ export default async function PublicMenuPage(props: MenuPageProps) {
       where: { active: true },
       include: {
         settings: true,
-        branches: { where: { active: true }, take: 1 },
+        branches: { where: { active: true }, orderBy: { createdAt: 'asc' }, take: 1 },
       },
     })
   }
