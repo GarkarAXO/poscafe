@@ -17,6 +17,7 @@ export async function GET() {
       where: { businessId: session.businessId, deletedAt: null },
       include: {
         category: { select: { id: true, name: true, slug: true } },
+        kitchenStation: { select: { id: true, name: true, code: true, color: true, icon: true } },
         variants: {
           where: { deletedAt: null },
           include: {
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const {
       categoryId,
+      kitchenStationId,
       name,
       code,
       description,
@@ -148,6 +150,7 @@ export async function POST(request: Request) {
         data: {
           businessId: session.businessId!,
           categoryId,
+          kitchenStationId: kitchenStationId || null,
           name: name.trim(),
           code: cleanCode,
           description: description?.trim() || null,

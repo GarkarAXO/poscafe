@@ -6,6 +6,7 @@ import {
   Boxes,
   Package,
   Plus,
+  ArrowLeft,
   Search,
   AlertTriangle,
   CheckCircle,
@@ -26,10 +27,15 @@ import {
   HelpCircle,
   Info,
   Calculator,
+  AlertOctagon,
+  History,
+  Calendar,
+  DollarSign,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
+import ModalPortal from '@/components/modal-portal'
 
 interface Presentation {
   id: string
@@ -105,6 +111,100 @@ export default function InventoryDashboardPage() {
     newStockQuantity: '', // Corrección manual opcional de stock
   })
 
+  // Modal de Merma / Desperdicio
+  const [showWasteModal, setShowWasteModal] = useState(false)
+  const [selectedWasteItemId, setSelectedWasteItemId] = useState('')
+  const [wasteQuantity, setWasteQuantity] = useState('')
+  const [wasteReason, setWasteReason] = useState('Derrame o Accidente')
+  const [wasteNotes, setWasteNotes] = useState('')
+  const [submittingWaste, setSubmittingWaste] = useState(false)
+
+  // Modal de Historial de Mermas
+  const [showWasteHistoryModal, setShowWasteHistoryModal] = useState(false)
+  const [wasteHistory, setWasteHistory] = useState<Array<{
+    id: string
+    itemId: string
+    itemName: string
+    itemSku: string
+    baseUnit: string
+    warehouseName: string
+    quantity: number
+    unitCost: number
+    totalCost: number
+    reason: string
+    createdAt: string
+  }>>([])
+  const [loadingWasteHistory, setLoadingWasteHistory] = useState(false)
+
+  const openWasteModal = (item?: InventoryItem) => {
+    if (item) {
+      setSelectedWasteItemId(item.id)
+    } else if (items.length > 0) {
+      setSelectedWasteItemId(items[0].id)
+    }
+    setWasteQuantity('')
+    setWasteReason('Derrame o Accidente')
+    setWasteNotes('')
+    setShowWasteModal(true)
+  }
+
+  const openWasteHistory = async () => {
+    setShowWasteHistoryModal(true)
+    setLoadingWasteHistory(true)
+    try {
+      const res = await fetch('/api/inventory/waste?limit=50').then((r) => r.json())
+      if (res.success && Array.isArray(res.data)) {
+        setWasteHistory(res.data)
+      }
+    } catch {
+      notify.error('Error', 'No se pudo cargar el historial de mermas')
+    } finally {
+      setLoadingWasteHistory(false)
+    }
+  }
+
+  const handleSaveWaste = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const targetItem = items.find((i) => i.id === selectedWasteItemId)
+    if (!targetItem) {
+      notify.error('Error', 'Selecciona un insumo')
+      return
+    }
+    const qty = Number(wasteQuantity)
+    if (!qty || isNaN(qty) || qty <= 0) {
+      notify.error('Cantidad inválida', 'La cantidad debe ser mayor a 0')
+      return
+    }
+
+    setSubmittingWaste(true)
+    try {
+      const res = await fetch('/api/inventory/waste', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inventoryItemId: targetItem.id,
+          quantity: qty,
+          reason: wasteReason,
+          notes: wasteNotes.trim() || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        notify.success('Merma registrada', json.message)
+        setShowWasteModal(false)
+        setWasteQuantity('')
+        setWasteNotes('')
+        loadInventory()
+      } else {
+        notify.error('Error al registrar merma', json.error?.message)
+      }
+    } catch {
+      notify.error('Error de conexión', 'No se pudo comunicar con el servidor')
+    } finally {
+      setSubmittingWaste(false)
+    }
+  }
+
   const loadInventory = async () => {
     try {
       setLoading(true)
@@ -124,6 +224,20 @@ export default function InventoryDashboardPage() {
   useEffect(() => {
     loadInventory()
   }, [])
+
+  // Bloquear scroll de la página de fondo cuando cualquier modal esté abierto
+  useEffect(() => {
+    const isAnyModalOpen =
+      showModal || (showEditModal && !!editingItem) || showWasteModal || showWasteHistoryModal
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [showModal, showEditModal, editingItem, showWasteModal, showWasteHistoryModal])
 
   // Guardar nuevo insumo
   const handleSaveItem = async (e: React.FormEvent) => {
@@ -316,60 +430,82 @@ export default function InventoryDashboardPage() {
   })
 
   return (
-    <div className={`flex-1 p-6 sm:p-8 space-y-6 max-w-7xl w-full mx-auto font-sans ${classes.textMain}`}>
-      {/* Cabecera Principal */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className={`text-xl sm:text-2xl font-black tracking-tight ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-              Inventario de Insumos y Materias Primas
+    <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
+      {/* Top Navbar */}
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <Link
+            href="/dashboard"
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Dashboard</span>
+          </Link>
+
+          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
+
+          <div className="min-w-0">
+            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-2 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Boxes className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="truncate">Inventario de Insumos y Materias Primas</span>
             </h1>
-            <span className={`px-2 py-0.5 rounded-full border text-xs font-semibold ${classes.badge}`}>
-              Control de Stock
-            </span>
+            <p className={`text-xs truncate hidden sm:block ${classes.textMuted}`}>
+              Existencias en almacenes, compras automáticas y alertas de stock
+            </p>
           </div>
-          <p className={`text-xs sm:text-sm mt-1 ${classes.textMuted}`}>
-            Materias primas en unidades base (gramos, mililitros, piezas) que alimentan compras y recetarios.
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Link
             href="/dashboard/purchases"
             style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
+            className="px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:opacity-95 active:scale-95 touch-manipulation"
           >
             <Truck className="w-4 h-4" />
-            <span>+ Cargar Compra o Ticket</span>
+            <span className="hidden sm:inline">Cargar Compra</span>
           </Link>
 
           <Link
             href="/dashboard/catalog"
-            className={`px-3.5 py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+            className={`px-3 py-2 rounded-xl border font-semibold text-xs hidden sm:flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
           >
             <Coffee className="w-4 h-4 text-amber-500" />
             <span>Recetarios</span>
           </Link>
 
-          <Link
-            href="/dashboard/catalog?tab=cupSizes"
-            className={`px-3.5 py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
-            title="Configurar tamaños de vasos y empaques para llevar"
+          <button
+            type="button"
+            onClick={() => openWasteModal()}
+            className="px-3 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 touch-manipulation"
+            title="Registrar merma o desperdicio de materia prima"
           >
-            <Package className="w-4 h-4 text-amber-500" />
-            <span>Vasos y Empaques</span>
-          </Link>
+            <AlertOctagon className="w-4 h-4 text-rose-500" />
+            <span>Merma</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openWasteHistory}
+            className={`px-3 py-2 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 touch-manipulation ${classes.buttonGhost}`}
+            title="Consultar historial de mermas registradas"
+          >
+            <History className="w-4 h-4 text-slate-400" />
+            <span className="hidden sm:inline">Historial</span>
+          </button>
 
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className={`px-3.5 py-2.5 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+            className={`px-3 py-2 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 touch-manipulation ${classes.buttonGhost}`}
           >
             <Plus className="w-4 h-4" style={{ color: buttonColor }} />
             <span>Alta Manual</span>
           </button>
         </div>
-      </div>
+      </header>
+
+      {/* Main Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
 
       {/* Cadena Operativa: Banner Explicativo del Flujo */}
       <div className={`p-4 rounded-3xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs ${classes.card}`}>
@@ -644,6 +780,16 @@ export default function InventoryDashboardPage() {
 
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Registrar Merma directa */}
+                          <button
+                            type="button"
+                            onClick={() => openWasteModal(item)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 transition-all cursor-pointer"
+                            title="Registrar merma o desperdicio de este insumo"
+                          >
+                            <AlertOctagon className="w-3.5 h-3.5" />
+                          </button>
+
                           {/* Editar registro y stock */}
                           <button
                             type="button"
@@ -689,12 +835,12 @@ export default function InventoryDashboardPage() {
       </div>
 
       {/* Modal Registrar Nuevo Insumo */}
-      {/* Modal Registrar Nuevo Insumo */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 ${classes.modalContent}`}>
-            {/* Header del Modal */}
-            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 my-auto ${classes.modalContent}`}>
+              {/* Header del Modal */}
+              <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-3">
                 <div
                   className="w-11 h-11 rounded-2xl flex items-center justify-center"
@@ -963,14 +1109,16 @@ export default function InventoryDashboardPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* Modal Editar Insumo y Corrección de Stock */}
       {showEditModal && editingItem && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-2xl max-h-[94vh] overflow-y-auto rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 ${classes.modalContent}`}>
-            {/* Header del Modal */}
-            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-2xl max-h-[94vh] overflow-y-auto rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-6 my-auto ${classes.modalContent}`}>
+              {/* Header del Modal */}
+              <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-3">
                 <div
                   className="w-11 h-11 rounded-2xl flex items-center justify-center"
@@ -1163,7 +1311,266 @@ export default function InventoryDashboardPage() {
             </form>
           </div>
         </div>
+      </ModalPortal>
+    )}
+
+      {/* MODAL REGISTRAR MERMA / DESPERDICIO */}
+      {showWasteModal && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-lg rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-5 my-auto ${classes.modalContent}`}>
+              {/* Header */}
+              <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-rose-500/20 text-rose-500 flex items-center justify-center font-bold">
+                    <AlertOctagon className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className={`text-base font-bold ${classes.textMain}`}>Registrar Merma / Desperdicio</h3>
+                    <p className={`text-xs ${classes.textMuted}`}>Deduce del inventario producto vencido, derrames o calibración</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWasteModal(false)}
+                  className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold transition-colors cursor-pointer ${classes.buttonGhost}`}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveWaste} className="space-y-4 text-xs">
+                {/* Selector de Insumo */}
+                <div className="space-y-1.5">
+                  <label className={`block font-semibold ${classes.textMuted}`}>
+                    Insumo / Materia Prima <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={selectedWasteItemId}
+                    onChange={(e) => setSelectedWasteItemId(e.target.value)}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none ${classes.input}`}
+                  >
+                    {items.map((i) => {
+                      const totalStock = i.warehouseStock.reduce(
+                        (acc, ws) => acc + (Number((ws as any).quantity ?? ws.currentStock) || 0),
+                        0
+                      )
+                      return (
+                        <option key={i.id} value={i.id}>
+                          {i.name} ({i.sku || 'SIN-SKU'}) — Stock: {totalStock.toLocaleString('es-MX')} {formatUnitSymbol(i.baseUnit)}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+
+                {/* Motivo de la Merma */}
+                <div className="space-y-1.5">
+                  <label className={`block font-semibold ${classes.textMuted}`}>
+                    Motivo / Causa del Desperdicio <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      'Calibración de Molino / Espresso',
+                      'Caducidad o Descomposición',
+                      'Derrame o Accidente',
+                      'Empaque / Insumo Dañado',
+                      'Error en Barra / Preparación',
+                      'Degustación / Muestra',
+                    ].map((reason) => (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => setWasteReason(reason)}
+                        className={`p-2 rounded-xl border text-[11px] font-medium text-left transition-all cursor-pointer ${
+                          wasteReason === reason
+                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-400 font-bold'
+                            : `${classes.buttonGhost}`
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cantidad Desperdiciada y Costo Estimado */}
+                {(() => {
+                  const currentItem = items.find((i) => i.id === selectedWasteItemId)
+                  const unitSymbol = currentItem ? formatUnitSymbol(currentItem.baseUnit) : ''
+                  const costPerUnit = currentItem ? Number(currentItem.costPerUnit) : 0
+                  const totalEstimatedCost = (Number(wasteQuantity) || 0) * costPerUnit
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <label className={`block font-semibold ${classes.textMuted}`}>
+                          Cantidad a Deducir de Almacén <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.000001"
+                            required
+                            value={wasteQuantity}
+                            onChange={(e) => setWasteQuantity(e.target.value)}
+                            placeholder="Ej: 50, 200, 1..."
+                            className={`w-full pl-3.5 pr-16 py-2.5 rounded-xl border font-mono font-bold text-sm focus:outline-none ${classes.input}`}
+                          />
+                          <span className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md border text-[11px] font-mono font-semibold ${classes.badge}`}>
+                            {unitSymbol}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Estimación de Impacto en Costo */}
+                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-between">
+                        <div>
+                          <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold block">
+                            Pérdida Económica Estimada
+                          </span>
+                          <span className={`text-[10px] ${classes.textMuted}`}>
+                            Costo de reposición: ${costPerUnit.toFixed(2)} MXN / {unitSymbol}
+                          </span>
+                        </div>
+                        <span className="text-base font-black text-rose-600 dark:text-rose-400 font-mono">
+                          ${totalEstimatedCost.toFixed(2)} MXN
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Notas adicionales */}
+                <div className="space-y-1.5">
+                  <label className={`block font-medium ${classes.textMuted}`}>
+                    Observaciones o Justificación (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={wasteNotes}
+                    onChange={(e) => setWasteNotes(e.target.value)}
+                    placeholder="Ej: Se cayó el galón al reponer, fecha de caducidad superada..."
+                    className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                  />
+                </div>
+
+                {/* Botones de acción */}
+                <div className={`flex items-center justify-end gap-3 pt-3 border-t ${classes.divider}`}>
+                  <button
+                    type="button"
+                    onClick={() => setShowWasteModal(false)}
+                    className={`px-4 py-2.5 rounded-xl border font-semibold text-xs transition-colors cursor-pointer ${classes.buttonGhost}`}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={submittingWaste || !wasteQuantity || Number(wasteQuantity) <= 0}
+                    className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-rose-600/30 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingWaste ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <AlertOctagon className="w-3.5 h-3.5" />
+                    )}
+                    <span>Registrar Merma</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </ModalPortal>
       )}
+
+      {/* MODAL HISTORIAL DE MERMAS */}
+      {showWasteHistoryModal && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl flex flex-col p-6 sm:p-7 space-y-5 my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                    <History className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className={`text-base font-bold ${classes.textMain}`}>Historial de Mermas y Desperdicios</h3>
+                    <p className={`text-xs ${classes.textMuted}`}>Auditoría de salidas por caducidad, calibración y derrames</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWasteHistoryModal(false)}
+                  className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold transition-colors cursor-pointer ${classes.buttonGhost}`}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {loadingWasteHistory ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                  <span className="text-xs">Cargando registros de merma...</span>
+                </div>
+              ) : wasteHistory.length === 0 ? (
+                <div className={`py-12 text-center text-xs ${classes.textMuted}`}>
+                  No se han registrado mermas o desperdicios en este periodo.
+                </div>
+              ) : (
+                <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+                  {wasteHistory.map((w) => (
+                    <div
+                      key={w.id}
+                      className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${classes.subCard}`}
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-500/20">
+                            -{w.quantity} {formatUnitSymbol(w.baseUnit)}
+                          </span>
+                          <strong className={`truncate font-semibold ${classes.textMain}`}>
+                            {w.itemName}
+                          </strong>
+                        </div>
+                        <p className={`text-[11px] ${classes.textMuted}`}>
+                          {w.reason}
+                        </p>
+                        <span className={`text-[10px] ${classes.textSub}`}>
+                          {new Date(w.createdAt).toLocaleString('es-MX', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
+                        </span>
+                      </div>
+
+                      <div className="sm:text-right shrink-0">
+                        <span className="text-[10px] text-slate-400 block">Costo estimado:</span>
+                        <strong className="text-sm font-mono text-rose-600 dark:text-rose-400 font-bold">
+                          -${w.totalCost.toFixed(2)} MXN
+                        </strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className={`flex justify-end pt-3 border-t ${classes.divider}`}>
+                <button
+                  type="button"
+                  onClick={() => setShowWasteHistoryModal(false)}
+                  className={`px-4 py-2.5 rounded-xl border font-semibold text-xs transition-colors cursor-pointer ${classes.buttonGhost}`}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+      </main>
     </div>
   )
 }

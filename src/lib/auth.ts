@@ -21,6 +21,8 @@ export interface UserPermissions {
   canAuthorizeCourtesies: boolean
   canAuthorizeCancellations: boolean
   canTransferTables: boolean
+  canAccessKDS: boolean
+  canManageKitchen: boolean
 }
 
 export interface AuthSession {
@@ -52,6 +54,8 @@ export function mergePermissions(roles: Array<{ role: UserPermissions }>): UserP
       canAuthorizeCourtesies: acc.canAuthorizeCourtesies || curr.role.canAuthorizeCourtesies,
       canAuthorizeCancellations: acc.canAuthorizeCancellations || curr.role.canAuthorizeCancellations,
       canTransferTables: acc.canTransferTables || curr.role.canTransferTables,
+      canAccessKDS: acc.canAccessKDS || curr.role.canAccessKDS,
+      canManageKitchen: acc.canManageKitchen || curr.role.canManageKitchen,
     }),
     {
       canAccessPOS: false,
@@ -67,6 +71,8 @@ export function mergePermissions(roles: Array<{ role: UserPermissions }>): UserP
       canAuthorizeCourtesies: false,
       canAuthorizeCancellations: false,
       canTransferTables: false,
+      canAccessKDS: false,
+      canManageKitchen: false,
     }
   )
 }

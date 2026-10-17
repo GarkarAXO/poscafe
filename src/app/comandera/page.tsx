@@ -2962,10 +2962,10 @@ export default function ComanderaPage() {
                       {/* Drawer Desplegable para Rectificar la Orden */}
                       {showOrderReviewDrawer && (
                         <div
-                          className={`p-3 sm:p-4 border-t-2 rounded-t-3xl shadow-2xl space-y-3 max-h-[55vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 backdrop-blur-xl ${
+                          className={`p-3 sm:p-4 border border-b-0 rounded-t-3xl shadow-2xl space-y-3 max-h-[55vh] overflow-y-auto animate-in slide-in-from-bottom duration-200 backdrop-blur-xl ${
                             isLight
-                              ? 'bg-white/98 border-[#C08552] text-[#2B1712]'
-                              : 'bg-[#181311]/98 border-[#C08552]/70 text-slate-100'
+                              ? 'bg-white/98 border-[#C08552]/40 text-[#2B1712]'
+                              : 'bg-[#181311]/98 border-[#C08552]/40 text-slate-100'
                           }`}
                         >
                           {/* Header del Drawer de Rectificación */}
@@ -4158,7 +4158,7 @@ export default function ComanderaPage() {
       {welcomeOverlayUser && (
         <div className="fixed inset-0 z-50 bg-[#14100E]/85 backdrop-blur-md flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white animate-in fade-in duration-200">
           <div className="w-full max-w-sm bg-[#251E1B] border border-[#3E2723] rounded-3xl p-8 text-center space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-bounce duration-1000">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-pulse">
               <UtensilsCrossed className="w-8 h-8" />
             </div>
             <div>

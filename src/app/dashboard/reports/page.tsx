@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   TrendingUp,
+  TrendingDown,
   ArrowLeft,
   DollarSign,
   ShoppingCart,
@@ -25,6 +26,8 @@ import { useDashboardTheme } from '@/context/dashboard-theme-context'
 
 interface SalesMetrics {
   totalSales: number
+  totalExpenses?: number
+  netOperatingProfit?: number
   ordersCount: number
   avgTicket: number
   paymentMethodsSummary: Record<string, number>
@@ -122,11 +125,11 @@ export default function ReportsPage() {
   return (
     <div className="flex-1 flex flex-col w-full">
       {/* Top Navbar */}
-      <header className={`px-6 py-4 flex items-center justify-between sticky top-0 z-30 border-b ${classes.header}`}>
-        <div className="flex items-center gap-4">
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-medium border ${classes.buttonGhost}`}
+            className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-medium border shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
@@ -191,17 +194,54 @@ export default function ReportsPage() {
 
         {!loading && metrics && (
           <>
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* KPI Cards (Finanzas P&L y Operación) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className={`p-5 rounded-3xl border transition-all ${classes.card}`}>
                 <div className={`flex items-center justify-between mb-2 ${classes.textMuted}`}>
                   <span className="text-xs font-medium">Ventas Totales</span>
                   <DollarSign className="w-4 h-4 text-emerald-500" />
                 </div>
-                <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
                   ${metrics.totalSales.toFixed(2)} MXN
                 </p>
-                <p className={`text-[11px] mt-1 ${classes.textSub}`}>Ingresos netos en el período</p>
+                <p className={`text-[11px] mt-1 ${classes.textSub}`}>Ingresos cobrados en el período</p>
+              </div>
+
+              <div className={`p-5 rounded-3xl border transition-all ${classes.card}`}>
+                <div className={`flex items-center justify-between mb-2 ${classes.textMuted}`}>
+                  <span className="text-xs font-medium">Gastos Operativos</span>
+                  <Link
+                    href="/dashboard/expenses"
+                    className="text-[10px] text-rose-500 hover:underline font-bold"
+                  >
+                    Ver detalles →
+                  </Link>
+                </div>
+                <p className="text-2xl font-black text-rose-500 font-mono">
+                  -${(metrics.totalExpenses || 0).toFixed(2)} MXN
+                </p>
+                <p className={`text-[11px] mt-1 ${classes.textSub}`}>Rentas, luz, servicios y mantenimiento</p>
+              </div>
+
+              <div className={`p-5 rounded-3xl border transition-all ${classes.card}`}>
+                <div className={`flex items-center justify-between mb-2 ${classes.textMuted}`}>
+                  <span className="text-xs font-medium">Utilidad Neta Operativa</span>
+                  {(metrics.netOperatingProfit || 0) >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-emerald-500" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-rose-500" />
+                  )}
+                </div>
+                <p
+                  className={`text-2xl font-black font-mono ${
+                    (metrics.netOperatingProfit || 0) >= 0
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-rose-500'
+                  }`}
+                >
+                  ${(metrics.netOperatingProfit || 0).toFixed(2)} MXN
+                </p>
+                <p className={`text-[11px] mt-1 ${classes.textSub}`}>Margen operativo antes de impuestos</p>
               </div>
 
               <div className={`p-5 rounded-3xl border transition-all ${classes.card}`}>
@@ -209,7 +249,7 @@ export default function ReportsPage() {
                   <span className="text-xs font-medium">Órdenes Pagadas</span>
                   <ShoppingCart className="w-4 h-4" style={{ color: buttonColor }} />
                 </div>
-                <p className={`text-2xl font-extrabold ${classes.textMain}`}>{metrics.ordersCount}</p>
+                <p className={`text-2xl font-black ${classes.textMain}`}>{metrics.ordersCount}</p>
                 <p className={`text-[11px] mt-1 ${classes.textSub}`}>Transacciones procesadas</p>
               </div>
 
@@ -218,7 +258,7 @@ export default function ReportsPage() {
                   <span className="text-xs font-medium">Ticket Promedio</span>
                   <Receipt className="w-4 h-4 text-amber-500" />
                 </div>
-                <p className={`text-2xl font-extrabold ${classes.textMain}`}>
+                <p className={`text-2xl font-black font-mono ${classes.textMain}`}>
                   ${metrics.avgTicket.toFixed(2)} MXN
                 </p>
                 <p className={`text-[11px] mt-1 ${classes.textSub}`}>Gasto medio por cliente</p>
@@ -229,8 +269,8 @@ export default function ReportsPage() {
                   <span className="text-xs font-medium">Cortes de Caja</span>
                   <CheckCircle className="w-4 h-4 text-cyan-500" />
                 </div>
-                <p className={`text-2xl font-extrabold ${classes.textMain}`}>{cashCuts.length}</p>
-                <p className={`text-[11px] mt-1 ${classes.textSub}`}>Sesiones de arqueo</p>
+                <p className={`text-2xl font-black ${classes.textMain}`}>{cashCuts.length}</p>
+                <p className={`text-[11px] mt-1 ${classes.textSub}`}>Sesiones de arqueo del turno</p>
               </div>
             </div>
 

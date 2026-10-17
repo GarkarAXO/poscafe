@@ -117,13 +117,30 @@ export async function GET(request: Request) {
 
     const topProducts = Object.values(productSalesMap)
       .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5)
+    // 3. Gastos Operativos del periodo
+    const expenses = await prisma.expense.findMany({
+      where: {
+        branch: {
+          businessId: session.businessId,
+          ...branchFilter,
+        },
+        ...(startDate ? { expensedAt: { gte: startDate } } : {}),
+      },
+      select: {
+        amount: true,
+      },
+    })
+
+    const totalExpenses = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0)
+    const netOperatingProfit = totalSales - totalExpenses
 
     return NextResponse.json({
       success: true,
       data: {
         metrics: {
           totalSales,
+          totalExpenses,
+          netOperatingProfit,
           ordersCount,
           avgTicket,
           paymentMethodsSummary,

@@ -119,8 +119,17 @@ export default function LoginForm() {
 
       const user = result.data?.user
       const userRoles = user?.roleCodes || []
-      const targetUrl = userRoles.includes('WAITER') ? '/comandera' : '/pos'
-      const roleName = userRoles.includes('WAITER') ? 'Comandera de Mesas' : 'Terminal POS'
+      const userPerms = user?.permissions || {}
+      let targetUrl = '/pos'
+      let roleName = 'Terminal POS'
+
+      if (userRoles.includes('WAITER')) {
+        targetUrl = '/comandera'
+        roleName = 'Comandera de Mesas'
+      } else if (userPerms.canAccessKDS || userRoles.includes('CHEF') || userRoles.includes('KITCHEN')) {
+        targetUrl = '/kds'
+        roleName = 'Monitor KDS Cocina'
+      }
 
       setLoading(false)
       setWelcomeUser({
@@ -192,6 +201,9 @@ export default function LoginForm() {
         if (userRoles.includes('WAITER')) {
           targetUrl = '/comandera'
           roleName = 'Comandera de Mesas'
+        } else if (perms.canAccessKDS || userRoles.includes('CHEF') || userRoles.includes('KITCHEN')) {
+          targetUrl = '/kds'
+          roleName = 'Monitor KDS Cocina'
         } else {
           targetUrl = '/pos'
           roleName = 'Terminal POS'
@@ -201,6 +213,9 @@ export default function LoginForm() {
           if (userRoles.includes('WAITER')) {
             targetUrl = '/comandera'
             roleName = 'Comandera de Mesas'
+          } else if (perms.canAccessKDS || userRoles.includes('CHEF') || userRoles.includes('KITCHEN')) {
+            targetUrl = '/kds'
+            roleName = 'Monitor KDS Cocina'
           } else if (perms.canAccessPOS || userRoles.includes('CASHIER')) {
             targetUrl = '/pos'
             roleName = 'Terminal POS'
@@ -231,7 +246,7 @@ export default function LoginForm() {
         <div className="absolute bottom-10 right-1/4 w-[450px] h-[450px] bg-[#5E3023]/25 rounded-full blur-[120px] pointer-events-none" />
 
         <div className="w-full max-w-md bg-[#251E1B]/95 border border-[#3E2723] rounded-3xl p-8 sm:p-10 text-center space-y-6 shadow-2xl relative z-10 animate-in zoom-in-95 fade-in duration-300">
-          <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-bounce duration-1000">
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-pulse">
             <Coffee className="w-10 h-10" />
           </div>
 
@@ -278,7 +293,7 @@ export default function LoginForm() {
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#7A3E2D] flex items-center justify-center shadow-lg shadow-[#5E3023]/25 mb-3.5 transform hover:scale-105 transition-transform duration-300">
             <Coffee className="w-8 h-8 text-[#F3E9DC]" />
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#C08552]/15 border border-[#C08552]/30 text-xs font-semibold text-[#C08552] mb-1.5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#C08552]/15 border border-[#C08552]/30 text-xs font-bold text-[#5E3023] mb-1.5">
             <span>Cafetería & Punto de Venta</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#5E3023]">
@@ -315,8 +330,8 @@ export default function LoginForm() {
           </div>
         )}
 
-        {/* Mode Selector Tabs (Crema, Caramelo, Espresso) */}
-        <div className="grid grid-cols-2 gap-1.5 bg-[#F3E9DC]/70 p-1.5 rounded-2xl mb-6 border border-[#E6D5C3] text-xs font-semibold">
+        {/* Segmented Control de Modo */}
+        <div className="grid grid-cols-2 gap-1 bg-[#F3E9DC]/60 p-1 rounded-xl mb-6 text-xs font-semibold">
           <button
             type="button"
             onClick={() => {
@@ -371,7 +386,7 @@ export default function LoginForm() {
                   onChange={(e) => setLogin(e.target.value)}
                   placeholder="usuario@cafeteria.com"
                   required
-                  className="w-full pl-10 pr-3.5 py-3 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
+                  className="w-full pl-10 pr-3.5 py-3 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#6E5448] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
                 />
                 <User className="w-4 h-4 text-[#A88C7D] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
@@ -388,7 +403,7 @@ export default function LoginForm() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#A88C7D] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
+                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-[#FDFBF9] border border-[#DECEBD] text-sm text-[#3D1E16] placeholder-[#6E5448] focus:outline-none focus:border-[#C08552] focus:ring-2 focus:ring-[#C08552]/20 transition-all font-medium"
                 />
                 <Lock className="w-4 h-4 text-[#A88C7D] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <button

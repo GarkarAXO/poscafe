@@ -47,6 +47,9 @@ export async function GET() {
         roles: {
           include: { role: true },
         },
+        kitchenStations: {
+          include: { station: true },
+        },
       },
     })
 
@@ -125,6 +128,13 @@ export async function GET() {
             })),
           roleCodes: session.roleCodes,
           permissions: session.permissions,
+          kitchenStations: user.kitchenStations?.map((ks) => ({
+            id: ks.station.id,
+            name: ks.station.name,
+            code: ks.station.code,
+            color: ks.station.color,
+            icon: ks.station.icon,
+          })) || [],
         },
       },
     })

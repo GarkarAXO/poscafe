@@ -65,6 +65,8 @@ export async function POST(request: Request) {
         canAuthorizeCourtesies: true,
         canAuthorizeCancellations: true,
         canTransferTables: true,
+        canAccessKDS: true,
+        canManageKitchen: true,
       },
     }
 

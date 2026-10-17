@@ -25,6 +25,14 @@ export default async function LoginPage() {
       if (session.roleCodes.includes('WAITER')) {
         redirect('/comandera')
       }
+      // Cocinero / KDS: enviar directo al monitor de cocina
+      if (
+        session.permissions.canAccessKDS ||
+        session.roleCodes.includes('CHEF') ||
+        session.roleCodes.includes('KITCHEN')
+      ) {
+        redirect('/kds')
+      }
       // Cajero o personal POS: enviar directo a su terminal de cobro
       if (session.permissions.canAccessPOS || session.roleCodes.includes('CASHIER')) {
         redirect('/pos')

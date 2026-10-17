@@ -27,6 +27,7 @@ import QRCode from 'qrcode'
 import { notify } from '@/lib/notify'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
 import { getStatusBadgeStyles, getContrastTextColor } from '@/lib/theme-utils'
+import ModalPortal from '@/components/modal-portal'
 
 interface AreaOption {
   id: string
@@ -158,6 +159,18 @@ export default function DashboardTablesManager({
   useEffect(() => {
     fetchTablesData()
   }, [branchId])
+
+  // Bloquear scroll de la página de fondo cuando cualquier modal esté activo
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(showCreateModal || showBulkModal || showAreaModal || qrModalTable)
+    if (isAnyModalOpen) {
+      const originalOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = originalOverflow
+      }
+    }
+  }, [showCreateModal, showBulkModal, showAreaModal, qrModalTable])
 
   // Cambiar modo de servicio (LIBRE vs ASIGNADO)
   const handleToggleServiceMode = async (newMode: 'FREE' | 'ASSIGNED') => {
@@ -555,7 +568,7 @@ export default function DashboardTablesManager({
   const unassignedCount = tables.length - assignedCount
 
   return (
-    <div className={`p-6 rounded-3xl border space-y-6 shadow-xl relative overflow-hidden backdrop-blur-md ${classes.card}`}>
+    <div className={`p-6 rounded-3xl border space-y-6 shadow-xl relative ${classes.card}`}>
       {/* Cabecera Principal de la Sección de Mesas */}
       <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b pb-5 ${classes.divider}`}>
         <div>
@@ -1142,146 +1155,324 @@ export default function DashboardTablesManager({
 
       {/* MODAL CÓDIGO QR DE MESA */}
       {qrModalTable && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border text-center ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
-              <div className="text-left">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  Menú Digital Interactivo
-                </span>
-                <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-                  QR de {qrModalTable.name}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setQrModalTable(null)}
-                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
-              >
-                ✕
-              </button>
-            </div>
-
-            {generatingQr ? (
-              <div className="py-12 flex flex-col items-center justify-center gap-2">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-                <span className="text-xs text-slate-400">Generando código QR...</span>
-              </div>
-            ) : qrCodeDataUrl ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-white rounded-2xl border inline-block shadow-md">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={qrCodeDataUrl}
-                    alt={`Código QR ${qrModalTable.name}`}
-                    className="w-52 h-52 mx-auto"
-                  />
+        <ModalPortal>
+          <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setQrModalTable(null)
+            }}
+          >
+            <div className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border text-center my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+                <div className="text-left">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Menú Digital Interactivo
+                  </span>
+                  <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    QR de {qrModalTable.name}
+                  </h3>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setQrModalTable(null)}
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
+                >
+                  ✕
+                </button>
+              </div>
 
-                <div className="space-y-1">
-                  <p className={`text-xs font-semibold ${classes.textMain}`}>
-                    Tus comensales verán directamente el menú de {qrModalTable.name}
-                  </p>
-                  <p className={`text-[11px] ${classes.textMuted}`}>
-                    Podrán explorar platillos, precios, variantes y solicitar asistencia a su mesero.
-                  </p>
+              {generatingQr ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2">
+                  <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                  <span className="text-xs text-slate-400">Generando código QR...</span>
                 </div>
-
-                <div className="flex flex-col gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handlePrintQR}
-                    style={{ backgroundColor: buttonColor }}
-                    className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>Imprimir Código QR para Mesa</span>
-                  </button>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={handleCopyLink}
-                      className={`py-2 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>{copiedLink ? '¡Copiado!' : 'Copiar Link'}</span>
-                    </button>
-
-                    <a
-                      href={qrCodeDataUrl}
-                      download={`QR-${qrModalTable.name.replace(/\s+/g, '-')}.png`}
-                      className={`py-2 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Descargar PNG</span>
-                    </a>
+              ) : qrCodeDataUrl ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-white rounded-2xl border inline-block shadow-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={qrCodeDataUrl}
+                      alt={`Código QR ${qrModalTable.name}`}
+                      className="w-52 h-52 mx-auto"
+                    />
                   </div>
 
-                  <a
-                    href={`/menu?table=${encodeURIComponent(qrModalTable.name)}`}
-                    target="_blank"
-                    className={`py-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center justify-center gap-1`}
-                  >
-                    <span>Probar vista de cliente en nueva pestaña</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                  <div className="space-y-1">
+                    <p className={`text-xs font-semibold ${classes.textMain}`}>
+                      Tus comensales verán directamente el menú de {qrModalTable.name}
+                    </p>
+                    <p className={`text-[11px] ${classes.textMuted}`}>
+                      Podrán explorar platillos, precios, variantes y solicitar asistencia a su mesero.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handlePrintQR}
+                      style={{ backgroundColor: buttonColor }}
+                      className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Imprimir Código QR para Mesa</span>
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyLink}
+                        className={`py-2 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>{copiedLink ? '¡Copiado!' : 'Copiar Link'}</span>
+                      </button>
+
+                      <a
+                        href={qrCodeDataUrl}
+                        download={`QR-${qrModalTable.name.replace(/\s+/g, '-')}.png`}
+                        className={`py-2 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Descargar PNG</span>
+                      </a>
+                    </div>
+
+                    <a
+                      href={`/menu?table=${encodeURIComponent(qrModalTable.name)}`}
+                      target="_blank"
+                      className={`py-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center justify-center gap-1`}
+                    >
+                      <span>Probar vista de cliente en nueva pestaña</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* MODAL CREAR / EDITAR MESA INDIVIDUAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
-              <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-                {editingTable ? `Editar ${editingTable.name}` : 'Nueva Mesa de Salón'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveTable} className="space-y-3.5 text-xs">
-              <div className="space-y-1">
-                <label className={`font-bold block ${classes.textMain}`}>Nombre o Número de Mesa *</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Mesa 1, Barra 2, Terraza A"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                />
+        <ModalPortal>
+          <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowCreateModal(false)
+            }}
+          >
+            <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+                <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                  {editingTable ? `Editar ${editingTable.name}` : 'Nueva Mesa de Salón'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
+                >
+                  ✕
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleSaveTable} className="space-y-3.5 text-xs">
                 <div className="space-y-1">
-                  <label className={`font-bold block ${classes.textMain}`}>Capacidad (Personas)</label>
+                  <label className={`font-bold block ${classes.textMain}`}>Nombre o Número de Mesa *</label>
                   <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={formData.capacity}
-                    onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) || 4 })}
+                    type="text"
+                    placeholder="Ej: Mesa 1, Barra 2, Terraza A"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
                     className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className={`font-bold block ${classes.textMain}`}>Capacidad (Personas)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={formData.capacity}
+                      onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) || 4 })}
+                      className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className={`font-bold block ${classes.textMain}`}>Área / Zona</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAreaModal(true)}
+                        style={{ color: buttonColor }}
+                        className="text-[10px] hover:underline font-bold cursor-pointer"
+                      >
+                        + Nueva Zona
+                      </button>
+                    </div>
+                    <select
+                      value={formData.areaId}
+                      onChange={(e) => setFormData({ ...formData, areaId: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                    >
+                      <option value="">General (Sin área)</option>
+                      {areas.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className={`font-bold flex items-center justify-between ${classes.textMain}`}>
+                    <span>Mesero Titular Responsable</span>
+                    <span className={`text-[10px] font-normal ${classes.textSub}`}>
+                      {tableServiceMode === 'FREE' ? 'Opcional (Modo Libre activo)' : 'Recomendado'}
+                    </span>
+                  </label>
+                  <select
+                    value={formData.assignedWaiterId}
+                    onChange={(e) => setFormData({ ...formData, assignedWaiterId: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                  >
+                    <option value="">(Sin mesero asignado - Libre)</option>
+                    {waiters.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} {w.roles.length > 0 ? `(${w.roles.join(', ')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className={`pt-2 flex justify-end gap-2 border-t ${classes.divider}`}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    style={{
+                      backgroundColor: activePrimary,
+                      color: getContrastTextColor(activePrimary),
+                    }}
+                    className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+                  >
+                    {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{editingTable ? 'Actualizar Mesa' : 'Crear Mesa'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {/* MODAL GENERACIÓN RÁPIDA EN LOTE */}
+      {showBulkModal && (
+        <ModalPortal>
+          <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowBulkModal(false)
+            }}
+          >
+            <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-8 h-8 rounded-xl flex items-center justify-center font-bold"
+                    style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Generar Lote de Mesas</h3>
+                    <p className={`text-[11px] ${classes.textMuted}`}>Crea múltiples mesas numeradas en 1 clic</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkModal(false)}
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleBulkGenerate} className="space-y-3.5 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className={`font-bold block ${classes.textMain}`}>¿Cuántas mesas crear?</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="40"
+                      value={bulkData.count}
+                      onChange={(e) => setBulkData({ ...bulkData, count: Number(e.target.value) || 1 })}
+                      required
+                      className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={`font-bold block ${classes.textMain}`}>Número Inicial</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={bulkData.startNumber}
+                      onChange={(e) => setBulkData({ ...bulkData, startNumber: Number(e.target.value) || 1 })}
+                      required
+                      className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className={`font-bold block ${classes.textMain}`}>Prefijo de Nombre</label>
+                    <input
+                      type="text"
+                      placeholder="Mesa"
+                      value={bulkData.prefix}
+                      onChange={(e) => setBulkData({ ...bulkData, prefix: e.target.value })}
+                      required
+                      className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={`font-bold block ${classes.textMain}`}>Capacidad (Comensales)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={bulkData.capacity}
+                      onChange={(e) => setBulkData({ ...bulkData, capacity: Number(e.target.value) || 4 })}
+                      required
+                      className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className={`font-bold block ${classes.textMain}`}>Área / Zona</label>
+                    <label className={`font-bold block ${classes.textMain}`}>Área / Zona de Destino</label>
                     <button
                       type="button"
-                      onClick={() => setShowAreaModal(true)}
+                      onClick={() => {
+                        setShowBulkModal(false)
+                        setShowAreaModal(true)
+                      }}
                       style={{ color: buttonColor }}
                       className="text-[10px] hover:underline font-bold cursor-pointer"
                     >
@@ -1289,11 +1480,11 @@ export default function DashboardTablesManager({
                     </button>
                   </div>
                   <select
-                    value={formData.areaId}
-                    onChange={(e) => setFormData({ ...formData, areaId: e.target.value })}
+                    value={bulkData.areaId}
+                    onChange={(e) => setBulkData({ ...bulkData, areaId: e.target.value })}
                     className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
                   >
-                    <option value="">General (Sin área)</option>
+                    <option value="">General (Sin área asignada)</option>
                     {areas.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
@@ -1301,480 +1492,330 @@ export default function DashboardTablesManager({
                     ))}
                   </select>
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className={`font-bold flex items-center justify-between ${classes.textMain}`}>
-                  <span>Mesero Titular Responsable</span>
-                  <span className={`text-[10px] font-normal ${classes.textSub}`}>
-                    {tableServiceMode === 'FREE' ? 'Opcional (Modo Libre activo)' : 'Recomendado'}
-                  </span>
-                </label>
-                <select
-                  value={formData.assignedWaiterId}
-                  onChange={(e) => setFormData({ ...formData, assignedWaiterId: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                >
-                  <option value="">(Sin mesero asignado - Libre)</option>
-                  {waiters.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} {w.roles.length > 0 ? `(${w.roles.join(', ')})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className={`pt-2 flex justify-end gap-2 border-t ${classes.divider}`}>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  style={{
-                    backgroundColor: activePrimary,
-                    color: getContrastTextColor(activePrimary),
-                  }}
-                  className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
-                >
-                  {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{editingTable ? 'Actualizar Mesa' : 'Crear Mesa'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL GENERACIÓN RÁPIDA EN LOTE */}
-      {showBulkModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center font-bold"
-                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
-                >
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Generar Lote de Mesas</h3>
-                  <p className={`text-[11px] ${classes.textMuted}`}>Crea múltiples mesas numeradas en 1 clic</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowBulkModal(false)}
-                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleBulkGenerate} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className={`font-bold block ${classes.textMain}`}>¿Cuántas mesas crear?</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="40"
-                    value={bulkData.count}
-                    onChange={(e) => setBulkData({ ...bulkData, count: Number(e.target.value) || 1 })}
-                    required
-                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                  />
+                {/* Previsualización */}
+                <div className={`p-3 rounded-2xl border space-y-1 ${classes.subCard}`}>
+                  <span className={`font-semibold block ${classes.textMain}`}>Previsualización del lote:</span>
+                  <p className={`text-[11px] ${classes.textMuted}`}>
+                    Se generarán: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{bulkData.prefix} {bulkData.startNumber}</strong> hasta{' '}
+                    <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>
+                      {bulkData.prefix} {bulkData.startNumber + bulkData.count - 1}
+                    </strong>{' '}
+                    con capacidad de {bulkData.capacity} comensales.
+                  </p>
                 </div>
 
-                <div className="space-y-1">
-                  <label className={`font-bold block ${classes.textMain}`}>Número Inicial</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={bulkData.startNumber}
-                    onChange={(e) => setBulkData({ ...bulkData, startNumber: Number(e.target.value) || 1 })}
-                    required
-                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className={`font-bold block ${classes.textMain}`}>Prefijo de Nombre</label>
-                  <input
-                    type="text"
-                    placeholder="Mesa"
-                    value={bulkData.prefix}
-                    onChange={(e) => setBulkData({ ...bulkData, prefix: e.target.value })}
-                    required
-                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className={`font-bold block ${classes.textMain}`}>Capacidad (Comensales)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    value={bulkData.capacity}
-                    onChange={(e) => setBulkData({ ...bulkData, capacity: Number(e.target.value) || 4 })}
-                    required
-                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className={`font-bold block ${classes.textMain}`}>Área / Zona de Destino</label>
+                <div className={`pt-2 flex justify-end gap-2 border-t ${classes.divider}`}>
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowBulkModal(false)
-                      setShowAreaModal(true)
-                    }}
-                    style={{ color: buttonColor }}
-                    className="text-[10px] hover:underline font-bold cursor-pointer"
+                    onClick={() => setShowBulkModal(false)}
+                    className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
                   >
-                    + Nueva Zona
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingBulk}
+                    style={{
+                      backgroundColor: activePrimary,
+                      color: getContrastTextColor(activePrimary),
+                    }}
+                    className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+                  >
+                    {submittingBulk && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Generar {bulkData.count} Mesas</span>
                   </button>
                 </div>
-                <select
-                  value={bulkData.areaId}
-                  onChange={(e) => setBulkData({ ...bulkData, areaId: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                >
-                  <option value="">General (Sin área asignada)</option>
-                  {areas.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Previsualización */}
-              <div className={`p-3 rounded-2xl border space-y-1 ${classes.subCard}`}>
-                <span className={`font-semibold block ${classes.textMain}`}>Previsualización del lote:</span>
-                <p className={`text-[11px] ${classes.textMuted}`}>
-                  Se generarán: <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>{bulkData.prefix} {bulkData.startNumber}</strong> hasta{' '}
-                  <strong className={isLight ? 'text-[#2B1712]' : 'text-white'}>
-                    {bulkData.prefix} {bulkData.startNumber + bulkData.count - 1}
-                  </strong>{' '}
-                  con capacidad de {bulkData.capacity} comensales.
-                </p>
-              </div>
-
-              <div className={`pt-2 flex justify-end gap-2 border-t ${classes.divider}`}>
-                <button
-                  type="button"
-                  onClick={() => setShowBulkModal(false)}
-                  className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingBulk}
-                  style={{
-                    backgroundColor: activePrimary,
-                    color: getContrastTextColor(activePrimary),
-                  }}
-                  className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
-                >
-                  {submittingBulk && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Generar {bulkData.count} Mesas</span>
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* MODAL GESTIÓN Y CREACIÓN DE ÁREAS / ZONAS */}
       {showAreaModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto border ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3.5 ${classes.divider}`}>
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center font-bold"
-                  style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
-                >
-                  <Layers className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Zonas y Áreas de Salón</h3>
-                  <p className={`text-[11px] ${classes.textMuted}`}>
-                    Crea áreas (Terraza, Frente, Salón) y genera sus mesas en un solo clic
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAreaModal(false)}
-                className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Formulario de Nueva Área */}
-            <form onSubmit={handleSaveArea} className="space-y-4 text-xs">
-              <div className="space-y-2">
-                <label className={`font-bold block ${classes.textMain}`}>
-                  Sugerencias rápidas de zonas:
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {popularAreaSuggestions.map((item) => {
-                    const isSelected = areaFormData.name === item.name
-                    return (
-                      <button
-                        key={item.name}
-                        type="button"
-                        onClick={() => {
-                          setAreaFormData((prev) => ({
-                            ...prev,
-                            name: item.name,
-                            prefix: item.prefix,
-                          }))
-                        }}
-                        style={
-                          isSelected
-                            ? {
-                                backgroundColor: buttonColor,
-                                color: getContrastTextColor(buttonColor),
-                                borderColor: buttonColor,
-                              }
-                            : undefined
-                        }
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
-                          isSelected ? 'shadow-xs' : classes.buttonGhost
-                        }`}
-                      >
-                        {item.name}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className={`font-bold block ${classes.textMain}`}>Nombre del Área / Zona *</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Terraza, Parte Frontal, Patio Trasero"
-                  value={areaFormData.name}
-                  onChange={(e) =>
-                    setAreaFormData({
-                      ...areaFormData,
-                      name: e.target.value,
-                      prefix: areaFormData.prefix || e.target.value,
-                    })
-                  }
-                  required
-                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                />
-              </div>
-
-              {/* Opción de crear mesas automáticamente */}
-              <div className={`p-3.5 rounded-2xl border space-y-3 ${classes.subCard}`}>
-                <label className="flex items-center justify-between cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" style={{ color: buttonColor }} />
-                    <span className={`font-bold text-xs ${classes.textMain}`}>
-                      ¿Generar mesas automáticamente en esta área?
-                    </span>
+        <ModalPortal>
+          <div
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowAreaModal(false)
+            }}
+          >
+            <div className={`w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto border my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3.5 ${classes.divider}`}>
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center font-bold"
+                    style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                  >
+                    <Layers className="w-5 h-5" />
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={areaFormData.generateTables}
-                    onChange={(e) =>
-                      setAreaFormData({ ...areaFormData, generateTables: e.target.checked })
-                    }
-                    className="w-4 h-4 rounded cursor-pointer"
-                    style={{ accentColor: buttonColor }}
-                  />
-                </label>
-
-                {areaFormData.generateTables && (
-                  <div className={`space-y-3 pt-2 border-t animate-in fade-in-50 ${classes.divider}`}>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className={`font-bold block ${classes.textMain}`}>Cantidad de mesas</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="40"
-                          value={areaFormData.tablesCount}
-                          onChange={(e) =>
-                            setAreaFormData({
-                              ...areaFormData,
-                              tablesCount: Number(e.target.value) || 1,
-                            })
-                          }
-                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className={`font-bold block ${classes.textMain}`}>Capacidad por mesa</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={areaFormData.capacity}
-                          onChange={(e) =>
-                            setAreaFormData({
-                              ...areaFormData,
-                              capacity: Number(e.target.value) || 4,
-                            })
-                          }
-                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className={`font-bold block ${classes.textMain}`}>Prefijo de las mesas</label>
-                        <input
-                          type="text"
-                          placeholder={areaFormData.name || 'Mesa'}
-                          value={areaFormData.prefix}
-                          onChange={(e) =>
-                            setAreaFormData({ ...areaFormData, prefix: e.target.value })
-                          }
-                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className={`font-bold block ${classes.textMain}`}>Mesero titular (Opcional)</label>
-                        <select
-                          value={areaFormData.defaultWaiterId}
-                          onChange={(e) =>
-                            setAreaFormData({
-                              ...areaFormData,
-                              defaultWaiterId: e.target.value,
-                            })
-                          }
-                          className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
-                        >
-                          <option value="">(Sin asignar)</option>
-                          {waiters.map((w) => (
-                            <option key={w.id} value={w.id}>
-                              {w.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <p
-                      className={`text-[11px] p-2.5 rounded-xl border ${
-                        isLight
-                          ? 'bg-amber-50 text-amber-950 border-amber-300'
-                          : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                      }`}
-                    >
-                      💡 Se creará la zona <strong>{areaFormData.name || 'Nueva'}</strong> con{' '}
-                      <strong>{areaFormData.tablesCount} mesas</strong> ({areaFormData.prefix || areaFormData.name || 'Mesa'} 1 a {areaFormData.prefix || areaFormData.name || 'Mesa'}{' '}
-                      {areaFormData.tablesCount}) para {areaFormData.capacity} comensales.
+                  <div>
+                    <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>Zonas y Áreas de Salón</h3>
+                    <p className={`text-[11px] ${classes.textMuted}`}>
+                      Crea áreas (Terraza, Frente, Salón) y genera sus mesas en un solo clic
                     </p>
                   </div>
-                )}
-              </div>
-
-              <div className={`flex justify-end gap-2 pt-1 border-t ${classes.divider}`}>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowAreaModal(false)}
-                  className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingArea || !areaFormData.name.trim()}
-                  style={{
-                    backgroundColor: activePrimary,
-                    color: getContrastTextColor(activePrimary),
-                  }}
-                  className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
-                >
-                  {submittingArea && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>
-                    {areaFormData.generateTables
-                      ? `Crear Área con ${areaFormData.tablesCount} Mesas`
-                      : 'Crear Área'}
-                  </span>
+                  ✕
                 </button>
               </div>
-            </form>
 
-            {/* Listado de Áreas Actuales */}
-            {areas.length > 0 && (
-              <div className={`space-y-2 pt-3 border-t ${classes.divider}`}>
-                <h4 className={`text-xs font-bold uppercase tracking-wider ${classes.textMuted}`}>
-                  Áreas existentes ({areas.length})
-                </h4>
-                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                  {areas.map((a) => {
-                    const count = tables.filter((t) => t.areaId === a.id).length
-                    return (
-                      <div
-                        key={a.id}
-                        className={`flex items-center justify-between p-2.5 rounded-xl border ${classes.subCard}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Layers className="w-3.5 h-3.5" style={{ color: buttonColor }} />
-                          <span className={`font-bold text-xs ${classes.textMain}`}>{a.name}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-md border ${classes.badge}`}>
-                            {count} {count === 1 ? 'mesa' : 'mesas'}
-                          </span>
+              {/* Formulario de Nueva Área */}
+              <form onSubmit={handleSaveArea} className="space-y-4 text-xs">
+                <div className="space-y-2">
+                  <label className={`font-bold block ${classes.textMain}`}>
+                    Sugerencias rápidas de zonas:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {popularAreaSuggestions.map((item) => {
+                      const isSelected = areaFormData.name === item.name
+                      return (
+                        <button
+                          key={item.name}
+                          type="button"
+                          onClick={() => {
+                            setAreaFormData((prev) => ({
+                              ...prev,
+                              name: item.name,
+                              prefix: item.prefix,
+                            }))
+                          }}
+                          style={
+                            isSelected
+                              ? {
+                                  backgroundColor: buttonColor,
+                                  color: getContrastTextColor(buttonColor),
+                                  borderColor: buttonColor,
+                                }
+                              : undefined
+                          }
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
+                            isSelected ? 'shadow-xs' : classes.buttonGhost
+                          }`}
+                        >
+                          {item.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className={`font-bold block ${classes.textMain}`}>Nombre del Área / Zona *</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Terraza, Parte Frontal, Patio Trasero"
+                    value={areaFormData.name}
+                    onChange={(e) =>
+                      setAreaFormData({
+                        ...areaFormData,
+                        name: e.target.value,
+                        prefix: areaFormData.prefix || e.target.value,
+                      })
+                    }
+                    required
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                  />
+                </div>
+
+                {/* Opción de crear mesas automáticamente */}
+                <div className={`p-3.5 rounded-2xl border space-y-3 ${classes.subCard}`}>
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" style={{ color: buttonColor }} />
+                      <span className={`font-bold text-xs ${classes.textMain}`}>
+                        ¿Generar mesas automáticamente en esta área?
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={areaFormData.generateTables}
+                      onChange={(e) =>
+                        setAreaFormData({ ...areaFormData, generateTables: e.target.checked })
+                      }
+                      className="w-4 h-4 rounded cursor-pointer"
+                      style={{ accentColor: buttonColor }}
+                    />
+                  </label>
+
+                  {areaFormData.generateTables && (
+                    <div className={`space-y-3 pt-2 border-t animate-in fade-in-50 ${classes.divider}`}>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className={`font-bold block ${classes.textMain}`}>Cantidad de mesas</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="40"
+                            value={areaFormData.tablesCount}
+                            onChange={(e) =>
+                              setAreaFormData({
+                                ...areaFormData,
+                                tablesCount: Number(e.target.value) || 1,
+                              })
+                            }
+                            className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
+                          />
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedAreaFilter(a.id)
-                              setShowAreaModal(false)
-                            }}
-                            className={`px-2 py-1 rounded-lg text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
-                          >
-                            Ver mesas
-                          </button>
-                          <button
-                            type="button"
-                            disabled={deletingAreaId === a.id}
-                            onClick={() => handleDeleteArea(a.id, a.name)}
-                            className="p-1 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-500 cursor-pointer"
-                            title="Eliminar área"
-                          >
-                            {deletingAreaId === a.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                        <div className="space-y-1">
+                          <label className={`font-bold block ${classes.textMain}`}>Capacidad por mesa</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="20"
+                            value={areaFormData.capacity}
+                            onChange={(e) =>
+                              setAreaFormData({
+                                ...areaFormData,
+                                capacity: Number(e.target.value) || 4,
+                              })
+                            }
+                            className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
+                          />
                         </div>
                       </div>
-                    )
-                  })}
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className={`font-bold block ${classes.textMain}`}>Prefijo de las mesas</label>
+                          <input
+                            type="text"
+                            placeholder={areaFormData.name || 'Mesa'}
+                            value={areaFormData.prefix}
+                            onChange={(e) =>
+                              setAreaFormData({ ...areaFormData, prefix: e.target.value })
+                            }
+                            className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className={`font-bold block ${classes.textMain}`}>Mesero titular (Opcional)</label>
+                          <select
+                            value={areaFormData.defaultWaiterId}
+                            onChange={(e) =>
+                              setAreaFormData({
+                                ...areaFormData,
+                                defaultWaiterId: e.target.value,
+                              })
+                            }
+                            className={`w-full px-3 py-1.5 rounded-xl border focus:outline-none ${classes.input}`}
+                          >
+                            <option value="">(Sin asignar)</option>
+                            {waiters.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {w.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <p
+                        className={`text-[11px] p-2.5 rounded-xl border ${
+                          isLight
+                            ? 'bg-amber-50 text-amber-950 border-amber-300'
+                            : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                        }`}
+                      >
+                        💡 Se creará la zona <strong>{areaFormData.name || 'Nueva'}</strong> con{' '}
+                        <strong>{areaFormData.tablesCount} mesas</strong> ({areaFormData.prefix || areaFormData.name || 'Mesa'} 1 a {areaFormData.prefix || areaFormData.name || 'Mesa'}{' '}
+                        {areaFormData.tablesCount}) para {areaFormData.capacity} comensales.
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+
+                <div className={`flex justify-end gap-2 pt-1 border-t ${classes.divider}`}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAreaModal(false)}
+                    className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingArea || !areaFormData.name.trim()}
+                    style={{
+                      backgroundColor: activePrimary,
+                      color: getContrastTextColor(activePrimary),
+                    }}
+                    className="px-5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+                  >
+                    {submittingArea && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>
+                      {areaFormData.generateTables
+                        ? `Crear Área con ${areaFormData.tablesCount} Mesas`
+                        : 'Crear Área'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Listado de Áreas Actuales */}
+              {areas.length > 0 && (
+                <div className={`space-y-2 pt-3 border-t ${classes.divider}`}>
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${classes.textMuted}`}>
+                    Áreas existentes ({areas.length})
+                  </h4>
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                    {areas.map((a) => {
+                      const count = tables.filter((t) => t.areaId === a.id).length
+                      return (
+                        <div
+                          key={a.id}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border ${classes.subCard}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-3.5 h-3.5" style={{ color: buttonColor }} />
+                            <span className={`font-bold text-xs ${classes.textMain}`}>{a.name}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-md border ${classes.badge}`}>
+                              {count} {count === 1 ? 'mesa' : 'mesas'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedAreaFilter(a.id)
+                                setShowAreaModal(false)
+                              }}
+                              className={`px-2 py-1 rounded-lg text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
+                            >
+                              Ver mesas
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingAreaId === a.id}
+                              onClick={() => handleDeleteArea(a.id, a.name)}
+                              className="p-1 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-500 cursor-pointer"
+                              title="Eliminar área"
+                            >
+                              {deletingAreaId === a.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   )

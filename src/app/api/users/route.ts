@@ -57,6 +57,19 @@ export async function GET() {
             },
           },
         },
+        kitchenStations: {
+          include: {
+            station: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                color: true,
+                icon: true,
+              },
+            },
+          },
+        },
       },
       orderBy: [{ active: 'desc' }, { createdAt: 'asc' }],
     })
@@ -87,12 +100,21 @@ export async function GET() {
           canAuthorizeDiscounts: ur.role.canAuthorizeDiscounts,
           canAuthorizeCourtesies: ur.role.canAuthorizeCourtesies,
           canAuthorizeCancellations: ur.role.canAuthorizeCancellations,
+          canAccessKDS: ur.role.canAccessKDS,
+          canManageKitchen: ur.role.canManageKitchen,
         })),
         branches: u.userBranches.map((ub: any) => ({
           id: ub.branch.id,
           name: ub.branch.name,
           code: ub.branch.code,
           isDefault: ub.isDefault,
+        })),
+        kitchenStations: (u.kitchenStations || []).map((ks: any) => ({
+          id: ks.station.id,
+          name: ks.station.name,
+          code: ks.station.code,
+          color: ks.station.color,
+          icon: ks.station.icon,
         })),
       })),
       planLimits: {
@@ -166,6 +188,7 @@ export async function POST(request: Request) {
       gender = 'MALE',
       roleId,
       branchIds = [],
+      kitchenStationIds = [],
       defaultBranchId,
     } = body
 
@@ -307,6 +330,26 @@ export async function POST(request: Request) {
             isDefault: branch.id === finalDefaultBranchId,
           },
         })
+      }
+
+      // Asignar estaciones de cocina si se enviaron
+      if (Array.isArray(kitchenStationIds) && kitchenStationIds.length > 0) {
+        const validStations = await tx.kitchenStation.findMany({
+          where: {
+            businessId: session.businessId,
+            id: { in: kitchenStationIds },
+          },
+          select: { id: true },
+        })
+
+        for (const st of validStations) {
+          await tx.userKitchenStation.create({
+            data: {
+              userId: user.id,
+              stationId: st.id,
+            },
+          })
+        }
       }
 
       return user

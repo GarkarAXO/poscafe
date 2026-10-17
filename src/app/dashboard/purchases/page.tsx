@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import {
   Truck,
   Plus,
+  ArrowLeft,
   Search,
   Building2,
   Calendar,
@@ -37,6 +39,7 @@ import { notify } from '@/lib/notify'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
 import { generateSkuFromName } from '@/lib/sku'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
+import ModalPortal from '@/components/modal-portal'
 
 interface Supplier {
   id: string
@@ -213,6 +216,31 @@ export default function PurchasesPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  // Bloquear scroll de la página de fondo cuando cualquier modal esté abierto
+  useEffect(() => {
+    const isAnyModalOpen =
+      showPurchaseModal ||
+      (showEditPurchaseModal && !!editingPurchase) ||
+      showSupplierModal ||
+      (showDetailModal && !!selectedPurchase)
+
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [
+    showPurchaseModal,
+    showEditPurchaseModal,
+    editingPurchase,
+    showSupplierModal,
+    showDetailModal,
+    selectedPurchase,
+  ])
 
   // Métricas
   const totalPurchasesMonth = purchases
@@ -623,47 +651,48 @@ export default function PurchasesPage() {
   }
 
   return (
-    <div className={`p-6 max-w-7xl mx-auto space-y-6 ${classes.textMain}`}>
-      {/* Cabecera Principal */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className={`text-2xl font-bold flex items-center gap-2.5 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-            <Truck className="w-6 h-6" style={{ color: buttonColor }} />
-            Compras
-          </h1>
-          <p className={`text-xs mt-1 ${classes.textMuted}`}>
-            Carga de tickets y facturas de compra, abastecimiento directo al inventario y directorio de proveedores
-          </p>
+    <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
+      {/* Top Navbar */}
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <Link
+            href="/dashboard"
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Dashboard</span>
+          </Link>
+
+          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
+
+          <div className="min-w-0">
+            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-2 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Truck className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="truncate">Compras y Abastecimiento</span>
+            </h1>
+            <p className={`text-xs truncate hidden sm:block ${classes.textMuted}`}>
+              Facturas, tickets, insumos comprados y directorio de proveedores
+            </p>
+          </div>
         </div>
 
-        {/* Botones de acción rápida */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Botones de acción rápida en cabecera */}
+        <div className="flex items-center gap-2 shrink-0">
           {activeTab === 'purchases' ? (
             <>
-              {/* Carga de Stock Inicial */}
-              <button
-                type="button"
-                onClick={() => handleOpenNewPurchase('INITIAL_STOCK')}
-                className={`px-3.5 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer border ${classes.buttonGhost}`}
-                title="Cargar saldo inicial de materias primas para arrancar operaciones"
-              >
-                <Boxes className="w-4 h-4 text-violet-400" />
-                <span>Cargar Stock Inicial</span>
-              </button>
-
               {/* Compra Rápida de Tiendita */}
               <button
                 type="button"
                 onClick={() => handleOpenNewPurchase('EMERGENCY_STORE')}
-                className={`px-3.5 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 border transition-all cursor-pointer ${
+                className={`hidden md:flex px-3 py-2 rounded-xl border font-semibold text-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 touch-manipulation ${
                   isLight
                     ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
                     : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
                 }`}
-                title="Compra de emergencia en tiendita o minisúper para sacar pedidos"
+                title="Compra rápida de emergencia en tiendita o minisúper"
               >
-                <ShoppingBag className="w-4 h-4 text-amber-500" />
-                <span>Compra Tiendita / Caja Chica</span>
+                <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
+                <span>Tiendita / Caja Chica</span>
               </button>
 
               {/* Compra Formal a Proveedor */}
@@ -671,10 +700,10 @@ export default function PurchasesPage() {
                 type="button"
                 onClick={() => handleOpenNewPurchase('SUPPLIER')}
                 style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-                className="px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg shadow-black/10 transition-all cursor-pointer hover:opacity-95"
+                className="px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:opacity-95 active:scale-95 touch-manipulation"
               >
                 <Plus className="w-4 h-4" />
-                <span>Compra a Proveedor</span>
+                <span>Nueva Compra</span>
               </button>
             </>
           ) : (
@@ -682,14 +711,17 @@ export default function PurchasesPage() {
               type="button"
               onClick={handleOpenNewSupplier}
               style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-              className="px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg shadow-black/10 transition-all cursor-pointer hover:opacity-95"
+              className="px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:opacity-95 active:scale-95 touch-manipulation"
             >
               <Plus className="w-4 h-4" />
               <span>Nuevo Proveedor</span>
             </button>
           )}
         </div>
-      </div>
+      </header>
+
+      {/* Main Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
 
       {/* Tarjetas de Métricas Resumen */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1123,7 +1155,8 @@ export default function PurchasesPage() {
 
       {/* MODAL PARA REGISTRAR COMPRA / ENTRADA */}
       {showPurchaseModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className={`w-full max-w-4xl max-h-[94vh] rounded-3xl border flex flex-col shadow-2xl animate-in zoom-in-95 my-auto overflow-hidden ${classes.modalContent}`}>
             {/* Cabecera del Modal */}
             <div className={`p-4 sm:px-6 border-b flex items-center justify-between shrink-0 ${classes.divider}`}>
@@ -1703,13 +1736,15 @@ export default function PurchasesPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL PARA EDITAR COMPRA */}
       {showEditPurchaseModal && editingPurchase && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-md rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-3">
                 <div
                   className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
@@ -1799,13 +1834,15 @@ export default function PurchasesPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL PARA CREAR / EDITAR PROVEEDOR */}
       {showSupplierModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 ${classes.modalContent}`}>
-            <div className={`flex items-center gap-3 border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-md rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center gap-3 border-b pb-3 ${classes.divider}`}>
               <div
                 className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
                 style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
@@ -1900,13 +1937,15 @@ export default function PurchasesPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL DETALLE DE COMPRA */}
       {showDetailModal && selectedPurchase && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-lg rounded-3xl border p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-3">
                 <div
                   className="w-10 h-10 rounded-2xl flex items-center justify-center font-bold"
@@ -2013,7 +2052,9 @@ export default function PurchasesPage() {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
+      </main>
     </div>
   )
 }

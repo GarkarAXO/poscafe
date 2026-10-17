@@ -37,7 +37,9 @@ import {
   ArrowRightLeft,
   Laptop,
   Settings,
+  ArrowUpDown,
 } from 'lucide-react'
+import ModalPortal from '@/components/modal-portal'
 import { notify } from '@/lib/notify'
 import {
   getTerminalDeviceConfig,
@@ -81,6 +83,15 @@ interface Table {
   } | null
 }
 
+interface CashMovementRecord {
+  id: string
+  type: 'CASH_IN' | 'CASH_OUT'
+  amount: number
+  reason: string
+  authorizedBy?: string | null
+  createdAt: string
+}
+
 interface CashSessionData {
   sessionId: string
   registerName: string
@@ -91,8 +102,11 @@ interface CashSessionData {
   cardSales: number
   transferSales: number
   totalSales: number
+  cashIn?: number
+  cashOut?: number
   expectedCashInDrawer: number
   ordersCount: number
+  movements?: CashMovementRecord[]
 }
 
 interface ProductVariant {
@@ -579,6 +593,70 @@ export default function PosTerminalPage() {
       setError('Error de comunicación con el servidor')
     } finally {
       setSubmittingCut(false)
+    }
+  }
+
+  // Cash Movement States & Handlers
+  const [showCashMovementModal, setShowCashMovementModal] = useState(false)
+  const [movementType, setMovementType] = useState<'CASH_IN' | 'CASH_OUT'>('CASH_OUT')
+  const [movementAmount, setMovementAmount] = useState('')
+  const [movementReason, setMovementReason] = useState('')
+  const [movementAuthorizedBy, setMovementAuthorizedBy] = useState('')
+  const [submittingMovement, setSubmittingMovement] = useState(false)
+
+  const openCashMovementModal = (type: 'CASH_IN' | 'CASH_OUT' = 'CASH_OUT') => {
+    setMovementType(type)
+    setMovementAmount('')
+    setMovementReason('')
+    setMovementAuthorizedBy(sessionUser?.name || '')
+    setShowCashMovementModal(true)
+  }
+
+  const handleSaveCashMovement = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const amt = Number(movementAmount)
+    if (!amt || isNaN(amt) || amt <= 0) {
+      notify.error('Monto inválido', 'Ingresa una cantidad mayor a 0')
+      return
+    }
+    if (!movementReason.trim()) {
+      notify.error('Concepto requerido', 'Indica el motivo o justificación del movimiento')
+      return
+    }
+    setSubmittingMovement(true)
+    try {
+      const res = await fetch('/api/pos/cash-session/movement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: movementType,
+          amount: amt,
+          reason: movementReason.trim(),
+          authorizedBy: movementAuthorizedBy.trim() || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        notify.success(
+          movementType === 'CASH_IN' ? 'Entrada registrada' : 'Salida registrada',
+          json.message
+        )
+        setShowCashMovementModal(false)
+        setMovementAmount('')
+        setMovementReason('')
+        // Actualizar datos de caja
+        const curRes = await fetch('/api/pos/cash-session/current').then((r) => r.json())
+        if (curRes.success && curRes.data) {
+          setCashSession(curRes.data)
+          setCountedCash(curRes.data.expectedCashInDrawer.toString())
+        }
+      } else {
+        notify.error('Error al registrar movimiento', json.error?.message)
+      }
+    } catch {
+      notify.error('Error de comunicación', 'No se pudo conectar con el servidor')
+    } finally {
+      setSubmittingMovement(false)
     }
   }
 
@@ -1259,6 +1337,21 @@ export default function PosTerminalPage() {
             <MonitorPlay className="w-3.5 h-3.5" />
             <span>KDS</span>
           </Link>
+
+          {/* Botón de Entrada/Salida de Efectivo */}
+          <button
+            type="button"
+            onClick={() => openCashMovementModal('CASH_OUT')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+              isLight
+                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+            }`}
+            title="Registrar entrada o salida de efectivo"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Mov. Caja</span>
+          </button>
 
           {/* Botón de Arqueo / Cierre de Turno */}
           <button
@@ -2234,120 +2327,347 @@ export default function PosTerminalPage() {
 
       {/* MODAL DE ARQUEO / CIERRE DE TURNO DE CAJA */}
       {showCutModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                  <Banknote className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Arqueo y Cierre de Turno</h3>
-                  <p className="text-xs text-slate-400">Verificación de efectivo físico y corte Z</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCutModal(false)}
-                className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {loadingSession ? (
-              <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
-                <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
-                <span className="text-xs">Consultando balance del turno...</span>
-              </div>
-            ) : cashSession ? (
-              <div className="space-y-4 text-xs">
-                {/* Desglose de Ventas del Turno */}
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 space-y-2.5">
-                  <div className="flex justify-between text-slate-400">
-                    <span>Fondo Inicial de Caja:</span>
-                    <strong className="text-white">${cashSession.openingBalance.toFixed(2)}</strong>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto my-auto">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                    <Banknote className="w-5 h-5" />
                   </div>
-                  <div className="flex justify-between text-slate-400">
-                    <span>Ventas en Efectivo:</span>
-                    <strong className="text-emerald-400">+${cashSession.cashSales.toFixed(2)}</strong>
-                  </div>
-                  <div className="flex justify-between text-slate-400">
-                    <span>Ventas con Tarjeta (Débito/Crédito):</span>
-                    <span className="text-slate-300">${cashSession.cardSales.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-400">
-                    <span>Transferencias / QR:</span>
-                    <span className="text-slate-300">${cashSession.transferSales.toFixed(2)}</span>
-                  </div>
-                  <div className="pt-2 border-t border-slate-800 flex justify-between font-bold text-sm">
-                    <span className="text-slate-200">Total Facturado en Turno ({cashSession.ordersCount} órdenes):</span>
-                    <span className="text-amber-400">${cashSession.totalSales.toFixed(2)} MXN</span>
-                  </div>
-                </div>
-
-                {/* Resumen de Efectivo Esperado */}
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex justify-between items-center">
                   <div>
-                    <span className="text-[11px] text-amber-300 block font-semibold">
-                      Efectivo Esperado en Cajón
-                    </span>
-                    <span className="text-[10px] text-slate-400">(Fondo + Ventas en Efectivo)</span>
+                    <h3 className="text-base font-bold text-white">Arqueo y Cierre de Turno</h3>
+                    <p className="text-xs text-slate-400">Verificación de efectivo físico y corte Z</p>
                   </div>
-                  <span className="text-2xl font-black text-amber-400">
-                    ${cashSession.expectedCashInDrawer.toFixed(2)}
-                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCutModal(false)}
+                  className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {loadingSession ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                  <span className="text-xs">Consultando balance del turno...</span>
+                </div>
+              ) : cashSession ? (
+                <div className="space-y-4 text-xs">
+                  {/* Desglose de Ventas del Turno */}
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 space-y-2.5">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Fondo Inicial de Caja:</span>
+                      <strong className="text-white">${cashSession.openingBalance.toFixed(2)}</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Ventas en Efectivo:</span>
+                      <strong className="text-emerald-400">+${cashSession.cashSales.toFixed(2)}</strong>
+                    </div>
+                    {Boolean(cashSession.cashIn && cashSession.cashIn > 0) && (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Entradas de Efectivo (Aportes/Cambio):</span>
+                        <strong className="text-emerald-400">+${cashSession.cashIn?.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    {Boolean(cashSession.cashOut && cashSession.cashOut > 0) && (
+                      <div className="flex justify-between text-slate-400">
+                        <span>Salidas / Retiros de Efectivo:</span>
+                        <strong className="text-rose-400">-${cashSession.cashOut?.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-slate-400">
+                      <span>Ventas con Tarjeta (Débito/Crédito):</span>
+                      <span className="text-slate-300">${cashSession.cardSales.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Transferencias / QR:</span>
+                      <span className="text-slate-300">${cashSession.transferSales.toFixed(2)}</span>
+                    </div>
+                    <div className="pt-2 border-t border-slate-800 flex justify-between font-bold text-sm">
+                      <span className="text-slate-200">Total Facturado en Turno ({cashSession.ordersCount} órdenes):</span>
+                      <span className="text-amber-400">${cashSession.totalSales.toFixed(2)} MXN</span>
+                    </div>
+                  </div>
+
+                  {/* Acciones y Lista de Movimientos de Caja */}
+                  <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
+                        Movimientos de Efectivo del Turno
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openCashMovementModal('CASH_OUT')}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Nuevo Movimiento</span>
+                      </button>
+                    </div>
+
+                    {cashSession.movements && cashSession.movements.length > 0 ? (
+                      <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                        {cashSession.movements.map((m) => (
+                          <div
+                            key={m.id}
+                            className="p-2 rounded-xl bg-slate-900 border border-slate-800/80 flex items-center justify-between text-[11px]"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-black shrink-0 ${
+                                  m.type === 'CASH_IN'
+                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                    : 'bg-rose-500/20 text-rose-400'
+                                }`}
+                              >
+                                {m.type === 'CASH_IN' ? '+ ENTRADA' : '- RETIRO'}
+                              </span>
+                              <span className="text-slate-300 truncate font-medium">{m.reason}</span>
+                            </div>
+                            <strong
+                              className={`shrink-0 font-mono ml-2 ${
+                                m.type === 'CASH_IN' ? 'text-emerald-400' : 'text-rose-400'
+                              }`}
+                            >
+                              {m.type === 'CASH_IN' ? '+' : '-'}${Number(m.amount).toFixed(2)}
+                            </strong>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500 italic py-1 text-center">
+                        No hay movimientos manuales registrados en este turno.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Resumen de Efectivo Esperado */}
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex justify-between items-center">
+                    <div>
+                      <span className="text-[11px] text-amber-300 block font-semibold">
+                        Efectivo Esperado en Cajón
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        (Fondo + Ventas Efectivo + Entradas - Salidas)
+                      </span>
+                    </div>
+                    <span className="text-2xl font-black text-amber-400">
+                      ${cashSession.expectedCashInDrawer.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Conteo Físico Real */}
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-300 font-semibold">
+                      Efectivo Físico Contado en Cajón ($ MXN) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={countedCash}
+                      onChange={(e) => setCountedCash(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-lg font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {/* Cálculo de Descuadre en Vivo */}
+                  {(() => {
+                    const diff = (Number(countedCash) || 0) - cashSession.expectedCashInDrawer
+                    return (
+                      <div
+                        className={`p-3 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+                          Math.abs(diff) < 0.01
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : diff > 0
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-red-500/10 border-red-500/30 text-red-400'
+                        }`}
+                      >
+                        <span>Resultado del Arqueo:</span>
+                        <span>
+                          {Math.abs(diff) < 0.01
+                            ? '✓ Caja Cuadrada Exacta ($0.00)'
+                            : diff > 0
+                            ? `▲ Sobrante de +$${diff.toFixed(2)} MXN`
+                            : `▼ Faltante de -$${Math.abs(diff).toFixed(2)} MXN`}
+                        </span>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Notas */}
+                  <div>
+                    <label className="block text-slate-300 font-medium mb-1">
+                      Notas o Justificación del Corte (Opcional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={cutNotes}
+                      onChange={(e) => setCutNotes(e.target.value)}
+                      placeholder="Observaciones de billetes o incidencias durante el turno..."
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setShowCutModal(false)}
+                      className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium cursor-pointer"
+                    >
+                      Continuar Vendiendo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmCloseSession}
+                      disabled={submittingCut || countedCash === ''}
+                      className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/30 cursor-pointer disabled:opacity-50"
+                    >
+                      {submittingCut ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                      <span>Confirmar Corte Z y Cerrar Turno</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  No hay sesiones de caja abiertas en este momento.
+                </div>
+              )}
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {/* MODAL REGISTRAR MOVIMIENTO DE EFECTIVO (CASH IN / CASH OUT) */}
+      {showCashMovementModal && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95 my-auto">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                      movementType === 'CASH_IN'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-rose-500/20 text-rose-400'
+                    }`}
+                  >
+                    <ArrowUpDown className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">
+                      {movementType === 'CASH_IN' ? 'Entrada de Efectivo' : 'Salida / Retiro de Caja'}
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      {movementType === 'CASH_IN'
+                        ? 'Aporte de fondo o cambio adicional'
+                        : 'Retiro de seguridad o compra urgente'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCashMovementModal(false)}
+                  className="text-slate-400 hover:text-slate-200 text-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Selector de Tipo */}
+              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-2xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setMovementType('CASH_IN')}
+                  className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    movementType === 'CASH_IN'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Entrada (Fondo)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMovementType('CASH_OUT')}
+                  className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    movementType === 'CASH_OUT'
+                      ? 'bg-rose-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                  <span>- Salida (Retiro)</span>
+                </button>
+              </div>
+
+              {/* Sugerencias Rápidas de Motivo */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 block">Conceptos Frecuentes</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(movementType === 'CASH_IN'
+                    ? ['Fondo Adicional', 'Cambio para Cajón', 'Devolución de Compra', 'Aporte Socio']
+                    : ['Retiro de Seguridad', 'Compra Urgente Insumos', 'Pago de Hielo / Botellón', 'Servicio de Limpieza']
+                  ).map((quick) => (
+                    <button
+                      key={quick}
+                      type="button"
+                      onClick={() => setMovementReason(quick)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700/60 transition-colors cursor-pointer"
+                    >
+                      {quick}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveCashMovement} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Monto en Efectivo ($ MXN) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-2.5 text-slate-400 text-base font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={movementAmount}
+                      onChange={(e) => setMovementAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-8 pr-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-lg font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
                 </div>
 
-                {/* Conteo Físico Real */}
-                <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-semibold">
-                    Efectivo Físico Contado en Cajón ($ MXN) *
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Motivo o Justificación Detallada *
                   </label>
                   <input
-                    type="number"
-                    step="0.01"
-                    value={countedCash}
-                    onChange={(e) => setCountedCash(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-lg font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    type="text"
+                    required
+                    value={movementReason}
+                    onChange={(e) => setMovementReason(e.target.value)}
+                    placeholder="Ej: Retiro a caja fuerte, compra urgente de 2 bolsas de hielo..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                 </div>
 
-                {/* Cálculo de Descuadre en Vivo */}
-                {(() => {
-                  const diff = (Number(countedCash) || 0) - cashSession.expectedCashInDrawer
-                  return (
-                    <div
-                      className={`p-3 rounded-xl border flex items-center justify-between text-xs font-semibold ${
-                        Math.abs(diff) < 0.01
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                          : diff > 0
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                          : 'bg-red-500/10 border-red-500/30 text-red-400'
-                      }`}
-                    >
-                      <span>Resultado del Arqueo:</span>
-                      <span>
-                        {Math.abs(diff) < 0.01
-                          ? '✓ Caja Cuadrada Exacta ($0.00)'
-                          : diff > 0
-                          ? `▲ Sobrante de +$${diff.toFixed(2)} MXN`
-                          : `▼ Faltante de -$${Math.abs(diff).toFixed(2)} MXN`}
-                      </span>
-                    </div>
-                  )
-                })()}
-
-                {/* Notas */}
                 <div>
                   <label className="block text-slate-300 font-medium mb-1">
-                    Notas o Justificación del Corte (Opcional)
+                    Autorizado Por (Opcional)
                   </label>
-                  <textarea
-                    rows={2}
-                    value={cutNotes}
-                    onChange={(e) => setCutNotes(e.target.value)}
-                    placeholder="Observaciones de billetes o incidencias durante el turno..."
+                  <input
+                    type="text"
+                    value={movementAuthorizedBy}
+                    onChange={(e) => setMovementAuthorizedBy(e.target.value)}
+                    placeholder="Nombre del encargado o cajero"
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                 </div>
@@ -2355,29 +2675,34 @@ export default function PosTerminalPage() {
                 <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setShowCutModal(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-medium cursor-pointer"
+                    onClick={() => setShowCashMovementModal(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-medium cursor-pointer"
                   >
-                    Continuar Vendiendo
+                    Cancelar
                   </button>
                   <button
-                    type="button"
-                    onClick={handleConfirmCloseSession}
-                    disabled={submittingCut || countedCash === ''}
-                    className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/30 cursor-pointer disabled:opacity-50"
+                    type="submit"
+                    disabled={submittingMovement || !movementAmount || Number(movementAmount) <= 0}
+                    className={`px-5 py-2.5 rounded-xl font-bold text-white flex items-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50 ${
+                      movementType === 'CASH_IN'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+                        : 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/30'
+                    }`}
                   >
-                    {submittingCut ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                    <span>Confirmar Corte Z y Cerrar Turno</span>
+                    {submittingMovement ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4" />
+                    )}
+                    <span>
+                      {movementType === 'CASH_IN' ? 'Confirmar Entrada' : 'Confirmar Retiro'}
+                    </span>
                   </button>
                 </div>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-slate-400 text-xs">
-                No hay sesiones de caja abiertas en este momento.
-              </div>
-            )}
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* MODAL TICKET / RECIBO DE CORTE Z */}
@@ -2899,7 +3224,7 @@ export default function PosTerminalPage() {
       {welcomeOverlayUser && (
         <div className="fixed inset-0 z-50 bg-[#14100E]/85 backdrop-blur-md flex items-center justify-center p-4 selection:bg-[#C08552] selection:text-white animate-in fade-in duration-200">
           <div className="w-full max-w-sm bg-[#251E1B] border border-[#3E2723] rounded-3xl p-8 text-center space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-bounce duration-1000">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5E3023] to-[#C08552] text-white flex items-center justify-center mx-auto shadow-xl shadow-[#C08552]/30 animate-pulse">
               <Coffee className="w-8 h-8" />
             </div>
             <div>

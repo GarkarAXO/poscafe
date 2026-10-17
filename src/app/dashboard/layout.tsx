@@ -32,6 +32,17 @@ export default async function DashboardLayout({
     redirect('/comandera')
   }
 
+  // El personal de cocina opera exclusivamente en el Monitor KDS
+  if (
+    (session.permissions.canAccessKDS ||
+      session.roleCodes.includes('CHEF') ||
+      session.roleCodes.includes('KITCHEN')) &&
+    !isOwnerOrAdmin &&
+    !hasManagementPermission
+  ) {
+    redirect('/kds')
+  }
+
   if (!isOwnerOrAdmin && !hasManagementPermission) {
     if (session.permissions.canAccessPOS || session.roleCodes.includes('CASHIER')) {
       redirect('/pos')

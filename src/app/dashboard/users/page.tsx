@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
+import ModalPortal from '@/components/modal-portal'
 
 interface RolePermissions {
   canAccessPOS: boolean
@@ -46,6 +47,8 @@ interface RolePermissions {
   canAuthorizeCourtesies: boolean
   canAuthorizeCancellations: boolean
   canTransferTables: boolean
+  canAccessKDS: boolean
+  canManageKitchen: boolean
 }
 
 interface RoleItem {
@@ -78,12 +81,21 @@ interface UserItem {
     canAuthorizeDiscounts: boolean
     canAuthorizeCourtesies: boolean
     canAuthorizeCancellations: boolean
+    canAccessKDS?: boolean
+    canManageKitchen?: boolean
   }>
   branches: Array<{
     id: string
     name: string
     code: string
     isDefault: boolean
+  }>
+  kitchenStations?: Array<{
+    id: string
+    name: string
+    code: string
+    color: string
+    icon: string
   }>
 }
 
@@ -126,6 +138,8 @@ export default function UsersAndRolesPage() {
   const [userRoleId, setUserRoleId] = useState('')
   const [userBranchIds, setUserBranchIds] = useState<string[]>([])
   const [userDefaultBranchId, setUserDefaultBranchId] = useState('')
+  const [userKitchenStationIds, setUserKitchenStationIds] = useState<string[]>([])
+  const [kitchenStations, setKitchenStations] = useState<any[]>([])
 
   // Modal PIN rápido
   const [pinModalOpen, setPinModalOpen] = useState(false)
@@ -153,16 +167,19 @@ export default function UsersAndRolesPage() {
     canAuthorizeCourtesies: false,
     canAuthorizeCancellations: false,
     canTransferTables: false,
+    canAccessKDS: false,
+    canManageKitchen: false,
   })
 
   // Carga inicial
   const loadData = async () => {
     setLoading(true)
     try {
-      const [resUsers, resRoles, resBranches] = await Promise.all([
+      const [resUsers, resRoles, resBranches, resStations] = await Promise.all([
         fetch('/api/users').then((r) => r.json()),
         fetch('/api/roles').then((r) => r.json()),
         fetch('/api/branches').then((r) => r.json()),
+        fetch('/api/kitchen-stations').then((r) => r.json()).catch(() => ({ success: false, data: [] })),
       ])
 
       if (resUsers.success) {
@@ -171,6 +188,9 @@ export default function UsersAndRolesPage() {
       }
       if (resRoles.success) {
         setRoles(resRoles.data)
+      }
+      if (resStations.success && Array.isArray(resStations.data)) {
+        setKitchenStations(resStations.data)
       }
       if (resBranches.success) {
         const branchList = Array.isArray(resBranches.data?.branches)
@@ -191,6 +211,19 @@ export default function UsersAndRolesPage() {
     loadData()
   }, [])
 
+  // Bloquear scroll de la página de fondo cuando cualquier modal esté abierto
+  useEffect(() => {
+    const isAnyModalOpen = userModalOpen || pinModalOpen || roleModalOpen
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [userModalOpen, pinModalOpen, roleModalOpen])
+
   // Abrir modal de usuario
   const openUserModal = (user?: UserItem) => {
     if (user) {
@@ -205,6 +238,7 @@ export default function UsersAndRolesPage() {
       setUserBranchIds(Array.isArray(user.branches) ? user.branches.map((b) => b.id) : [])
       const defBranch = user.branches?.find((b) => b.isDefault)?.id || user.branches?.[0]?.id || ''
       setUserDefaultBranchId(defBranch)
+      setUserKitchenStationIds(user.kitchenStations?.map((ks) => ks.id) || [])
     } else {
       if (planLimits && !planLimits.canAddUser) {
         notify.warning(
@@ -221,6 +255,7 @@ export default function UsersAndRolesPage() {
       setUserPassword('')
       setUserPin('')
       setUserRoleId(roles[0]?.id || '')
+      setUserKitchenStationIds([])
       const initialBranchIds = Array.isArray(branches) ? branches.map((b) => b.id) : []
       setUserBranchIds(initialBranchIds)
       setUserDefaultBranchId(Array.isArray(branches) && branches[0] ? branches[0].id : '')
@@ -264,6 +299,7 @@ export default function UsersAndRolesPage() {
         roleId: userRoleId,
         branchIds: userBranchIds,
         defaultBranchId: userDefaultBranchId,
+        kitchenStationIds: userKitchenStationIds,
       }
 
       const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users'
@@ -401,7 +437,23 @@ export default function UsersAndRolesPage() {
       setEditingRole(role)
       setRoleName(role.name)
       setRoleCode(role.code)
-      setRolePermissions(role.permissions)
+      setRolePermissions({
+        canAccessPOS: Boolean(role.permissions?.canAccessPOS),
+        canManageCatalog: Boolean(role.permissions?.canManageCatalog),
+        canManageInventory: Boolean(role.permissions?.canManageInventory),
+        canManagePurchases: Boolean(role.permissions?.canManagePurchases),
+        canManageExpenses: Boolean(role.permissions?.canManageExpenses),
+        canManageCashRegisters: Boolean(role.permissions?.canManageCashRegisters),
+        canViewReports: Boolean(role.permissions?.canViewReports),
+        canManageUsers: Boolean(role.permissions?.canManageUsers),
+        canManageSettings: Boolean(role.permissions?.canManageSettings),
+        canAuthorizeDiscounts: Boolean(role.permissions?.canAuthorizeDiscounts),
+        canAuthorizeCourtesies: Boolean(role.permissions?.canAuthorizeCourtesies),
+        canAuthorizeCancellations: Boolean(role.permissions?.canAuthorizeCancellations),
+        canTransferTables: Boolean(role.permissions?.canTransferTables),
+        canAccessKDS: Boolean(role.permissions?.canAccessKDS),
+        canManageKitchen: Boolean(role.permissions?.canManageKitchen),
+      })
     } else {
       setEditingRole(null)
       setRoleName('')
@@ -420,6 +472,8 @@ export default function UsersAndRolesPage() {
         canAuthorizeCourtesies: false,
         canAuthorizeCancellations: false,
         canTransferTables: false,
+        canAccessKDS: false,
+        canManageKitchen: false,
       })
     }
     setRoleModalOpen(true)
@@ -512,55 +566,53 @@ export default function UsersAndRolesPage() {
   })
 
   return (
-    <div className={`flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full ${classes.textMain}`}>
-      {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/dashboard"
-              className={`p-2 rounded-xl border transition-colors cursor-pointer ${classes.buttonGhost}`}
-              title="Volver al panel principal"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <h1 className={`text-xl sm:text-2xl font-bold flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-              <Users className="w-6 h-6" style={{ color: buttonColor }} />
-              Personal y Roles
+    <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
+      {/* Top Navbar */}
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <Link
+            href="/dashboard"
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Dashboard</span>
+          </Link>
+
+          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
+
+          <div className="min-w-0">
+            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-2 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Users className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="truncate">Personal y Roles</span>
             </h1>
+            <p className={`text-xs truncate hidden sm:block ${classes.textMuted}`}>
+              Credenciales, PINs de acceso rápido y permisos de autorización
+            </p>
           </div>
-          <p className={`text-xs sm:text-sm ${classes.textMuted}`}>
-            Administra empleados, credenciales, códigos PIN de acceso rápido y permisos de autorización.
-          </p>
         </div>
 
-        {/* Indicador de límite de plan */}
+        {/* Indicador de límite de plan en cabecera */}
         {planLimits && (
-          <div className={`flex items-center gap-3 border px-4 py-2.5 rounded-2xl ${classes.card}`}>
-            <div className="space-y-0.5">
-              <div className={`flex items-center gap-1.5 text-xs ${classes.textMuted}`}>
-                <span>Límite de Personal:</span>
-                <span className={`font-semibold ${classes.textMain}`}>
-                  {planLimits.activeUsers} / {planLimits.maxUsers}
-                </span>
-              </div>
-              <div className={`w-32 h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-[#DECEBD]' : 'bg-slate-800'}`}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    backgroundColor: planLimits.activeUsers >= planLimits.maxUsers ? '#F59E0B' : buttonColor,
-                    width: `${Math.min(100, (planLimits.activeUsers / planLimits.maxUsers) * 100)}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            <span className={`text-[11px] font-medium px-2 py-0.5 rounded border ${classes.badge}`}>
-              Cupo Sucursal
+          <div className={`flex items-center gap-2.5 border px-3 py-1.5 rounded-xl text-xs shrink-0 ${classes.card}`}>
+            <span className={`text-[11px] font-semibold hidden md:inline ${classes.textMuted}`}>Cupo:</span>
+            <span className={`font-bold text-xs ${classes.textMain}`}>
+              {planLimits.activeUsers} / {planLimits.maxUsers}
             </span>
+            <div className={`w-16 sm:w-24 h-1.5 rounded-full overflow-hidden ${isLight ? 'bg-[#DECEBD]' : 'bg-slate-800'}`}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  backgroundColor: planLimits.activeUsers >= planLimits.maxUsers ? '#F59E0B' : buttonColor,
+                  width: `${Math.min(100, (planLimits.activeUsers / planLimits.maxUsers) * 100)}%`,
+                }}
+              />
+            </div>
           </div>
         )}
-      </div>
+      </header>
+
+      {/* Main Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
 
       {/* Tabs */}
       <div className={`flex items-center gap-2 border-b pb-3 ${classes.divider}`}>
@@ -733,6 +785,30 @@ export default function UsersAndRolesPage() {
                         <span className={classes.textSub}>Sucursales: </span>
                         {user.branches.map((b) => b.name).join(', ') || 'Sin sucursal'}
                       </div>
+
+                      {/* Áreas de Cocina Asignadas */}
+                      {user.kitchenStations && user.kitchenStations.length > 0 && (
+                        <div className="pt-2 flex flex-wrap items-center gap-1.5">
+                          <span className={`text-[11px] font-semibold ${classes.textSub} flex items-center gap-1`}>
+                            <UtensilsCrossed className="w-3 h-3 text-amber-500" />
+                            Cocina:
+                          </span>
+                          {user.kitchenStations.map((ks) => (
+                            <span
+                              key={ks.id}
+                              style={{
+                                backgroundColor: `${ks.color}15`,
+                                borderColor: `${ks.color}40`,
+                                color: ks.color,
+                              }}
+                              className="text-[10px] font-semibold px-2 py-0.5 rounded-md border inline-flex items-center gap-1"
+                            >
+                              <span>{ks.icon}</span>
+                              <span>{ks.name}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Acciones */}
@@ -962,6 +1038,28 @@ export default function UsersAndRolesPage() {
                       Administrar Personal
                     </span>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    {role.permissions.canAccessKDS ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
+                    )}
+                    <span className={role.permissions.canAccessKDS ? classes.textMain : classes.textSub}>
+                      Monitor KDS Cocina
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {role.permissions.canManageKitchen ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <XCircle className={`w-4 h-4 opacity-40 shrink-0 ${classes.textSub}`} />
+                    )}
+                    <span className={role.permissions.canManageKitchen ? classes.textMain : classes.textSub}>
+                      Gestionar Áreas Cocina
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -971,9 +1069,10 @@ export default function UsersAndRolesPage() {
 
       {/* MODAL: REGISTRAR / EDITAR COLABORADOR */}
       {userModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className={`border rounded-3xl w-full max-w-lg p-6 space-y-5 my-8 shadow-2xl ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`border rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-5 my-auto shadow-2xl ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <h2 className={`text-lg font-bold flex items-center gap-2 ${classes.textMain}`}>
                 <Users className="w-5 h-5" style={{ color: buttonColor }} />
                 {editingUser ? 'Editar Colaborador' : 'Nuevo Colaborador'}
@@ -1163,6 +1262,67 @@ export default function UsersAndRolesPage() {
                 </div>
               </div>
 
+              {/* Áreas de Cocina Asignadas */}
+              {kitchenStations.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className={`block text-xs font-semibold ${classes.textMuted}`}>
+                      Áreas de Cocina Asignadas
+                    </label>
+                    <span className={`text-[11px] ${classes.textSub}`}>
+                      {userKitchenStationIds.length === 0
+                        ? 'Atiende todas las áreas'
+                        : `${userKitchenStationIds.length} asignada(s)`}
+                    </span>
+                  </div>
+                  <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-2xl border ${classes.subCard}`}>
+                    {kitchenStations.map((station) => {
+                      const isChecked = userKitchenStationIds.includes(station.id)
+                      return (
+                        <label
+                          key={station.id}
+                          className={`flex items-center gap-2.5 text-xs cursor-pointer p-2 rounded-xl border transition-all ${
+                            isChecked
+                              ? 'ring-1 font-semibold'
+                              : `${classes.buttonGhost} opacity-80 hover:opacity-100`
+                          }`}
+                          style={
+                            isChecked
+                              ? {
+                                  backgroundColor: `${station.color}15`,
+                                  borderColor: `${station.color}60`,
+                                  color: station.color,
+                                }
+                              : undefined
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setUserKitchenStationIds([...userKitchenStationIds, station.id])
+                              } else {
+                                setUserKitchenStationIds(
+                                  userKitchenStationIds.filter((id) => id !== station.id)
+                                )
+                              }
+                            }}
+                            className="w-4 h-4 rounded focus:ring-0"
+                            style={{ accentColor: station.color }}
+                          />
+                          <span className="text-base">{station.icon}</span>
+                          <span className="truncate">{station.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className={`text-[10px] mt-1.5 ${classes.textSub}`}>
+                    Si no seleccionas ninguna, el colaborador verá los pedidos de todas las áreas en su pantalla de KDS.
+                  </p>
+                </div>
+              )}
+
               <div className={`flex items-center justify-end gap-3 pt-3 border-t ${classes.divider}`}>
                 <button
                   type="button"
@@ -1184,13 +1344,15 @@ export default function UsersAndRolesPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL: ASIGNAR / CAMBIAR PIN RÁPIDO */}
       {pinModalOpen && pinTargetUser && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`border rounded-3xl w-full max-w-sm p-6 space-y-5 shadow-2xl ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`border rounded-3xl w-full max-w-sm p-6 space-y-5 my-auto shadow-2xl ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <h2 className={`text-base font-bold flex items-center gap-2 ${classes.textMain}`}>
                 <KeyRound className="w-5 h-5 text-amber-500" />
                 Código PIN de Acceso
@@ -1262,13 +1424,15 @@ export default function UsersAndRolesPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL: CREAR / EDITAR ROL PERSONALIZADO */}
       {roleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className={`border rounded-3xl w-full max-w-xl p-6 space-y-5 my-8 shadow-2xl ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`border rounded-3xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 space-y-5 my-auto shadow-2xl ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <h2 className={`text-lg font-bold flex items-center gap-2 ${classes.textMain}`}>
                 <Shield className="w-5 h-5" style={{ color: buttonColor }} />
                 {editingRole
@@ -1430,6 +1594,44 @@ export default function UsersAndRolesPage() {
                 </div>
               </div>
 
+              {/* SECCIÓN: COCINA Y PANTALLA KDS */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Cocina y Pantalla KDS
+                </h4>
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-2xl border ${classes.subCard}`}>
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
+                    <input
+                      type="checkbox"
+                      checked={rolePermissions.canAccessKDS}
+                      onChange={(e) =>
+                        setRolePermissions({
+                          ...rolePermissions,
+                          canAccessKDS: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 rounded text-emerald-500 focus:ring-0"
+                    />
+                    <span>Monitor KDS de Cocina</span>
+                  </label>
+
+                  <label className={`flex items-center gap-2.5 text-xs cursor-pointer p-1 ${classes.textMain}`}>
+                    <input
+                      type="checkbox"
+                      checked={rolePermissions.canManageKitchen}
+                      onChange={(e) =>
+                        setRolePermissions({
+                          ...rolePermissions,
+                          canManageKitchen: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 rounded text-emerald-500 focus:ring-0"
+                    />
+                    <span>Administrar Áreas de Cocina</span>
+                  </label>
+                </div>
+              </div>
+
               {/* SECCIÓN 3: ADMINISTRACIÓN Y CATÁLOGO */}
               <div className="space-y-2">
                 <h4 className={`text-xs font-bold uppercase tracking-wider ${classes.textSub}`}>
@@ -1523,7 +1725,9 @@ export default function UsersAndRolesPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
+      </main>
     </div>
   )
 }

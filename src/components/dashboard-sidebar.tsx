@@ -23,6 +23,7 @@ import {
   Boxes,
   LayoutGrid,
   Palette,
+  Receipt,
 } from 'lucide-react'
 
 interface DashboardSidebarProps {
@@ -85,6 +86,8 @@ interface DashboardSidebarProps {
       canAuthorizeCourtesies?: boolean
       canAuthorizeCancellations?: boolean
       canTransferTables?: boolean
+      canAccessKDS?: boolean
+      canManageKitchen?: boolean
     }
   }
   activeBranchId?: string
@@ -317,6 +320,8 @@ export default function DashboardSidebar({
     canAuthorizeCourtesies: false,
     canAuthorizeCancellations: false,
     canTransferTables: false,
+    canAccessKDS: false,
+    canManageKitchen: false,
   }
 
   // Items de Operación Diaria dinámicos según módulos habilitados y permisos
@@ -360,11 +365,13 @@ export default function DashboardSidebar({
       icon: MonitorPlay,
       active: pathname === '/kds',
       enabled:
-        (isOwnerOrAdmin ||
-          user.roleCodes.includes('CHEF') ||
-          user.roleCodes.includes('KITCHEN') ||
-          perms.canManageInventory) &&
-        (settings.kitchenEnabled ?? false),
+        isOwnerOrAdmin ||
+        perms.canAccessKDS ||
+        perms.canManageKitchen ||
+        user.roleCodes.includes('CHEF') ||
+        user.roleCodes.includes('KITCHEN') ||
+        user.roleCodes.includes('BARISTA') ||
+        perms.canManageInventory,
     },
   ].filter((item) => item.enabled)
 
@@ -389,11 +396,27 @@ export default function DashboardSidebar({
         (settings.purchasesEnabled ?? true),
     },
     {
+      name: 'Gastos Operativos',
+      href: '/dashboard/expenses',
+      icon: Receipt,
+      active: pathname.startsWith('/dashboard/expenses'),
+      enabled:
+        (isOwnerOrAdmin || perms.canManageExpenses) &&
+        (settings.expensesEnabled ?? true),
+    },
+    {
       name: settings.recipesEnabled !== false ? 'Catálogo y Recetas' : 'Catálogo de Productos',
       href: '/dashboard/catalog',
       icon: Package,
       active: pathname.startsWith('/dashboard/catalog'),
       enabled: isOwnerOrAdmin || perms.canManageCatalog,
+    },
+    {
+      name: 'Áreas de Cocina',
+      href: '/dashboard/kitchen-stations',
+      icon: UtensilsCrossed,
+      active: pathname.startsWith('/dashboard/kitchen-stations'),
+      enabled: isOwnerOrAdmin || perms.canManageKitchen || perms.canManageCatalog,
     },
     {
       name: 'Control de Mesas',
@@ -456,11 +479,11 @@ export default function DashboardSidebar({
   return (
     <>
       {/* Botón flotante para abrir menú en móviles */}
-      <div className="lg:hidden fixed top-3 left-3 z-40">
+      <div className="lg:hidden fixed top-2.5 sm:top-3 left-3 z-40">
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className={`p-2.5 rounded-xl ${mobileBtnClass} shadow-lg cursor-pointer`}
+          className={`p-2.5 rounded-xl ${mobileBtnClass} shadow-lg cursor-pointer active:scale-95 touch-manipulation select-none transition-transform flex items-center justify-center`}
           title="Menú de Navegación"
         >
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

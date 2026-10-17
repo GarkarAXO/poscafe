@@ -22,15 +22,34 @@ import {
   CheckCheck,
   ShieldAlert,
   MoreHorizontal,
+  LogOut,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
+
+interface KitchenStation {
+  id: string
+  name: string
+  code: string
+  description?: string | null
+  color: string
+  icon: string
+  sortOrder: number
+  active: boolean
+}
 
 interface KdsItem {
   id: string
   productName: string
   variantName: string
   categoryName: string
+  kitchenStation?: {
+    id: string
+    name: string
+    code: string
+    color: string
+    icon: string
+  } | null
   quantity: number
   notes: string | null
   modifiers?: string[]
@@ -55,7 +74,8 @@ interface KdsOrder {
 export default function KdsPage() {
   const [orders, setOrders] = useState<KdsOrder[]>([])
   const [view, setView] = useState<'active' | 'history'>('active')
-  const [stationFilter, setStationFilter] = useState<'ALL' | 'BAR' | 'KITCHEN'>('ALL')
+  const [stations, setStations] = useState<KitchenStation[]>([])
+  const [selectedStationId, setSelectedStationId] = useState<string>('ALL')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(true)
@@ -65,6 +85,13 @@ export default function KdsPage() {
   const [mounted, setMounted] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
   const [branchesCount, setBranchesCount] = useState(1)
+  const [currentUser, setCurrentUser] = useState<{
+    id: string
+    name: string
+    isAdmin: boolean
+    canAccessDashboard: boolean
+    kitchenStations: KitchenStation[]
+  } | null>(null)
   const [activeBranch, setActiveBranch] = useState<{
     id?: string
     name?: string
@@ -80,6 +107,18 @@ export default function KdsPage() {
   // Protección contra condición de carrera entre optimistic updates y polling cada 4s
   const pendingItemStatusUpdatesRef = useRef<Map<string, { status: string; timestamp: number }>>(new Map())
 
+  // Cargar áreas de cocina configuradas
+  useEffect(() => {
+    fetch('/api/kitchen-stations')
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success && Array.isArray(res.data)) {
+          setStations(res.data.filter((s: KitchenStation) => s.active))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   // Validar permisos y cargar datos de sucursal para temas
   useEffect(() => {
     fetch('/api/auth/me')
@@ -94,6 +133,36 @@ export default function KdsPage() {
             setBranchesCount(u.branches.length)
           }
 
+          const isAdmin =
+            Boolean(u.isPlatformAdmin) ||
+            u.roleCodes?.includes('ADMIN') ||
+            u.roleCodes?.includes('SUPERADMIN') ||
+            u.roleCodes?.includes('BRANCH_MANAGER') ||
+            Boolean(u.permissions?.canManageKitchen)
+
+          const canAccessDashboard =
+            isAdmin ||
+            Boolean(u.permissions?.canManageCatalog) ||
+            Boolean(u.permissions?.canManageInventory) ||
+            Boolean(u.permissions?.canViewReports) ||
+            Boolean(u.permissions?.canManageSettings) ||
+            Boolean(u.permissions?.canManageUsers)
+
+          const userAssignedStations = Array.isArray(u.kitchenStations) ? u.kitchenStations : []
+
+          setCurrentUser({
+            id: u.id,
+            name: u.name,
+            isAdmin,
+            canAccessDashboard,
+            kitchenStations: userAssignedStations,
+          })
+
+          // Si es cocinero con estaciones asignadas (y no admin), seleccionar su estación por defecto
+          if (userAssignedStations.length > 0 && !isAdmin) {
+            setSelectedStationId(userAssignedStations[0].id)
+          }
+
           const isStrictWaiter =
             u.roleCodes?.includes('WAITER') &&
             !u.roleCodes?.includes('ADMIN') &&
@@ -101,6 +170,7 @@ export default function KdsPage() {
             !u.roleCodes?.includes('BRANCH_MANAGER') &&
             !u.roleCodes?.includes('CHEF') &&
             !u.roleCodes?.includes('KITCHEN') &&
+            !u.permissions?.canAccessKDS &&
             !u.permissions?.canManageInventory
 
           if (isStrictWaiter) {
@@ -114,6 +184,23 @@ export default function KdsPage() {
       })
       .catch(() => {})
   }, [])
+
+  // Logout para colaboradores de cocina
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } finally {
+      window.location.href = '/login'
+    }
+  }
+
+  const isRestrictedCook = Boolean(currentUser && !currentUser.isAdmin && currentUser.kitchenStations.length > 0)
+  const userStationIds = new Set(currentUser?.kitchenStations?.map((s) => s.id) || [])
+
+  // Las pestañas en la barra KDS solo muestran las estaciones asignadas si es un cocinero asignado
+  const displayStations = isRestrictedCook
+    ? stations.filter((s) => userStationIds.has(s.id))
+    : stations
 
   // Sincronización en caliente del tema y colores
   useEffect(() => {
@@ -431,36 +518,67 @@ const STATUS_RANK: Record<string, number> = {
     }
   }
 
-  // Filtrado de ítems según estación de trabajo
+  // Filtrado de ítems según área / estación de cocina dinámica
   const filterOrderItems = (items: KdsItem[]) => {
-    if (stationFilter === 'ALL') return items
-    if (stationFilter === 'BAR') {
-      return items.filter((it) => {
-        const cat = it.categoryName.toLowerCase()
-        const prod = it.productName.toLowerCase()
+    // Si el usuario es un cocinero restringido a áreas específicas:
+    if (isRestrictedCook) {
+      if (selectedStationId === 'ALL') {
+        return items.filter((it) => it.kitchenStation?.id && userStationIds.has(it.kitchenStation.id))
+      }
+      return items.filter((it) => it.kitchenStation?.id === selectedStationId)
+    }
+
+    if (selectedStationId === 'ALL') return items
+    return items.filter((it) => {
+      // 1. Coincidencia directa por estación asignada en base de datos
+      if (it.kitchenStation?.id) {
+        return it.kitchenStation.id === selectedStationId
+      }
+
+      // 2. Coincidencia de respaldo por categoría para productos no reasignados
+      const targetStation = stations.find((s) => s.id === selectedStationId)
+      if (!targetStation) return false
+
+      const cat = (it.categoryName || '').toLowerCase()
+      const prod = (it.productName || '').toLowerCase()
+
+      if (targetStation.code === 'BEBIDAS') {
         return (
           cat.includes('café') ||
+          cat.includes('cafe') ||
           cat.includes('bebida') ||
+          cat.includes('refresco') ||
+          cat.includes('frappe') ||
+          cat.includes('té') ||
           prod.includes('café') ||
           prod.includes('latte') ||
-          prod.includes('té')
+          prod.includes('coca')
         )
-      })
-    }
-    if (stationFilter === 'KITCHEN') {
-      return items.filter((it) => {
-        const cat = it.categoryName.toLowerCase()
-        const prod = it.productName.toLowerCase()
-        return !(
-          cat.includes('café') ||
-          cat.includes('bebida') ||
-          prod.includes('café') ||
-          prod.includes('latte') ||
-          prod.includes('té')
+      }
+      if (targetStation.code === 'CALIENTE') {
+        return (
+          cat.includes('crepa') ||
+          cat.includes('sandwich') ||
+          cat.includes('panini') ||
+          cat.includes('caliente') ||
+          cat.includes('waffle') ||
+          prod.includes('crepa') ||
+          prod.includes('sandwich') ||
+          prod.includes('panini')
         )
-      })
-    }
-    return items
+      }
+      if (targetStation.code === 'FRIA') {
+        return (
+          cat.includes('ensalada') ||
+          cat.includes('fria') ||
+          cat.includes('fría') ||
+          cat.includes('bowl') ||
+          cat.includes('fruta') ||
+          prod.includes('ensalada')
+        )
+      }
+      return false
+    })
   }
 
   // Conteo de métricas en pantalla
@@ -528,26 +646,50 @@ const STATUS_RANK: Record<string, number> = {
         }}
       >
         <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="p-1.5 rounded-lg border transition-all text-xs flex items-center gap-1 cursor-pointer"
-            style={
-              isLight
-                ? {
-                    backgroundColor: '#FFFFFF',
-                    borderColor: '#DECEBD',
-                    color: '#5E3023',
-                  }
-                : {
-                    backgroundColor: `${themeSecondary}40`,
-                    borderColor: `${themeSecondary}70`,
-                    color: '#DECEBD',
-                  }
-            }
-            title="Volver al Dashboard"
-          >
-            <ArrowLeft className="w-4 h-4" style={{ color: themePrimary }} />
-          </Link>
+          {currentUser?.canAccessDashboard ? (
+            <Link
+              href="/dashboard"
+              className="p-1.5 rounded-lg border transition-all text-xs flex items-center gap-1 cursor-pointer"
+              style={
+                isLight
+                  ? {
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#DECEBD',
+                      color: '#5E3023',
+                    }
+                  : {
+                      backgroundColor: `${themeSecondary}40`,
+                      borderColor: `${themeSecondary}70`,
+                      color: '#DECEBD',
+                    }
+              }
+              title="Volver al Dashboard"
+            >
+              <ArrowLeft className="w-4 h-4" style={{ color: themePrimary }} />
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-1.5 rounded-lg border transition-all text-xs flex items-center gap-1 cursor-pointer"
+              style={
+                isLight
+                  ? {
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#DECEBD',
+                      color: '#DC2626',
+                    }
+                  : {
+                      backgroundColor: `${themeSecondary}40`,
+                      borderColor: `${themeSecondary}70`,
+                      color: '#F87171',
+                    }
+              }
+              title="Cerrar turno / Salir"
+            >
+              <LogOut className="w-4 h-4 text-rose-500" />
+            </button>
+          )}
 
           {/* Isologo / Isotipo de la Sucursal (libre y sin encerrar) */}
           {isotypeUrl || logoUrl ? (
@@ -587,42 +729,55 @@ const STATUS_RANK: Record<string, number> = {
                 }
           }
         >
-          <button
-            type="button"
-            onClick={() => setStationFilter('ALL')}
-            className="px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer"
-            style={
-              stationFilter === 'ALL'
-                ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF', boxShadow: `0 2px 8px ${themeButton}40` }
-                : { color: isLight ? '#5E3023' : '#DECEBD' }
-            }
-          >
-            Todo el Menú
-          </button>
-          <button
-            type="button"
-            onClick={() => setStationFilter('BAR')}
-            className="px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer"
-            style={
-              stationFilter === 'BAR'
-                ? { backgroundColor: '#C08552', color: '#FFFFFF', boxShadow: '0 2px 8px rgba(192, 133, 82, 0.4)' }
-                : { color: isLight ? '#5E3023' : '#DECEBD' }
-            }
-          >
-            ☕ Barra / Bebidas
-          </button>
-          <button
-            type="button"
-            onClick={() => setStationFilter('KITCHEN')}
-            className="px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer"
-            style={
-              stationFilter === 'KITCHEN'
-                ? { backgroundColor: '#E06A3B', color: '#FFFFFF', boxShadow: '0 2px 8px rgba(224, 106, 59, 0.4)' }
-                : { color: isLight ? '#5E3023' : '#DECEBD' }
-            }
-          >
-            🍳 Cocina / Alimentos
-          </button>
+          {(!isRestrictedCook || userStationIds.size > 1) && (
+            <button
+              type="button"
+              onClick={() => setSelectedStationId('ALL')}
+              className="px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap"
+              style={
+                selectedStationId === 'ALL'
+                  ? { backgroundColor: themeButton, color: isLightButton ? '#2B1712' : '#FFFFFF', boxShadow: `0 2px 8px ${themeButton}40` }
+                  : { color: isLight ? '#5E3023' : '#DECEBD' }
+              }
+            >
+              {isRestrictedCook ? 'Mis Áreas' : 'Todo el Menú'}
+            </button>
+          )}
+          {displayStations.map((st) => {
+            const isSelected = selectedStationId === st.id
+            const pendingCount = orders
+              .flatMap((o) => o.items)
+              .filter(
+                (it) =>
+                  (it.kitchenStation?.id === st.id || (!it.kitchenStation && st.code === 'BEBIDAS')) &&
+                  (it.kitchenStatus === 'PENDING' || it.kitchenStatus === 'COOKING')
+              ).length
+
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setSelectedStationId(st.id)}
+                className="px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                style={
+                  isSelected
+                    ? { backgroundColor: st.color || '#3B82F6', color: '#FFFFFF', boxShadow: `0 2px 8px ${st.color}40` }
+                    : { color: isLight ? '#5E3023' : '#DECEBD' }
+                }
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: isSelected ? '#FFFFFF' : st.color || '#3B82F6' }}
+                />
+                <span>{st.name}</span>
+                {pendingCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-white/20">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Status Counters & Tools */}
@@ -806,7 +961,7 @@ const STATUS_RANK: Record<string, number> = {
             <Loader2 className="w-8 h-8 animate-spin" style={{ color: themePrimary }} />
             <p className="text-xs">Sincronizando monitor de comandas...</p>
           </div>
-        ) : orders.length === 0 ? (
+        ) : orders.filter((o) => filterOrderItems(o.items).length > 0).length === 0 ? (
           <div
             className={`h-full flex flex-col items-center justify-center gap-3 ${
               isLight ? 'text-[#895737]' : 'text-slate-500'
@@ -821,16 +976,19 @@ const STATUS_RANK: Record<string, number> = {
               </h3>
               <p className={`text-xs mt-1 ${isLight ? 'text-[#895737]' : 'text-slate-500'}`}>
                 {view === 'active'
-                  ? 'No hay comandas pendientes de preparación en este momento.'
+                  ? isRestrictedCook
+                    ? 'No hay comandas pendientes para tu área de cocina en este momento.'
+                    : 'No hay comandas pendientes de preparación en este momento.'
                   : 'No hay órdenes despachadas en el historial reciente.'}
               </p>
             </div>
           </div>
         ) : (
           <div className="h-full flex gap-4 overflow-x-auto pb-2 items-start">
-            {orders.map((order) => {
-              const visibleItems = filterOrderItems(order.items)
-              if (visibleItems.length === 0 && stationFilter !== 'ALL') return null
+            {orders
+              .filter((o) => filterOrderItems(o.items).length > 0)
+              .map((order) => {
+                const visibleItems = filterOrderItems(order.items)
 
               const elapsed = order.elapsedMinutes
               const isUrgent = elapsed >= 12
@@ -1078,13 +1236,23 @@ const STATUS_RANK: Record<string, number> = {
                                 </span>
                                 {item.productName}
                               </span>
-                              <span
-                                className={`text-[10px] block ${
-                                  isLight ? 'text-[#7A5A43]' : 'text-slate-400'
-                                }`}
-                              >
-                                {item.variantName}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`text-[10px] block ${
+                                    isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                                  }`}
+                                >
+                                  {item.variantName}
+                                </span>
+                                {item.kitchenStation && (!isRestrictedCook || userStationIds.has(item.kitchenStation.id)) && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-md text-white shadow-xs"
+                                    style={{ backgroundColor: item.kitchenStation.color || '#3B82F6' }}
+                                  >
+                                    {item.kitchenStation.name}
+                                  </span>
+                                )}
+                              </div>
 
                               {/* Modificadores / Extras / Sabores seleccionados */}
                               {item.modifiers && item.modifiers.length > 0 && (

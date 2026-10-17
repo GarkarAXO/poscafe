@@ -46,9 +46,13 @@ import {
   BookOpen,
   Tv,
   ExternalLink,
+  Image as ImageIcon,
+  Pencil,
+  Sliders,
+  Calendar,
 } from 'lucide-react'
 import ElegantMenu from '@/components/elegant-menu'
-import { DISPLAY_THEMES } from '@/app/display/display-client'
+import { DISPLAY_THEMES, CustomDisplayColors, QUICK_COLOR_PALETTES } from '@/app/display/display-client'
 import { notify } from '@/lib/notify'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
@@ -250,6 +254,27 @@ export default function ThemeCustomizerPage() {
   const [displayThemeId, setDisplayThemeId] = useState<string>('cinepolis-gold')
   const [displayPreviewSlide, setDisplayPreviewSlide] = useState<'category' | 'featured'>('category')
 
+  // Estados para Pantalla Digital TV (Menuboard)
+  const [displayThemeNames, setDisplayThemeNames] = useState<Record<string, string>>({})
+  const [displayShowWallpaper, setDisplayShowWallpaper] = useState<boolean>(true)
+  const [displayWallpaperOpacity, setDisplayWallpaperOpacity] = useState<number>(0.60)
+  const [displayCustomWallpaperUrl, setDisplayCustomWallpaperUrl] = useState<string>('')
+  const [displayCategoryTab, setDisplayCategoryTab] = useState<'seasonal' | 'classic' | 'all'>('seasonal')
+  const [editingDisplayThemeId, setEditingDisplayThemeId] = useState<string | null>(null)
+  const [tempDisplayThemeName, setTempDisplayThemeName] = useState<string>('')
+  const [displaySubTab, setDisplaySubTab] = useState<'themes' | 'colors' | 'stickers' | 'wallpaper'>('themes')
+  const [displayShowStickers, setDisplayShowStickers] = useState<boolean>(true)
+  const [displayCustomStickerEmoji, setDisplayCustomStickerEmoji] = useState<string>('')
+  const [displayCustomStickerTag, setDisplayCustomStickerTag] = useState<string>('')
+  const [displayCustomColors, setDisplayCustomColors] = useState<CustomDisplayColors>({
+    enabled: false,
+    primaryColor: '#DC2626',
+    secondaryColor: '#15803D',
+    accentColor: '#FFFFFF',
+    priceColor: '#FEF08A',
+    textColor: '#FFFFFF',
+  })
+
   // Colores y ajustes visuales para la sucursal seleccionada
   const [themeData, setThemeData] = useState({
     bgColor: '#14100E',
@@ -310,8 +335,127 @@ export default function ThemeCustomizerPage() {
       if (savedDisplayTheme) {
         setDisplayThemeId(savedDisplayTheme)
       }
+      try {
+        const savedNames = localStorage.getItem('poscafe_display_custom_names')
+        if (savedNames) {
+          setDisplayThemeNames(JSON.parse(savedNames))
+        }
+      } catch {}
+
+      const savedShowWp = localStorage.getItem('poscafe_display_show_wallpaper')
+      if (savedShowWp !== null) {
+        setDisplayShowWallpaper(savedShowWp === 'true')
+      }
+
+      const savedWpOpacity = localStorage.getItem('poscafe_display_wallpaper_opacity')
+      if (savedWpOpacity) {
+        const parsed = parseFloat(savedWpOpacity)
+        if (!isNaN(parsed)) setDisplayWallpaperOpacity(parsed)
+      }
+
+      const savedCustomWp = localStorage.getItem('poscafe_display_custom_wallpaper')
+      if (savedCustomWp) {
+        setDisplayCustomWallpaperUrl(savedCustomWp)
+      }
+
+      // Cargar stickers y colores personalizados de pantalla TV
+      const savedStickers = localStorage.getItem('poscafe_display_show_stickers')
+      if (savedStickers !== null) {
+        setDisplayShowStickers(savedStickers === 'true')
+      }
+      const savedStickerEmoji = localStorage.getItem('poscafe_display_custom_sticker_emoji')
+      if (savedStickerEmoji) setDisplayCustomStickerEmoji(savedStickerEmoji)
+      const savedStickerTag = localStorage.getItem('poscafe_display_custom_sticker_tag')
+      if (savedStickerTag) setDisplayCustomStickerTag(savedStickerTag)
+
+      try {
+        const savedColors = localStorage.getItem('poscafe_display_custom_colors')
+        if (savedColors) {
+          setDisplayCustomColors(JSON.parse(savedColors))
+        }
+      } catch {}
     }
   }, [])
+
+  const handleSaveDisplayThemeName = (themeId: string, newName: string) => {
+    const trimmed = newName.trim()
+    const updated = { ...displayThemeNames }
+    if (trimmed) {
+      updated[themeId] = trimmed
+    } else {
+      delete updated[themeId]
+    }
+    setDisplayThemeNames(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('poscafe_display_custom_names', JSON.stringify(updated))
+      window.dispatchEvent(
+        new CustomEvent('poscafe:theme-updated', {
+          detail: { customThemeNames: updated },
+        })
+      )
+    }
+    setEditingDisplayThemeId(null)
+    setTempDisplayThemeName('')
+    notify.success('Nombre actualizado', `El tema ahora se llamará "${trimmed || DISPLAY_THEMES[themeId]?.name}".`)
+  }
+
+  const handleResetDisplayThemeName = (themeId: string) => {
+    const updated = { ...displayThemeNames }
+    delete updated[themeId]
+    setDisplayThemeNames(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('poscafe_display_custom_names', JSON.stringify(updated))
+      window.dispatchEvent(
+        new CustomEvent('poscafe:theme-updated', {
+          detail: { customThemeNames: updated },
+        })
+      )
+    }
+    setEditingDisplayThemeId(null)
+    setTempDisplayThemeName('')
+    notify.info('Nombre restablecido', 'Se recuperó el nombre original de fábrica.')
+  }
+
+  const handleToggleDisplayCustomColors = (enabled: boolean) => {
+    setDisplayCustomColors((prev) => ({ ...prev, enabled }))
+    setPreviewTab('display')
+  }
+
+  const handleApplyDisplayQuickPalette = (palColors: Omit<CustomDisplayColors, 'enabled'>) => {
+    setDisplayCustomColors({ enabled: true, ...palColors })
+    setPreviewTab('display')
+    notify.info('Paleta aplicada a TV', 'Se cargaron los colores en la pantalla TV. Haz clic en "Guardar" para conservarlos.')
+  }
+
+  const handleUpdateDisplayCustomColor = (key: keyof Omit<CustomDisplayColors, 'enabled'>, val: string) => {
+    setDisplayCustomColors((prev) => ({ ...prev, enabled: true, [key]: val }))
+    setPreviewTab('display')
+  }
+
+  const handleResetDisplayCustomColors = () => {
+    const cur = DISPLAY_THEMES[displayThemeId] || DISPLAY_THEMES['cinepolis-gold']
+    setDisplayCustomColors({
+      enabled: false,
+      primaryColor: cur.primaryColor,
+      secondaryColor: cur.secondaryColor,
+      accentColor: cur.accentColor,
+      priceColor: cur.priceColor,
+      textColor: cur.textColor,
+    })
+    setPreviewTab('display')
+    notify.info('Colores restablecidos', 'Se restableció a la paleta predeterminada de la plantilla.')
+  }
+
+  const handleToggleDisplayStickers = (enabled: boolean) => {
+    setDisplayShowStickers(enabled)
+    setPreviewTab('display')
+  }
+
+  const handleSaveDisplayStickerPreset = (emoji: string, tag: string) => {
+    setDisplayCustomStickerEmoji(emoji)
+    setDisplayCustomStickerTag(tag)
+    setPreviewTab('display')
+  }
 
   // Cambiar sucursal activa en el selector
   const handleBranchChange = (branchId: string) => {
@@ -396,6 +540,14 @@ export default function ThemeCustomizerPage() {
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem('poscafe_display_theme', displayThemeId)
+            localStorage.setItem('poscafe_display_custom_names', JSON.stringify(displayThemeNames))
+            localStorage.setItem('poscafe_display_show_wallpaper', String(displayShowWallpaper))
+            localStorage.setItem('poscafe_display_wallpaper_opacity', String(displayWallpaperOpacity))
+            localStorage.setItem('poscafe_display_custom_wallpaper', displayCustomWallpaperUrl)
+            localStorage.setItem('poscafe_display_show_stickers', String(displayShowStickers))
+            localStorage.setItem('poscafe_display_custom_sticker_emoji', displayCustomStickerEmoji)
+            localStorage.setItem('poscafe_display_custom_sticker_tag', displayCustomStickerTag)
+            localStorage.setItem('poscafe_display_custom_colors', JSON.stringify(displayCustomColors))
           } catch {}
         }
 
@@ -411,13 +563,38 @@ export default function ThemeCustomizerPage() {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
             new CustomEvent('poscafe:theme-updated', {
-              detail: { branchId: selectedBranchId, ...themeData, displayThemeId },
+              detail: {
+                branchId: selectedBranchId,
+                ...themeData,
+                displayThemeId,
+                customThemeNames: displayThemeNames,
+                showWallpaper: displayShowWallpaper,
+                wallpaperOpacity: displayWallpaperOpacity,
+                customWallpaperUrl: displayCustomWallpaperUrl,
+                showStickers: displayShowStickers,
+                customStickerEmoji: displayCustomStickerEmoji,
+                customStickerTag: displayCustomStickerTag,
+                customColors: displayCustomColors,
+              },
             })
           )
           try {
             localStorage.setItem(
               'poscafe_theme_event',
-              JSON.stringify({ branchId: selectedBranchId, ...themeData, displayThemeId, timestamp: Date.now() })
+              JSON.stringify({
+                branchId: selectedBranchId,
+                ...themeData,
+                displayThemeId,
+                customThemeNames: displayThemeNames,
+                showWallpaper: displayShowWallpaper,
+                wallpaperOpacity: displayWallpaperOpacity,
+                customWallpaperUrl: displayCustomWallpaperUrl,
+                showStickers: displayShowStickers,
+                customStickerEmoji: displayCustomStickerEmoji,
+                customStickerTag: displayCustomStickerTag,
+                customColors: displayCustomColors,
+                timestamp: Date.now(),
+              })
             )
           } catch {}
           // Revalidar rutas Next.js para invalidar Client Router Cache
@@ -455,11 +632,11 @@ export default function ThemeCustomizerPage() {
   return (
     <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
       {/* Top Navbar Sticky (estándar de Catálogo e Insumos) */}
-      <header className={`border-b px-6 py-4 flex items-center justify-between sticky top-0 z-30 transition-colors ${classes.header}`}>
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
         <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer ${classes.buttonGhost}`}
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
             title="Volver al Panel General"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1147,60 +1324,600 @@ export default function ThemeCustomizerPage() {
                 </div>
               </div>
 
-              {/* Selector de Temas Visuales de Pantalla TV */}
-              <div className="space-y-1.5">
-                <span className={`text-[11px] font-bold ${classes.textMain}`}>
-                  Estilo de Pantalla Digital TV
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {Object.values(DISPLAY_THEMES).map((th) => {
-                    const isCurrent = displayThemeId === th.id
-                    return (
+              {/* Sub-pestañas de Pantalla TV */}
+              <div className="flex items-center gap-1 p-1 rounded-xl border text-[10px]" style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}>
+                {[
+                  { id: 'themes' as const, label: '🎨 Plantillas' },
+                  { id: 'colors' as const, label: '🌈 Colores' },
+                  { id: 'stickers' as const, label: '✨ Stickers' },
+                  { id: 'wallpaper' as const, label: '🖼️ Fondo' },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setDisplaySubTab(st.id)
+                      setPreviewTab('display')
+                    }}
+                    className={`flex-1 py-1.5 px-1 rounded-lg font-bold transition-all cursor-pointer text-center ${
+                      displaySubTab === st.id
+                        ? 'bg-amber-500 text-black shadow-xs font-black'
+                        : 'opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* SUB-PESTAÑA 1: CATÁLOGO DE TEMAS */}
+              {displaySubTab === 'themes' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[11px] font-bold ${classes.textMain}`}>
+                      Catálogo de Plantillas & Festividades
+                    </span>
+                    <span className={`text-[10px] ${classes.textMuted}`}>15 diseños listos</span>
+                  </div>
+
+                  {/* Filtro por Categorías */}
+                  <div className="flex items-center gap-1.5 p-1 rounded-xl border text-[10px]" style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}>
+                    {[
+                      { id: 'seasonal' as const, label: '🇲🇽 Festividades (10)' },
+                      { id: 'classic' as const, label: '☕ Clásicas (5)' },
+                      { id: 'all' as const, label: '✨ Todas' },
+                    ].map((tab) => (
                       <button
-                        key={th.id}
+                        key={tab.id}
                         type="button"
-                        onClick={() => {
-                          setDisplayThemeId(th.id)
-                          setPreviewTab('display')
-                        }}
-                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 select-none ${
-                          isCurrent
-                            ? 'ring-2 ring-amber-500 border-amber-500 shadow-sm'
-                            : 'border-slate-300/40 opacity-85 hover:opacity-100'
+                        onClick={() => setDisplayCategoryTab(tab.id)}
+                        className={`flex-1 py-1 px-1.5 rounded-lg font-bold transition-all cursor-pointer text-center ${
+                          displayCategoryTab === tab.id
+                            ? 'bg-amber-500 text-black shadow-xs font-black'
+                            : 'opacity-70 hover:opacity-100'
                         }`}
-                        style={{
-                          backgroundColor: th.bg,
-                          color: th.textColor,
-                        }}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-black">{th.name}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/20 font-bold">
-                            {th.tag}
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Modal / Diálogo Inline para Renombrar Plantilla */}
+                  {editingDisplayThemeId && (
+                    <div
+                      className="p-3 rounded-2xl border space-y-2 animate-in fade-in"
+                      style={{
+                        backgroundColor: isLight ? '#FFFBEB' : 'rgba(245, 158, 11, 0.08)',
+                        borderColor: '#F59E0B',
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase text-amber-500 flex items-center gap-1">
+                          <Pencil className="w-3 h-3" />
+                          Renombrar: {DISPLAY_THEMES[editingDisplayThemeId]?.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingDisplayThemeId(null)
+                            setTempDisplayThemeName('')
+                          }}
+                          className="text-[10px] opacity-60 hover:opacity-100 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={tempDisplayThemeName}
+                        onChange={(e) => setTempDisplayThemeName(e.target.value)}
+                        placeholder="Escribe el nombre personalizado..."
+                        className={`w-full px-2.5 py-1.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                      />
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveDisplayThemeName(editingDisplayThemeId, tempDisplayThemeName)}
+                          className="flex-1 py-1 px-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-[10px] flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>Guardar Alias</span>
+                        </button>
+
+                        {displayThemeNames[editingDisplayThemeId] && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetDisplayThemeName(editingDisplayThemeId)}
+                            className="py-1 px-2 rounded-xl border font-semibold text-[10px] opacity-75 hover:opacity-100 cursor-pointer flex items-center gap-1"
+                            title="Restablecer nombre original"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Original</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grid de Plantillas */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
+                    {Object.values(DISPLAY_THEMES)
+                      .filter((th) => {
+                        if (displayCategoryTab === 'seasonal') return th.category === 'seasonal'
+                        if (displayCategoryTab === 'classic') return th.category === 'classic'
+                        return true
+                      })
+                      .map((th) => {
+                        const isCurrent = displayThemeId === th.id
+                        const currentName = displayThemeNames[th.id] || th.name
+                        const isRenamed = Boolean(displayThemeNames[th.id])
+
+                        return (
+                          <div
+                            key={th.id}
+                            className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1 select-none relative ${
+                              isCurrent
+                                ? 'ring-2 ring-amber-500 border-amber-500 shadow-sm'
+                                : 'border-slate-300/40 opacity-85 hover:opacity-100'
+                            }`}
+                            style={{
+                              backgroundColor: th.bg,
+                              color: th.textColor,
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDisplayThemeId(th.id)
+                                setPreviewTab('display')
+                              }}
+                              className="text-left w-full cursor-pointer"
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-[11px] font-black truncate flex items-center gap-1">
+                                  <span>{th.icon}</span>
+                                  <span>{currentName}</span>
+                                </span>
+                                {isRenamed && (
+                                  <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                                    Alias
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[9px] opacity-70 block mt-0.5 truncate">
+                                {th.monthOrSeason || th.tag}
+                              </span>
+                            </button>
+
+                            <div className="flex items-center justify-between pt-1 border-t border-white/10 mt-1">
+                              <div className="flex items-center gap-1.5">
+                                <div
+                                  className="w-3 h-3 rounded-full border border-white/30"
+                                  style={{ backgroundColor: th.primaryColor }}
+                                  title="Color Primario"
+                                />
+                                <div
+                                  className="w-3 h-3 rounded-full border border-white/30"
+                                  style={{ backgroundColor: th.accentColor }}
+                                  title="Acento / Precios"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEditingDisplayThemeId(th.id)
+                                    setTempDisplayThemeName(currentName)
+                                  }}
+                                  className="p-1 rounded-md border border-white/20 hover:bg-white/10 opacity-70 hover:opacity-100 cursor-pointer"
+                                  title="Renombrar esta plantilla"
+                                >
+                                  <Pencil className="w-2.5 h-2.5" />
+                                </button>
+
+                                {isCurrent && (
+                                  <span className="text-[9px] font-black text-amber-400 flex items-center gap-0.5 ml-1">
+                                    <Check className="w-3 h-3" /> Activo
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-PESTAÑA 2: COLORES PERSONALIZADOS */}
+              {displaySubTab === 'colors' && (
+                <div className="space-y-3">
+                  <div
+                    className="p-3 rounded-2xl border flex items-center justify-between gap-3"
+                    style={{
+                      backgroundColor: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.04)',
+                      borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)',
+                    }}
+                  >
+                    <div>
+                      <span className={`text-[11px] font-black block ${classes.textMain}`}>
+                        Habilitar Colores Propios
+                      </span>
+                      <p className={`text-[9px] ${classes.textMuted}`}>
+                        {displayCustomColors.enabled ? 'Sobrescribe los colores de la plantilla activa' : 'Usa la paleta predeterminada de la plantilla'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDisplayCustomColors(!displayCustomColors.enabled)}
+                      className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer p-0.5 ${
+                        displayCustomColors.enabled ? 'bg-amber-500' : 'bg-white/20'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform shadow-xs ${
+                          displayCustomColors.enabled ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Paletas Rápidas (1 clic) */}
+                  <div className="space-y-1.5">
+                    <span className={`text-[10px] font-black uppercase block ${classes.textMuted}`}>
+                      Paletas Rápidas (1 Clic)
+                    </span>
+                    <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                      {QUICK_COLOR_PALETTES.map((pal) => (
+                        <button
+                          key={pal.id}
+                          type="button"
+                          onClick={() => handleApplyDisplayQuickPalette(pal.colors)}
+                          className={`p-2 rounded-xl border text-left flex items-center justify-between gap-2 transition-all hover:scale-[1.01] cursor-pointer group ${classes.card}`}
+                          style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}
+                        >
+                          <span className={`text-[11px] font-bold truncate group-hover:text-amber-500 ${classes.textMain}`}>
+                            {pal.name}
                           </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-xs" style={{ backgroundColor: pal.colors.primaryColor }} title="Primario" />
+                            <span className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-xs" style={{ backgroundColor: pal.colors.secondaryColor }} title="Secundario" />
+                            <span className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-xs" style={{ backgroundColor: pal.colors.accentColor }} title="Acento" />
+                            <span className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-xs" style={{ backgroundColor: pal.colors.priceColor }} title="Precios" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Selectores de Color */}
+                  <div className={`p-3 rounded-2xl border space-y-2.5 ${classes.card}`} style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}>
+                    <span className={`text-[10px] font-black uppercase block ${classes.textMuted}`}>
+                      Ajuste Individual de Colores
+                    </span>
+
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      {/* Primario */}
+                      <div className="space-y-1">
+                        <label className={`font-bold block ${classes.textMain}`}>Primario</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={displayCustomColors.primaryColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('primaryColor', e.target.value)}
+                            className="w-7 h-7 rounded-lg border border-white/20 cursor-pointer bg-transparent"
+                          />
+                          <input
+                            type="text"
+                            value={displayCustomColors.primaryColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('primaryColor', e.target.value)}
+                            className={`w-full px-1.5 py-1 rounded-lg border text-[10px] font-mono uppercase ${classes.input}`}
+                          />
                         </div>
-                        <div className="flex items-center gap-1.5 pt-1">
-                          <div
-                            className="w-3.5 h-3.5 rounded-full border border-white/30"
-                            style={{ backgroundColor: th.primaryColor }}
-                            title="Color Primario"
+                      </div>
+
+                      {/* Secundario */}
+                      <div className="space-y-1">
+                        <label className={`font-bold block ${classes.textMain}`}>Secundario</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={displayCustomColors.secondaryColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('secondaryColor', e.target.value)}
+                            className="w-7 h-7 rounded-lg border border-white/20 cursor-pointer bg-transparent"
                           />
-                          <div
-                            className="w-3.5 h-3.5 rounded-full border border-white/30"
-                            style={{ backgroundColor: th.accentColor }}
-                            title="Acento / Precios"
+                          <input
+                            type="text"
+                            value={displayCustomColors.secondaryColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('secondaryColor', e.target.value)}
+                            className={`w-full px-1.5 py-1 rounded-lg border text-[10px] font-mono uppercase ${classes.input}`}
                           />
-                          {isCurrent && (
-                            <span className="text-[10px] font-bold text-amber-400 ml-auto flex items-center gap-0.5">
-                              <Check className="w-3 h-3" /> Activo
-                            </span>
+                        </div>
+                      </div>
+
+                      {/* Acento */}
+                      <div className="space-y-1">
+                        <label className={`font-bold block ${classes.textMain}`}>Acento / Badges</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={displayCustomColors.accentColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('accentColor', e.target.value)}
+                            className="w-7 h-7 rounded-lg border border-white/20 cursor-pointer bg-transparent"
+                          />
+                          <input
+                            type="text"
+                            value={displayCustomColors.accentColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('accentColor', e.target.value)}
+                            className={`w-full px-1.5 py-1 rounded-lg border text-[10px] font-mono uppercase ${classes.input}`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Precios */}
+                      <div className="space-y-1">
+                        <label className={`font-bold block ${classes.textMain}`}>Precios ($)</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={displayCustomColors.priceColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('priceColor', e.target.value)}
+                            className="w-7 h-7 rounded-lg border border-white/20 cursor-pointer bg-transparent"
+                          />
+                          <input
+                            type="text"
+                            value={displayCustomColors.priceColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('priceColor', e.target.value)}
+                            className={`w-full px-1.5 py-1 rounded-lg border text-[10px] font-mono uppercase ${classes.input}`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Texto */}
+                      <div className="space-y-1 col-span-2">
+                        <label className={`font-bold block ${classes.textMain}`}>Texto Principal</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={displayCustomColors.textColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('textColor', e.target.value)}
+                            className="w-7 h-7 rounded-lg border border-white/20 cursor-pointer bg-transparent"
+                          />
+                          <input
+                            type="text"
+                            value={displayCustomColors.textColor}
+                            onChange={(e) => handleUpdateDisplayCustomColor('textColor', e.target.value)}
+                            className={`w-full px-1.5 py-1 rounded-lg border text-[10px] font-mono uppercase ${classes.input}`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleResetDisplayCustomColors}
+                      className={`w-full py-1.5 px-3 rounded-xl border text-[10px] font-bold opacity-75 hover:opacity-100 flex items-center justify-center gap-1 cursor-pointer mt-1 ${classes.card}`}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Restablecer colores de plantilla activa</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* SUB-PESTAÑA 3: STICKERS & BORDES */}
+              {displaySubTab === 'stickers' && (
+                <div className="space-y-3">
+                  <div
+                    className="p-3 rounded-2xl border flex items-center justify-between gap-3"
+                    style={{
+                      backgroundColor: isLight ? '#FFFFFF' : 'rgba(255,255,255,0.04)',
+                      borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)',
+                    }}
+                  >
+                    <div>
+                      <span className={`text-[11px] font-black block ${classes.textMain}`}>
+                        Mostrar Stickers & Bordes
+                      </span>
+                      <p className={`text-[9px] ${classes.textMuted}`}>
+                        {displayShowStickers ? 'Mostrando sellos festivos y franjas adaptadas en tarjetas' : 'Desactivados (Estilo neutro clásico)'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDisplayStickers(!displayShowStickers)}
+                      className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer p-0.5 ${
+                        displayShowStickers ? 'bg-emerald-500' : 'bg-white/20'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform shadow-xs ${
+                          displayShowStickers ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {displayShowStickers && (
+                    <>
+                      {/* Emojis Rápidos */}
+                      <div className="space-y-1.5">
+                        <span className={`text-[10px] font-black uppercase block ${classes.textMuted}`}>
+                          Sticker Festivo Rápido
+                        </span>
+                        <div
+                          className={`flex flex-wrap gap-1.5 p-2 rounded-2xl border ${classes.card}`}
+                          style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}
+                        >
+                          {[
+                            { emoji: '🎄', tag: 'Navidad' },
+                            { emoji: '🎅', tag: 'Nochebuena' },
+                            { emoji: '🍾', tag: 'Año Nuevo' },
+                            { emoji: '✨', tag: 'Gala VIP' },
+                            { emoji: '🌸', tag: 'Primavera' },
+                            { emoji: '🌼', tag: 'Flores' },
+                            { emoji: '💀', tag: 'Día de Muertos' },
+                            { emoji: '🇲🇽', tag: 'Viva México' },
+                            { emoji: '💘', tag: 'San Valentín' },
+                            { emoji: '🌹', tag: 'Amor' },
+                            { emoji: '☕', tag: 'Artesanal' },
+                            { emoji: '☀️', tag: 'Verano' },
+                            { emoji: '🍂', tag: 'Otoño' },
+                            { emoji: '💐', tag: 'Mamá' },
+                            { emoji: '🎬', tag: 'Cine' },
+                          ].map((item) => (
+                            <button
+                              key={item.emoji}
+                              type="button"
+                              onClick={() => handleSaveDisplayStickerPreset(item.emoji, item.tag)}
+                              className={`p-1.5 px-2 rounded-xl border text-sm flex items-center gap-1 transition-all cursor-pointer ${
+                                (displayCustomStickerEmoji || DISPLAY_THEMES[displayThemeId]?.stickerEmoji) === item.emoji
+                                  ? 'ring-2 ring-amber-500 bg-amber-500/20'
+                                  : 'opacity-75 hover:opacity-100 hover:bg-white/10'
+                              }`}
+                              style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.15)' }}
+                              title={item.tag}
+                            >
+                              <span>{item.emoji}</span>
+                              <span className="text-[9px] font-bold">{item.tag}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Manual input */}
+                      <div className={`p-3 rounded-2xl border space-y-2.5 ${classes.card}`} style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}>
+                        <span className={`text-[10px] font-black uppercase block ${classes.textMuted}`}>
+                          Sticker Personalizado
+                        </span>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <label className={`text-[10px] font-bold block ${classes.textMain}`}>Emoji</label>
+                            <input
+                              type="text"
+                              value={displayCustomStickerEmoji}
+                              placeholder={DISPLAY_THEMES[displayThemeId]?.stickerEmoji || '🎁'}
+                              onChange={(e) => {
+                                setDisplayCustomStickerEmoji(e.target.value)
+                                setPreviewTab('display')
+                              }}
+                              className={`w-full px-2 py-1.5 rounded-xl border text-center text-sm focus:outline-none ${classes.input}`}
+                            />
+                          </div>
+
+                          <div className="space-y-1 col-span-2">
+                            <label className={`text-[10px] font-bold block ${classes.textMain}`}>Etiqueta del Sello</label>
+                            <input
+                              type="text"
+                              value={displayCustomStickerTag}
+                              placeholder={DISPLAY_THEMES[displayThemeId]?.stickerTag || 'Edición Festiva'}
+                              onChange={(e) => {
+                                setDisplayCustomStickerTag(e.target.value)
+                                setPreviewTab('display')
+                              }}
+                              className={`w-full px-2.5 py-1.5 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                            />
+                          </div>
+                        </div>
+
+                        {(displayCustomStickerEmoji || displayCustomStickerTag) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDisplayCustomStickerEmoji('')
+                              setDisplayCustomStickerTag('')
+                              setPreviewTab('display')
+                            }}
+                            className={`w-full py-1.5 px-3 rounded-xl border text-[10px] font-bold opacity-75 hover:opacity-100 flex items-center justify-center gap-1 cursor-pointer mt-1 ${classes.card}`}
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Restablecer al sticker de la plantilla activa</span>
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* SUB-PESTAÑA 4: FONDOS DE PANTALLA */}
+              {displaySubTab === 'wallpaper' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[11px] font-bold flex items-center gap-1.5 ${classes.textMain}`}>
+                      <ImageIcon className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Fondo de Pantalla Temático (Wallpaper)</span>
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setDisplayShowWallpaper(!displayShowWallpaper)}
+                      className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer p-0.5 ${
+                        displayShowWallpaper ? 'bg-emerald-500' : 'bg-white/20'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform shadow-xs ${
+                          displayShowWallpaper ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {displayShowWallpaper && (
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-[10px] font-semibold opacity-75">
+                        <span>Opacidad de Fondo</span>
+                        <span className="font-mono font-bold text-amber-500">
+                          {Math.round(displayWallpaperOpacity * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.20"
+                        max="0.90"
+                        step="0.05"
+                        value={displayWallpaperOpacity}
+                        onChange={(e) => setDisplayWallpaperOpacity(parseFloat(e.target.value))}
+                        className="w-full cursor-pointer accent-amber-500"
+                      />
+
+                      {/* URL de Fondo Personalizado */}
+                      <div className="space-y-1 pt-1">
+                        <label className={`text-[10px] font-bold block ${classes.textMuted}`}>
+                          URL de Imagen Propia (Opcional)
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={displayCustomWallpaperUrl}
+                            onChange={(e) => setDisplayCustomWallpaperUrl(e.target.value)}
+                            placeholder="https://images.unsplash.com/..."
+                            className={`flex-1 px-2.5 py-1.5 rounded-xl border text-[10px] focus:outline-none ${classes.input}`}
+                          />
+                          {displayCustomWallpaperUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setDisplayCustomWallpaperUrl('')}
+                              className="px-2 py-1.5 rounded-xl border text-[10px] font-bold opacity-75 hover:opacity-100 cursor-pointer"
+                              title="Restablecer al fondo de la plantilla activa"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </button>
                           )}
                         </div>
-                      </button>
-                    )
-                  })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               {/* Guía de Múltiples Pantallas TV */}
               <div className={`p-3 rounded-xl border text-[11px] space-y-1.5 ${classes.card}`}>
@@ -2408,7 +3125,30 @@ export default function ThemeCustomizerPage() {
 
             // VISTA 8: PANTALLA DIGITAL TV / MENUBOARD (CON FOTOS GRANDES, SABORES EN LISTA Y TEMAS)
             if (previewTab === 'display') {
-              const tvTheme = DISPLAY_THEMES[displayThemeId] || DISPLAY_THEMES['cinepolis-gold']
+              let tvTheme = DISPLAY_THEMES[displayThemeId] || DISPLAY_THEMES['cinepolis-gold']
+              if (displayThemeNames[tvTheme.id]) {
+                tvTheme = { ...tvTheme, name: displayThemeNames[tvTheme.id] }
+              }
+              if (displayCustomColors.enabled) {
+                tvTheme = {
+                  ...tvTheme,
+                  primaryColor: displayCustomColors.primaryColor || tvTheme.primaryColor,
+                  secondaryColor: displayCustomColors.secondaryColor || tvTheme.secondaryColor,
+                  accentColor: displayCustomColors.accentColor || tvTheme.accentColor,
+                  priceColor: displayCustomColors.priceColor || tvTheme.priceColor,
+                  textColor: displayCustomColors.textColor || tvTheme.textColor,
+                  glow1: displayCustomColors.primaryColor || tvTheme.glow1,
+                  glow2: displayCustomColors.secondaryColor || tvTheme.glow2,
+                  cardBorder: `${displayCustomColors.primaryColor || tvTheme.primaryColor}50`,
+                  cardBorderAccent: `linear-gradient(90deg, ${displayCustomColors.primaryColor} 0%, ${displayCustomColors.accentColor} 50%, ${displayCustomColors.secondaryColor} 100%)`,
+                }
+              }
+              if (displayCustomStickerEmoji.trim()) {
+                tvTheme = { ...tvTheme, stickerEmoji: displayCustomStickerEmoji.trim() }
+              }
+              if (displayCustomStickerTag.trim()) {
+                tvTheme = { ...tvTheme, stickerTag: displayCustomStickerTag.trim() }
+              }
               const isCatMode = displayPreviewSlide === 'category'
 
               return (
@@ -2417,11 +3157,17 @@ export default function ThemeCustomizerPage() {
                     <div className="flex items-center gap-2">
                       <Tv className="w-4 h-4 text-amber-400" />
                       <span className="font-bold text-white">
-                        Previsualización TV: {tvTheme.name}
+                        Previsualización TV: {displayThemeNames[tvTheme.id] || tvTheme.name}
                       </span>
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-amber-300 font-mono">
                         {tvTheme.tag}
                       </span>
+                      {displayShowStickers && tvTheme.stickerEmoji && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white font-mono flex items-center gap-1 border border-white/10">
+                          <span>{tvTheme.stickerEmoji}</span>
+                          <span>{tvTheme.stickerTag || tvTheme.tag}</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -2467,6 +3213,26 @@ export default function ThemeCustomizerPage() {
                       color: tvTheme.textColor,
                     }}
                   >
+                    {/* CAPA DE FONDO CINEMATOGRÁFICO TEMÁTICO (WALLPAPER CON OVERLAY PROTECTOR) */}
+                    {displayShowWallpaper && (displayCustomWallpaperUrl || tvTheme.bgWallpaperUrl) && (
+                      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={displayCustomWallpaperUrl || tvTheme.bgWallpaperUrl}
+                          alt="Fondo temático"
+                          className="w-full h-full object-cover select-none transition-all duration-700 scale-[1.02]"
+                          style={{ opacity: displayWallpaperOpacity }}
+                        />
+                        <div
+                          className="absolute inset-0 transition-colors duration-700"
+                          style={{
+                            backgroundColor: tvTheme.wallpaperOverlay || 'rgba(10, 8, 7, 0.45)',
+                            backgroundImage: 'radial-gradient(circle at center, transparent 35%, rgba(0,0,0,0.40) 100%)',
+                          }}
+                        />
+                      </div>
+                    )}
+
                     {/* Glow ambiental */}
                     <div
                       className="absolute top-0 right-1/4 w-72 h-72 rounded-full blur-[120px] opacity-25 pointer-events-none"
@@ -2587,17 +3353,34 @@ export default function ThemeCustomizerPage() {
                             ].map((prod) => (
                               <div
                                 key={prod.id}
-                                className="rounded-2xl border p-3 flex gap-3 shadow-md backdrop-blur-md"
+                                className="rounded-2xl border p-3 flex gap-3 shadow-md backdrop-blur-md relative overflow-hidden"
                                 style={{
                                   backgroundColor: tvTheme.cardBg,
                                   borderColor: tvTheme.cardBorder,
                                 }}
                               >
+                                {displayShowStickers && tvTheme.cardBorderAccent && (
+                                  <div
+                                    className="h-1 w-full absolute top-0 left-0 z-10 pointer-events-none"
+                                    style={{ background: tvTheme.cardBorderAccent }}
+                                  />
+                                )}
                                 {/* Foto grande de autor */}
                                 <div
                                   className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shrink-0 border bg-black/40 flex flex-col items-center justify-center p-2 relative shadow"
                                   style={{ borderColor: tvTheme.cardBorder }}
                                 >
+                                  {displayShowStickers && tvTheme.stickerEmoji && (
+                                    <div
+                                      className="absolute top-1.5 right-1.5 z-10 flex items-center justify-center w-6 h-6 rounded-full shadow border backdrop-blur-md"
+                                      style={{
+                                        backgroundColor: 'rgba(0,0,0,0.65)',
+                                        borderColor: tvTheme.cardBorder,
+                                      }}
+                                    >
+                                      <span className="text-xs">{tvTheme.stickerEmoji}</span>
+                                    </div>
+                                  )}
                                   <Coffee className="w-8 h-8 opacity-60" style={{ color: tvTheme.accentColor }} />
                                   <span className="text-[8px] uppercase font-mono font-bold mt-1 opacity-70">
                                     Artesanal
@@ -2698,17 +3481,34 @@ export default function ThemeCustomizerPage() {
                           ].map((feat, fIdx) => (
                             <div
                               key={fIdx}
-                              className="rounded-2xl border p-3 flex flex-col justify-between shadow-md"
+                              className="rounded-2xl border p-3 flex flex-col justify-between shadow-md relative overflow-hidden"
                               style={{
                                 backgroundColor: tvTheme.cardBg,
                                 borderColor: tvTheme.cardBorder,
                               }}
                             >
+                              {displayShowStickers && tvTheme.cardBorderAccent && (
+                                <div
+                                  className="h-1 w-full absolute top-0 left-0 z-10 pointer-events-none"
+                                  style={{ background: tvTheme.cardBorderAccent }}
+                                />
+                              )}
                               <div>
                                 <div
                                   className="w-full h-28 rounded-xl border mb-2 bg-black/40 flex flex-col items-center justify-center relative shadow"
                                   style={{ borderColor: tvTheme.cardBorder }}
                                 >
+                                  {displayShowStickers && tvTheme.stickerEmoji && (
+                                    <div
+                                      className="absolute top-1.5 right-1.5 z-10 flex items-center justify-center w-6 h-6 rounded-full shadow border backdrop-blur-md"
+                                      style={{
+                                        backgroundColor: 'rgba(0,0,0,0.65)',
+                                        borderColor: tvTheme.cardBorder,
+                                      }}
+                                    >
+                                      <span className="text-xs">{tvTheme.stickerEmoji}</span>
+                                    </div>
+                                  )}
                                   <Flame className="w-8 h-8 opacity-60" style={{ color: tvTheme.accentColor }} />
                                   <span
                                     className="absolute top-1.5 left-1.5 text-[8px] font-black uppercase px-2 py-0.5 rounded shadow text-black"

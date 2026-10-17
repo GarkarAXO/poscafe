@@ -85,6 +85,8 @@ export async function GET() {
           canAuthorizeCourtesies: r.canAuthorizeCourtesies,
           canAuthorizeCancellations: r.canAuthorizeCancellations,
           canTransferTables: r.canTransferTables,
+          canAccessKDS: r.canAccessKDS,
+          canManageKitchen: r.canManageKitchen,
         },
         createdAt: r.createdAt,
       })),
@@ -169,6 +171,8 @@ export async function POST(request: Request) {
         canAuthorizeCourtesies: Boolean(p.canAuthorizeCourtesies),
         canAuthorizeCancellations: Boolean(p.canAuthorizeCancellations),
         canTransferTables: Boolean(p.canTransferTables),
+        canAccessKDS: Boolean(p.canAccessKDS),
+        canManageKitchen: Boolean(p.canManageKitchen),
       },
     })
 

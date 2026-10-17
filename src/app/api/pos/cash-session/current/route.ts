@@ -84,6 +84,14 @@ export async function GET() {
         cashOut,
         expectedCashInDrawer,
         ordersCount: cashSession.orders.length,
+        movements: cashSession.movements.map((m) => ({
+          id: m.id,
+          type: m.type,
+          amount: Number(m.amount),
+          reason: m.reason,
+          authorizedBy: m.authorizedBy,
+          createdAt: m.createdAt,
+        })),
       },
     })
   } catch (error) {

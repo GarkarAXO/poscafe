@@ -112,6 +112,7 @@ model Business {
   suppliers          Supplier[]
   measurementUnits   MeasurementUnit[]
   expenseCategories  ExpenseCategory[]
+  kitchenStations    KitchenStation[]
   apiKeys            TenantApiKey[]
   webhookSubscriptions WebhookSubscription[]
   auditLogs          AuditLog[]
@@ -233,6 +234,7 @@ model Branch {
   orders       Order[]
   purchases    Purchase[]
   expenses     Expense[]
+  kitchenStations KitchenStation[]
 
   @@unique([businessId, code])
   @@index([businessId, active])
@@ -265,6 +267,7 @@ model User {
   assignedTables Table[]       @relation("TableAssignedWaiter")
   currentTables  Table[]       @relation("TableCurrentWaiter")
   cashSessions   CashSession[]
+  kitchenStations UserKitchenStation[]
   auditLogs      AuditLog[]
 
   @@unique([businessId, email])
@@ -309,6 +312,8 @@ model Role {
   canAuthorizeCourtesies  Boolean @default(false)
   canAuthorizeCancellations Boolean @default(false)
   canTransferTables       Boolean @default(false)
+  canAccessKDS            Boolean @default(false)
+  canManageKitchen        Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -541,11 +546,14 @@ model Product {
 
   business       Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
   category       Category               @relation(fields: [categoryId], references: [id])
+  kitchenStationId String?
+  kitchenStation   KitchenStation?      @relation(fields: [kitchenStationId], references: [id], onDelete: SetNull)
   variants       ProductVariant[]
   modifierGroups ProductModifierGroup[]
 
   @@unique([businessId, code])
   @@index([businessId, active])
+  @@index([businessId, kitchenStationId])
   @@map("products")
 }
 
@@ -1080,4 +1088,44 @@ model AuditLog {
   @@index([businessId, action])
   @@index([businessId, entityType, entityId])
   @@map("audit_logs")
+}
+
+// ==========================================
+// 15. ÁREAS DE COCINA / ESTACIONES DE PREPARACIÓN
+// ==========================================
+
+model KitchenStation {
+  id          String   @id @default(uuid())
+  businessId  String
+  branchId    String?
+  name        String   // Ej: Bebidas y Barista, Cocina Fría, Cocina Caliente, Repostería
+  code        String   // Ej: BEBIDAS, FRIA, CALIENTE, REPOSTERIA
+  description String?
+  color       String?  @default("#3B82F6")
+  icon        String?  @default("Utensils")
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business     Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  branch       Branch?               @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  products     Product[]
+  userStations UserKitchenStation[]
+
+  @@unique([businessId, code])
+  @@index([businessId, active])
+  @@map("kitchen_stations")
+}
+
+model UserKitchenStation {
+  userId    String
+  stationId String
+  createdAt DateTime @default(now())
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  station KitchenStation @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, stationId])
+  @@map("user_kitchen_stations")
 }

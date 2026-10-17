@@ -532,13 +532,13 @@ export default function AdminPanelClient({
       {/* Top Navbar Super Admin */}
       <header className="border-b border-slate-800 bg-slate-900/70 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 border border-violet-500/30 flex items-center justify-center text-white shadow-lg shadow-violet-600/20">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#895737] to-[#C08552] border border-[#C08552]/30 flex items-center justify-center text-white shadow-lg shadow-[#C08552]/20">
             <ShieldCheck className="w-5 h-5 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-sm text-white">Super Administrador SaaS</h1>
-              <span className="px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 text-[10px] font-semibold">
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-semibold">
                 Control Central
               </span>
             </div>

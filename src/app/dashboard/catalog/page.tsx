@@ -28,6 +28,7 @@ import {
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
 import { notify } from '@/lib/notify'
+import ModalPortal from '@/components/modal-portal'
 
 interface InventoryItem {
   id: string
@@ -84,6 +85,15 @@ interface ProductVariant {
   }
 }
 
+interface KitchenStationOption {
+  id: string
+  name: string
+  code: string
+  color: string
+  icon: string
+  active: boolean
+}
+
 interface Product {
   id: string
   name: string
@@ -94,6 +104,8 @@ interface Product {
   isSeasonal?: boolean
   inventoryPolicy: 'NONE' | 'DIRECT' | 'RECIPE'
   hasVariants?: boolean
+  kitchenStationId?: string | null
+  kitchenStation?: KitchenStationOption | null
   category: { id: string; name: string }
   variants: ProductVariant[]
   modifierGroups?: Array<{
@@ -171,9 +183,36 @@ export default function CatalogManagerPage() {
   const [submittingCupSize, setSubmittingCupSize] = useState(false)
   const [savingPackagingSettings, setSavingPackagingSettings] = useState(false)
 
+  // Bloquear scroll de la página de fondo cuando cualquier modal esté abierto
+  useEffect(() => {
+    const isAnyModalOpen =
+      showProductModal ||
+      showModGroupModal ||
+      showItemModal ||
+      showCategoryModal ||
+      showCupSizeModal
+
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [
+    showProductModal,
+    showModGroupModal,
+    showItemModal,
+    showCategoryModal,
+    showCupSizeModal,
+  ])
+
   // Product Form state
+  const [kitchenStations, setKitchenStations] = useState<KitchenStationOption[]>([])
   const [prodForm, setProdForm] = useState({
     categoryId: '',
+    kitchenStationId: '',
     name: '',
     code: '',
     description: '',
@@ -243,13 +282,14 @@ export default function CatalogManagerPage() {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [resProd, resIng, resCat, resModGroups, resSettings, resCupSizes] = await Promise.all([
+      const [resProd, resIng, resCat, resModGroups, resSettings, resCupSizes, resStations] = await Promise.all([
         fetch('/api/products').then((r) => r.json()),
         fetch('/api/inventory/items').then((r) => r.json()),
         fetch('/api/categories').then((r) => r.json()),
         fetch('/api/modifier-groups').then((r) => r.json()).catch(() => ({ success: false, data: [] })),
         fetch('/api/business/settings').then((r) => r.json()).catch(() => ({ success: false })),
         fetch('/api/cup-sizes').then((r) => r.json()).catch(() => ({ success: false, data: [] })),
+        fetch('/api/kitchen-stations').then((r) => r.json()).catch(() => ({ success: false, data: [] })),
       ])
 
       if (resProd.success) setProducts(resProd.data)
@@ -257,6 +297,7 @@ export default function CatalogManagerPage() {
       if (resCat.success) setCategories(resCat.data)
       if (resModGroups.success && Array.isArray(resModGroups.data)) setModifierGroups(resModGroups.data)
       if (resCupSizes.success && Array.isArray(resCupSizes.data)) setCupSizes(resCupSizes.data)
+      if (resStations.success && Array.isArray(resStations.data)) setKitchenStations(resStations.data)
       if (resSettings.success && resSettings.data?.settings) {
         setBusinessSettings({
           recipesEnabled: resSettings.data.settings.recipesEnabled ?? true,
@@ -579,6 +620,7 @@ export default function CatalogManagerPage() {
     setFlavorInput('')
     setProdForm({
       categoryId: categories[0]?.id || '',
+      kitchenStationId: '',
       name: '',
       code: '',
       description: '',
@@ -671,6 +713,7 @@ export default function CatalogManagerPage() {
 
     setProdForm({
       categoryId: prod.category.id,
+      kitchenStationId: prod.kitchenStationId || '',
       name: prod.name,
       code: prod.code,
       description: prod.description || '',
@@ -710,6 +753,7 @@ export default function CatalogManagerPage() {
     try {
       let payload: any = {
         categoryId: prodForm.categoryId,
+        kitchenStationId: prodForm.kitchenStationId || null,
         name: prodForm.name,
         code: prodForm.code,
         description: prodForm.description,
@@ -1003,17 +1047,17 @@ export default function CatalogManagerPage() {
   return (
     <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
       {/* Top Navbar */}
-      <header className={`border-b px-6 py-4 flex items-center justify-between sticky top-0 z-30 transition-colors ${classes.header}`}>
-        <div className="flex items-center gap-4">
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer ${classes.buttonGhost}`}
+            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
 
-          <div className={`h-5 w-px border-l ${classes.divider}`}></div>
+          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
           <div>
             <h1 className={`font-bold text-base flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
               <Package className="w-5 h-5" style={{ color: buttonColor }} />
@@ -1221,6 +1265,14 @@ export default function CatalogManagerPage() {
                           <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${classes.badge}`}>
                             {p.category.name}
                           </span>
+                          {p.kitchenStation && (
+                            <span
+                              className="text-[10px] font-black px-2 py-0.5 rounded-full text-white shadow-xs"
+                              style={{ backgroundColor: p.kitchenStation.color || '#3B82F6' }}
+                            >
+                              {p.kitchenStation.name}
+                            </span>
+                          )}
                           {p.isNew && (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                               ✨ Nuevo
@@ -1933,9 +1985,10 @@ export default function CatalogManagerPage() {
 
       {/* MODAL PRODUCTO (CON TAMAÑOS / VARIANTES Y MODIFICADORES) */}
       {showProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center"
@@ -1962,7 +2015,7 @@ export default function CatalogManagerPage() {
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className={`block font-medium mb-1 ${classes.textMuted}`}>Categoría *</label>
                   <select
@@ -1975,6 +2028,22 @@ export default function CatalogManagerPage() {
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Área de Cocina</label>
+                  <select
+                    value={prodForm.kitchenStationId}
+                    onChange={(e) => setProdForm({ ...prodForm, kitchenStationId: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                  >
+                    <option value="">Automático / Por Categoría</option>
+                    {kitchenStations.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.name} ({st.code})
                       </option>
                     ))}
                   </select>
@@ -2628,13 +2697,15 @@ export default function CatalogManagerPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL CREAR / EDITAR GRUPO DE MODIFICADORES */}
       {showModGroupModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center"
@@ -2865,13 +2936,15 @@ export default function CatalogManagerPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL NUEVO INSUMO BASE */}
       {showItemModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-lg rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center"
@@ -2993,57 +3066,61 @@ export default function CatalogManagerPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL NUEVA CATEGORÍA */}
       {showCategoryModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-sm rounded-3xl border p-6 space-y-4 shadow-2xl ${classes.modalContent}`}>
-            <h3 className={`text-sm font-bold flex items-center gap-2 ${classes.textMain}`}>
-              <Tag className="w-4 h-4" style={{ color: buttonColor }} /> Nueva Categoría
-            </h3>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-sm rounded-3xl border p-6 space-y-4 shadow-2xl my-auto ${classes.modalContent}`}>
+              <h3 className={`text-sm font-bold flex items-center gap-2 ${classes.textMain}`}>
+                <Tag className="w-4 h-4" style={{ color: buttonColor }} /> Nueva Categoría
+              </h3>
 
-            <form onSubmit={handleCreateCategory} className="space-y-4 text-xs">
-              <div>
-                <label className={`block font-medium mb-1 ${classes.textMuted}`}>Nombre de Categoría *</label>
-                <input
-                  type="text"
-                  required
-                  value={catName}
-                  onChange={(e) => setCatName(e.target.value)}
-                  placeholder="Ej: Panadería, Postres, Frappes"
-                  className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
-                />
-              </div>
+              <form onSubmit={handleCreateCategory} className="space-y-4 text-xs">
+                <div>
+                  <label className={`block font-medium mb-1 ${classes.textMuted}`}>Nombre de Categoría *</label>
+                  <input
+                    type="text"
+                    required
+                    value={catName}
+                    onChange={(e) => setCatName(e.target.value)}
+                    placeholder="Ej: Panadería, Postres, Frappes"
+                    className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                  />
+                </div>
 
-              <div className={`flex justify-end gap-2 pt-2 border-t ${classes.divider}`}>
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryModal(false)}
-                  className={`px-3 py-1.5 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingCategory}
-                  style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-                  className="px-4 py-1.5 rounded-xl font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 hover:opacity-95"
-                >
-                  {submittingCategory && <Loader2 className="w-3 h-3 animate-spin" />}
-                  <span>Guardar</span>
-                </button>
-              </div>
-            </form>
+                <div className={`flex justify-end gap-2 pt-2 border-t ${classes.divider}`}>
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryModal(false)}
+                    className={`px-3 py-1.5 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingCategory}
+                    style={{ backgroundColor: buttonColor, color: contrastTextButton }}
+                    className="px-4 py-1.5 rounded-xl font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 hover:opacity-95"
+                  >
+                    {submittingCategory && <Loader2 className="w-3 h-3 animate-spin" />}
+                    <span>Guardar</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* MODAL TAMAÑO DE VASO Y EMPAQUE */}
       {showCupSizeModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-3xl border p-6 space-y-4 shadow-2xl ${classes.modalContent}`}>
-            <div className="flex items-center justify-between pb-2 border-b border-border/30">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-lg rounded-3xl border p-6 space-y-4 shadow-2xl my-auto ${classes.modalContent}`}>
+              <div className="flex items-center justify-between pb-2 border-b border-border/30">
               <h3 className={`text-base font-bold flex items-center gap-2 ${classes.textMain}`}>
                 <Coffee className="w-5 h-5 text-amber-500" />
                 {editingCupSizeId ? 'Editar Tamaño de Vaso' : 'Nuevo Tamaño de Vaso y Empaques'}
@@ -3169,7 +3246,8 @@ export default function CatalogManagerPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
     </div>
   )
 }

@@ -40,7 +40,18 @@ export async function GET(request: Request) {
               productVariant: {
                 include: {
                   product: {
-                    include: { category: true },
+                    include: {
+                      category: true,
+                      kitchenStation: {
+                        select: {
+                          id: true,
+                          name: true,
+                          code: true,
+                          color: true,
+                          icon: true,
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -75,7 +86,18 @@ export async function GET(request: Request) {
               productVariant: {
                 include: {
                   product: {
-                    include: { category: true },
+                    include: {
+                      category: true,
+                      kitchenStation: {
+                        select: {
+                          id: true,
+                          name: true,
+                          code: true,
+                          color: true,
+                          icon: true,
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -117,6 +139,15 @@ export async function GET(request: Request) {
           productName: it.productVariant.product.name,
           variantName: it.productVariant.name,
           categoryName: it.productVariant.product.category?.name || 'Varios',
+          kitchenStation: it.productVariant.product.kitchenStation
+            ? {
+                id: it.productVariant.product.kitchenStation.id,
+                name: it.productVariant.product.kitchenStation.name,
+                code: it.productVariant.product.kitchenStation.code,
+                color: it.productVariant.product.kitchenStation.color,
+                icon: it.productVariant.product.kitchenStation.icon,
+              }
+            : null,
           quantity: Number(it.quantity),
           notes: it.notes,
           modifiers: it.modifiers?.map((m: any) => m.modifier?.name || '').filter(Boolean) || [],

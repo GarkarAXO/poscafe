@@ -52,6 +52,8 @@ export async function PUT(
       canAuthorizeCourtesies: Boolean(p.canAuthorizeCourtesies),
       canAuthorizeCancellations: Boolean(p.canAuthorizeCancellations),
       canTransferTables: Boolean(p.canTransferTables),
+      canAccessKDS: Boolean(p.canAccessKDS),
+      canManageKitchen: Boolean(p.canManageKitchen),
     }
 
     // Caso 1: El rol ya es propio de este negocio

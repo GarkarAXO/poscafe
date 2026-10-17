@@ -25,6 +25,7 @@ import {
 import { notify } from '@/lib/notify'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
 import { getContrastTextColor } from '@/lib/theme-utils'
+import ModalPortal from '@/components/modal-portal'
 
 interface Branch {
   id: string
@@ -171,6 +172,19 @@ export default function BranchesManagerPage() {
     fetchBranches()
   }, [])
 
+  // Bloquear scroll de la página de fondo cuando cualquier modal esté abierto
+  useEffect(() => {
+    const isAnyModalOpen = showCreateModal || !!selectedBranchForWarehouse || !!brandingBranch
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [showCreateModal, selectedBranchForWarehouse, brandingBranch])
+
   // Crear Sucursal
   const handleCreateBranch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -269,14 +283,14 @@ export default function BranchesManagerPage() {
   return (
     <div className="flex-1 flex flex-col w-full">
       {/* Top Navbar */}
-      <header className={`px-6 py-4 flex items-center justify-between sticky top-0 z-30 border-b ${classes.header}`}>
-        <div className="flex items-center gap-4">
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-medium border ${classes.buttonGhost}`}
+            className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-medium border shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Volver al Dashboard</span>
+            <span>Dashboard</span>
           </Link>
           <div className={`h-5 w-px ${isLight ? 'bg-[#DECEBD]' : 'bg-white/10'}`} />
           <div>
@@ -543,9 +557,10 @@ export default function BranchesManagerPage() {
 
       {/* MODAL CREAR SUCURSAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-lg rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 border ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-lg rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 border my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center font-bold"
@@ -674,13 +689,15 @@ export default function BranchesManagerPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
 
       {/* MODAL CREAR ALMACÉN */}
       {selectedBranchForWarehouse && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 border ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 border my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center font-bold"
@@ -767,12 +784,14 @@ export default function BranchesManagerPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
       {/* MODAL PERSONALIZAR BRANDING DE SUCURSAL */}
       {brandingBranch && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto border ${classes.modalContent}`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className={`w-full max-w-xl rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto border my-auto ${classes.modalContent}`}>
+              <div className={`flex items-center justify-between border-b pb-3 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center font-bold"
@@ -1026,7 +1045,8 @@ export default function BranchesManagerPage() {
             </form>
           </div>
         </div>
-      )}
+      </ModalPortal>
+    )}
     </div>
   )
 }

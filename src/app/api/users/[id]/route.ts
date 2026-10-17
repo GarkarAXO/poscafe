@@ -34,6 +34,7 @@ export async function PUT(
       gender,
       roleId,
       branchIds,
+      kitchenStationIds,
       defaultBranchId,
       active,
     } = body
@@ -155,6 +156,25 @@ export async function PUT(
                 userId,
                 branchId: b.id,
                 isDefault: b.id === finalDefault,
+              },
+            })
+          }
+        }
+      }
+
+      // 4. Actualizar estaciones de cocina asignadas si se enviaron
+      if (Array.isArray(kitchenStationIds)) {
+        await tx.userKitchenStation.deleteMany({ where: { userId } })
+        if (kitchenStationIds.length > 0) {
+          const validStations = await tx.kitchenStation.findMany({
+            where: { businessId: session.businessId, id: { in: kitchenStationIds } },
+            select: { id: true },
+          })
+          for (const st of validStations) {
+            await tx.userKitchenStation.create({
+              data: {
+                userId,
+                stationId: st.id,
               },
             })
           }
