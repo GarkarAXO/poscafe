@@ -654,23 +654,24 @@ export default function PurchasesPage() {
     <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
       {/* Top Navbar */}
       <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+            className={`hidden lg:inline-flex p-2 rounded-xl border transition-all items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
 
-          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
+          <div className={`hidden lg:block h-5 w-px border-l ${classes.divider} shrink-0`}></div>
 
           <div className="min-w-0">
-            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-2 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-              <Truck className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
-              <span className="truncate">Compras y Abastecimiento</span>
+            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-1.5 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Truck className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="inline sm:hidden">Compras</span>
+              <span className="hidden sm:inline">Compras y Abastecimiento</span>
             </h1>
-            <p className={`text-xs truncate hidden sm:block ${classes.textMuted}`}>
+            <p className={`text-[11px] sm:text-xs truncate hidden sm:block ${classes.textMuted}`}>
               Facturas, tickets, insumos comprados y directorio de proveedores
             </p>
           </div>
@@ -854,125 +855,262 @@ export default function PurchasesPage() {
                 <p>Usa los botones superiores para registrar compras a proveedores, tiendita o cargar tu stock inicial.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className={`border-b uppercase font-semibold text-[10px] tracking-wider ${classes.tableHeader}`}>
-                    <tr>
-                      <th className="py-3 px-4">Fecha</th>
-                      <th className="py-3 px-4">Tipo de Entrada</th>
-                      <th className="py-3 px-4">Folio / Factura</th>
-                      <th className="py-3 px-4">Proveedor / Origen</th>
-                      <th className="py-3 px-4">Insumos Ingresados</th>
-                      <th className="py-3 px-4">Total</th>
-                      <th className="py-3 px-4">Estado</th>
-                      <th className="py-3 px-4 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${classes.divider}`}>
-                    {filteredPurchases.map((purchase) => {
-                      const isCancelled = purchase.status === 'CANCELLED'
+              <div>
+                {/* Tabla Desktop (lg y superior) */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className={`border-b uppercase font-semibold text-[10px] tracking-wider ${classes.tableHeader}`}>
+                      <tr>
+                        <th className="py-3 px-4">Fecha</th>
+                        <th className="py-3 px-4">Tipo de Entrada</th>
+                        <th className="py-3 px-4">Folio / Factura</th>
+                        <th className="py-3 px-4">Proveedor / Origen</th>
+                        <th className="py-3 px-4">Insumos Ingresados</th>
+                        <th className="py-3 px-4">Total</th>
+                        <th className="py-3 px-4">Estado</th>
+                        <th className="py-3 px-4 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${classes.divider}`}>
+                      {filteredPurchases.map((purchase) => {
+                        const isCancelled = purchase.status === 'CANCELLED'
 
-                      let typeBadge = (
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
-                          isLight
-                            ? 'bg-blue-50 text-blue-800 border-blue-200'
-                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                        }`}>
-                          <Building2 className="w-3 h-3" />
-                          <span>Proveedor</span>
-                        </span>
-                      )
-                      if (purchase.entryType === 'EMERGENCY_STORE') {
-                        typeBadge = (
+                        let typeBadge = (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
                             isLight
-                              ? 'bg-amber-50 text-amber-800 border-amber-200'
-                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              ? 'bg-blue-50 text-blue-800 border-blue-200'
+                              : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                           }`}>
-                            <ShoppingBag className="w-3 h-3" />
-                            <span>Tiendita / Urgencia</span>
+                            <Building2 className="w-3 h-3" />
+                            <span>Proveedor</span>
                           </span>
                         )
-                      } else if (purchase.entryType === 'INITIAL_STOCK') {
-                        typeBadge = (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
-                            isLight
-                              ? 'bg-purple-50 text-purple-800 border-purple-200'
-                              : 'bg-violet-500/10 text-violet-400 border-violet-500/20'
-                          }`}>
-                            <Boxes className="w-3 h-3" />
-                            <span>Stock Inicial</span>
-                          </span>
-                        )
-                      }
+                        if (purchase.entryType === 'EMERGENCY_STORE') {
+                          typeBadge = (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                              isLight
+                                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            }`}>
+                              <ShoppingBag className="w-3 h-3" />
+                              <span>Tiendita / Urgencia</span>
+                            </span>
+                          )
+                        } else if (purchase.entryType === 'INITIAL_STOCK') {
+                          typeBadge = (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                              isLight
+                                ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                : 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+                            }`}>
+                              <Boxes className="w-3 h-3" />
+                              <span>Stock Inicial</span>
+                            </span>
+                          )
+                        }
 
-                      return (
-                        <tr
-                          key={purchase.id}
-                          className={`transition-colors ${classes.tableRow} ${
-                            isCancelled ? 'opacity-50' : ''
-                          }`}
-                        >
-                          <td className={`py-3.5 px-4 font-mono ${classes.textMuted}`}>
-                            {new Date(purchase.purchasedAt).toLocaleDateString('es-MX', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </td>
+                        return (
+                          <tr
+                            key={purchase.id}
+                            className={`transition-colors ${classes.tableRow} ${
+                              isCancelled ? 'opacity-50' : ''
+                            }`}
+                          >
+                            <td className={`py-3.5 px-4 font-mono ${classes.textMuted}`}>
+                              {new Date(purchase.purchasedAt).toLocaleDateString('es-MX', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </td>
 
-                          <td className="py-3.5 px-4">
-                            {typeBadge}
-                          </td>
+                            <td className="py-3.5 px-4">
+                              {typeBadge}
+                            </td>
 
-                          <td className={`py-3.5 px-4 font-bold ${classes.textMain}`}>
-                            {purchase.invoiceNumber}
-                          </td>
+                            <td className={`py-3.5 px-4 font-bold ${classes.textMain}`}>
+                              {purchase.invoiceNumber}
+                            </td>
 
-                          <td className="py-3.5 px-4">
-                            {purchase.supplier ? (
-                              <div>
-                                <span className={`font-semibold block ${classes.textMain}`}>{purchase.supplier.name}</span>
-                                {purchase.supplier.contact && (
-                                  <span className={`text-[10px] ${classes.textMuted}`}>{purchase.supplier.contact}</span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className={`italic ${classes.textMuted}`}>
-                                {purchase.entryType === 'INITIAL_STOCK'
-                                  ? 'Inventario de Apertura'
-                                  : 'Compra de Mostrador / Sin proveedor'}
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="py-3.5 px-4">
-                            <div className="flex flex-col gap-0.5 max-w-xs">
-                              {purchase.items.slice(0, 2).map((it) => (
-                                <span key={it.id} className={`text-[11px] truncate ${classes.textMuted}`}>
-                                  • {it.itemName} ({it.quantityBought} {it.presentationName || formatUnitName(it.baseUnit)})
-                                </span>
-                              ))}
-                              {purchase.items.length > 2 && (
-                                <span className={`text-[10px] font-semibold ${isLight ? 'text-amber-800' : 'text-amber-400/80'}`}>
-                                  +{purchase.items.length - 2} insumos más...
+                            <td className="py-3.5 px-4">
+                              {purchase.supplier ? (
+                                <div>
+                                  <span className={`font-semibold block ${classes.textMain}`}>{purchase.supplier.name}</span>
+                                  {purchase.supplier.contact && (
+                                    <span className={`text-[10px] ${classes.textMuted}`}>{purchase.supplier.contact}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className={`italic ${classes.textMuted}`}>
+                                  {purchase.entryType === 'INITIAL_STOCK'
+                                    ? 'Inventario de Apertura'
+                                    : 'Compra de Mostrador / Sin proveedor'}
                                 </span>
                               )}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="flex flex-col gap-0.5 max-w-xs">
+                                {purchase.items.slice(0, 2).map((it) => (
+                                  <span key={it.id} className={`text-[11px] truncate ${classes.textMuted}`}>
+                                    • {it.itemName} ({it.quantityBought} {it.presentationName || formatUnitName(it.baseUnit)})
+                                  </span>
+                                ))}
+                                {purchase.items.length > 2 && (
+                                  <span className={`text-[10px] font-semibold ${isLight ? 'text-amber-800' : 'text-amber-400/80'}`}>
+                                    +{purchase.items.length - 2} insumos más...
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className={`py-3.5 px-4 font-mono font-bold ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
+                              ${purchase.total.toFixed(2)} MXN
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              {isCancelled ? (
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  isLight
+                                    ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                }`}>
+                                  Cancelada / Revertida
+                                </span>
+                              ) : (
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  isLight
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                }`}>
+                                  Aplicada en Almacén
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Ver detalle */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPurchase(purchase)
+                                    setShowDetailModal(true)
+                                  }}
+                                  className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost}`}
+                                  title="Ver desglose completo de insumos"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Editar datos (si no está cancelada) */}
+                                {!isCancelled && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditPurchase(purchase)}
+                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost}`}
+                                    title="Editar folio, notas o proveedor"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" style={{ color: buttonColor }} />
+                                  </button>
+                                )}
+
+                                {/* Cancelar / Revertir (si no está cancelada) */}
+                                {!isCancelled && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCancelPurchase(purchase)}
+                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                      isLight
+                                        ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                        : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-rose-500/20'
+                                    }`}
+                                    title="Cancelar y revertir existencias del almacén"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Tarjetas Mobile y Tablet (< lg) */}
+                <div className="block lg:hidden p-3.5 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {filteredPurchases.map((purchase) => {
+                    const isCancelled = purchase.status === 'CANCELLED'
+
+                    let typeBadge = (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                        isLight
+                          ? 'bg-blue-50 text-blue-800 border-blue-200'
+                          : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      }`}>
+                        <Building2 className="w-3 h-3" />
+                        <span>Proveedor</span>
+                      </span>
+                    )
+                    if (purchase.entryType === 'EMERGENCY_STORE') {
+                      typeBadge = (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                          isLight
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>
+                          <ShoppingBag className="w-3 h-3" />
+                          <span>Tiendita</span>
+                        </span>
+                      )
+                    } else if (purchase.entryType === 'INITIAL_STOCK') {
+                      typeBadge = (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                          isLight
+                            ? 'bg-purple-50 text-purple-800 border-purple-200'
+                            : 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+                        }`}>
+                          <Boxes className="w-3 h-3" />
+                          <span>Stock Inicial</span>
+                        </span>
+                      )
+                    }
+
+                    return (
+                      <div
+                        key={purchase.id}
+                        className={`p-4 rounded-2xl border space-y-3 transition-colors ${classes.subCard} ${
+                          isCancelled ? 'opacity-55' : ''
+                        }`}
+                      >
+                        {/* Cabecera de la tarjeta */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                              {typeBadge}
+                              <span className={`font-mono text-[10px] ${classes.textMuted}`}>
+                                {new Date(purchase.purchasedAt).toLocaleDateString('es-MX', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </span>
                             </div>
-                          </td>
+                            <h4 className={`text-sm font-bold ${classes.textMain}`}>
+                              Folio: {purchase.invoiceNumber}
+                            </h4>
+                          </div>
 
-                          <td className={`py-3.5 px-4 font-mono font-bold ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
-                            ${purchase.total.toFixed(2)} MXN
-                          </td>
-
-                          <td className="py-3.5 px-4">
+                          <div className="shrink-0">
                             {isCancelled ? (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                 isLight
                                   ? 'bg-rose-100 text-rose-800 border-rose-200'
                                   : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                               }`}>
-                                Cancelada / Revertida
+                                Cancelada
                               </span>
                             ) : (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -980,60 +1118,85 @@ export default function PurchasesPage() {
                                   ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                                   : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                               }`}>
-                                Aplicada en Almacén
+                                Aplicada
                               </span>
                             )}
-                          </td>
+                          </div>
+                        </div>
 
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Ver detalle */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedPurchase(purchase)
-                                  setShowDetailModal(true)
-                                }}
-                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost}`}
-                                title="Ver desglose completo de insumos"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
+                        {/* Proveedor y Total */}
+                        <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${isLight ? 'bg-amber-50/40 border-[#E6D5C3]/70' : 'bg-black/20 border-white/5'}`}>
+                          <div>
+                            <span className={`text-[10px] block uppercase font-medium ${classes.textSub}`}>Origen / Proveedor</span>
+                            <span className={`font-bold block ${classes.textMain}`}>
+                              {purchase.supplier ? purchase.supplier.name : purchase.entryType === 'INITIAL_STOCK' ? 'Apertura' : 'Mostrador'}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-[10px] block uppercase font-medium ${classes.textSub}`}>Total Compra</span>
+                            <span className={`text-sm font-mono font-extrabold ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>
+                              ${purchase.total.toFixed(2)} MXN
+                            </span>
+                          </div>
+                        </div>
 
-                              {/* Editar datos (si no está cancelada) */}
-                              {!isCancelled && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditPurchase(purchase)}
-                                  className={`p-1.5 rounded-lg border transition-all cursor-pointer ${classes.buttonGhost}`}
-                                  title="Editar folio, notas o proveedor"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" style={{ color: buttonColor }} />
-                                </button>
-                              )}
+                        {/* Insumos */}
+                        <div className="space-y-1">
+                          <span className={`text-[10px] font-semibold uppercase ${classes.textSub}`}>Insumos:</span>
+                          <div className="flex flex-col gap-0.5">
+                            {purchase.items.slice(0, 3).map((it) => (
+                              <span key={it.id} className={`text-xs truncate ${classes.textMuted}`}>
+                                • {it.itemName} ({it.quantityBought} {it.presentationName || formatUnitName(it.baseUnit)})
+                              </span>
+                            ))}
+                            {purchase.items.length > 3 && (
+                              <span className={`text-[10px] font-semibold ${isLight ? 'text-amber-800' : 'text-amber-400/80'}`}>
+                                +{purchase.items.length - 3} insumos más...
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                              {/* Cancelar / Revertir (si no está cancelada) */}
-                              {!isCancelled && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleCancelPurchase(purchase)}
-                                  className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                    isLight
-                                      ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
-                                      : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border-rose-500/20'
-                                  }`}
-                                  title="Cancelar y revertir existencias del almacén"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                        {/* Acciones */}
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-inherit">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPurchase(purchase)
+                              setShowDetailModal(true)
+                            }}
+                            className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-all ${classes.buttonGhost}`}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Ver Insumos</span>
+                          </button>
+
+                          {!isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPurchase(purchase)}
+                              className={`p-1.5 rounded-xl border text-xs transition-all ${classes.buttonGhost}`}
+                              title="Editar folio"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" style={{ color: buttonColor }} />
+                            </button>
+                          )}
+
+                          {!isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancelPurchase(purchase)}
+                              className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 text-xs transition-all"
+                              title="Cancelar y revertir existencias"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>

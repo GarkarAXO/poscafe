@@ -1048,22 +1048,23 @@ export default function CatalogManagerPage() {
     <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
       {/* Top Navbar */}
       <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+            className={`hidden lg:inline-flex p-2 rounded-xl border transition-all items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
 
-          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
-          <div>
-            <h1 className={`font-bold text-base flex items-center gap-2 ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-              <Package className="w-5 h-5" style={{ color: buttonColor }} />
-              Catálogo, Recetas y Modificadores
+          <div className={`hidden lg:block h-5 w-px border-l ${classes.divider} shrink-0`}></div>
+          <div className="min-w-0">
+            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-1.5 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Package className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="inline sm:hidden">Catálogo</span>
+              <span className="hidden sm:inline">Catálogo, Recetas y Modificadores</span>
             </h1>
-            <p className={`text-xs ${classes.textMuted}`}>
+            <p className={`text-[11px] sm:text-xs truncate hidden sm:block ${classes.textMuted}`}>
               Productos, tamaños, escandallos, insumos base y sabores con descuento de stock
             </p>
           </div>
@@ -1716,7 +1717,8 @@ export default function CatalogManagerPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Tabla Desktop (lg y superior) */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className={`w-full text-left text-xs ${classes.textMain}`}>
                 <thead className={`uppercase font-semibold text-[10px] border-b ${classes.tableHeader}`}>
                   <tr>
@@ -1771,6 +1773,49 @@ export default function CatalogManagerPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Tarjetas Mobile y Tablet (< lg) */}
+            <div className="block lg:hidden p-3.5 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {ingredients.map((item) => (
+                <div key={item.id} className={`p-4 rounded-2xl border space-y-2.5 transition-colors ${classes.subCard}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className={`font-mono text-[10px] block ${classes.textSub}`}>{item.sku || 'SIN-SKU'}</span>
+                      <h4 className={`text-sm font-bold ${classes.textMain}`}>{item.name}</h4>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-lg border font-mono text-[10px] font-semibold ${classes.badge}`}>
+                      {formatUnitFull(item.baseUnit)}
+                    </span>
+                  </div>
+
+                  <div className={`grid grid-cols-2 gap-2 p-2.5 rounded-xl border text-xs ${isLight ? 'bg-amber-50/40 border-[#E6D5C3]/70' : 'bg-black/20 border-white/5'}`}>
+                    <div>
+                      <span className={`text-[10px] block uppercase font-medium ${classes.textSub}`}>Costo Base</span>
+                      <strong className={`text-xs font-mono font-medium ${classes.textMuted}`}>
+                        ${Number(item.costPerUnit).toFixed(2)} /{formatUnitSymbol(item.baseUnit)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className={`text-[10px] block uppercase font-medium ${classes.textSub}`}>Pto. Reorden</span>
+                      <strong className={`text-xs font-mono font-medium ${classes.textSub}`}>
+                        {item.reorderPoint ? `${item.reorderPoint} ${formatUnitSymbol(item.baseUnit)}` : '—'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {item.presentations.length > 0 && (
+                    <div className={`text-[11px] flex items-center gap-1.5 flex-wrap ${classes.textSub}`}>
+                      <span className="font-semibold text-[10px]">Presentaciones:</span>
+                      {item.presentations.map((pr) => (
+                        <span key={pr.id} className={`px-1.5 py-0.5 rounded border text-[10px] ${classes.badge}`}>
+                          {pr.name} ({pr.factorToBase} {formatUnitSymbol(item.baseUnit)})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -1987,7 +2032,7 @@ export default function CatalogManagerPage() {
       {showProductModal && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-            <div className={`w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
+            <div className={`w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
               <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
@@ -2192,7 +2237,7 @@ export default function CatalogManagerPage() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
                     type="text"
                     value={flavorInput}
@@ -2203,14 +2248,14 @@ export default function CatalogManagerPage() {
                         handleAddFlavors()
                       }
                     }}
-                    placeholder="Ej: Taro, Amaretto, Caramelo, Coco, Vainilla..."
-                    className={`flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                    placeholder="Ej: Taro, Amaretto, Caramelo, Coco..."
+                    className={`w-full sm:flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                   />
                   <button
                     type="button"
                     onClick={handleAddFlavors}
                     style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-                    className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0 hover:opacity-90 shadow-sm"
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 hover:opacity-90 shadow-sm active:scale-98 touch-manipulation"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Añadir Sabores</span>
@@ -2432,7 +2477,7 @@ export default function CatalogManagerPage() {
                                 {variant.recipeItems.map((r, itemIdx) => {
                                   const selectedIng = ingredients.find((i) => i.id === r.inventoryItemId)
                                   return (
-                                    <div key={itemIdx} className="flex items-center gap-2">
+                                    <div key={itemIdx} className={`p-2 rounded-xl border flex flex-col sm:flex-row items-stretch sm:items-center gap-2 ${classes.card}`}>
                                       <select
                                         value={r.inventoryItemId}
                                         onChange={(e) => {
@@ -2440,7 +2485,7 @@ export default function CatalogManagerPage() {
                                           copy[varIdx].recipeItems[itemIdx].inventoryItemId = e.target.value
                                           setProdForm({ ...prodForm, variants: copy })
                                         }}
-                                        className={`flex-1 px-2 py-1 rounded-md border text-xs ${classes.input}`}
+                                        className={`w-full sm:flex-1 min-w-0 px-2 py-1 rounded-md border text-xs truncate ${classes.input}`}
                                       >
                                         {ingredients.map((ing) => (
                                           <option key={ing.id} value={ing.id}>
@@ -2449,52 +2494,55 @@ export default function CatalogManagerPage() {
                                         ))}
                                       </select>
 
-                                      <div className="flex items-center gap-1 w-24">
-                                        <input
-                                          type="number"
-                                          step="any"
-                                          value={r.quantityBase}
-                                          onChange={(e) => {
+                                      <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                                        <div className="flex items-center gap-1 w-24">
+                                          <input
+                                            type="number"
+                                            step="any"
+                                            value={r.quantityBase}
+                                            onChange={(e) => {
+                                              const copy = [...prodForm.variants]
+                                              copy[varIdx].recipeItems[itemIdx].quantityBase = e.target.value
+                                              setProdForm({ ...prodForm, variants: copy })
+                                            }}
+                                            placeholder="Cant"
+                                            className={`w-full px-2 py-1 rounded-md border text-right text-xs ${classes.input}`}
+                                          />
+                                          <span className={`text-[10px] font-mono shrink-0 w-6 text-center ${classes.textSub}`}>
+                                            {formatUnitSymbol(selectedIng?.baseUnit)}
+                                          </span>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
                                             const copy = [...prodForm.variants]
-                                            copy[varIdx].recipeItems[itemIdx].quantityBase = e.target.value
+                                            copy[varIdx].recipeItems[itemIdx].onlyTakeaway = !copy[varIdx].recipeItems[itemIdx].onlyTakeaway
                                             setProdForm({ ...prodForm, variants: copy })
                                           }}
-                                          placeholder="Cant"
-                                          className={`w-full px-2 py-1 rounded-md border text-right text-xs ${classes.input}`}
-                                        />
-                                        <span className={`text-[10px] font-mono w-6 ${classes.textSub}`}>
-                                          {formatUnitSymbol(selectedIng?.baseUnit)}
-                                        </span>
+                                          className={`px-2 py-1 rounded-md text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors border shrink-0 ${
+                                            r.onlyTakeaway
+                                              ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40'
+                                              : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                                          }`}
+                                          title={
+                                            r.onlyTakeaway
+                                              ? '🥡 Solo para llevar (NO se descuenta si el cliente pide comer en sucursal)'
+                                              : '🍵 Siempre (Se descuenta siempre, sea comer aquí o para llevar)'
+                                          }
+                                        >
+                                          {r.onlyTakeaway ? '🥡 Solo llevar' : '🍵 Siempre'}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => removeVariantRecipeRow(varIdx, itemIdx)}
+                                          className="text-rose-500 hover:text-rose-400 p-1 rounded-lg hover:bg-rose-500/10 cursor-pointer shrink-0"
+                                          title="Eliminar insumo"
+                                        >
+                                          ✕
+                                        </button>
                                       </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const copy = [...prodForm.variants]
-                                          copy[varIdx].recipeItems[itemIdx].onlyTakeaway = !copy[varIdx].recipeItems[itemIdx].onlyTakeaway
-                                          setProdForm({ ...prodForm, variants: copy })
-                                        }}
-                                        className={`px-2 py-1 rounded-md text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors border ${
-                                          r.onlyTakeaway
-                                            ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40'
-                                            : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                                        }`}
-                                        title={
-                                          r.onlyTakeaway
-                                            ? '🥡 Solo para llevar (NO se descuenta si el cliente pide comer en sucursal)'
-                                            : '🍵 Siempre (Se descuenta siempre, sea comer aquí o para llevar)'
-                                        }
-                                      >
-                                        {r.onlyTakeaway ? '🥡 Solo llevar' : '🍵 Siempre'}
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => removeVariantRecipeRow(varIdx, itemIdx)}
-                                        className="text-rose-500 hover:text-rose-400 p-1 cursor-pointer"
-                                      >
-                                        ✕
-                                      </button>
                                     </div>
                                   )
                                 })}
@@ -2513,7 +2561,7 @@ export default function CatalogManagerPage() {
                 ) : (
                   /* PRODUCTO DE TAMAÑO ÚNICO */
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className={`block font-medium mb-1 ${classes.textMuted}`}>Precio de Venta ($ MXN) *</label>
                         <input
@@ -2537,11 +2585,11 @@ export default function CatalogManagerPage() {
                               inventoryPolicy: e.target.value as any,
                             })
                           }
-                          className={`w-full px-3 py-2 rounded-xl border focus:outline-none ${classes.input}`}
+                          className={`w-full px-3 py-2 rounded-xl border focus:outline-none truncate ${classes.input}`}
                         >
-                          <option value="RECIPE">RECETA (Descuenta ingredientes por porción)</option>
-                          <option value="DIRECT">DIRECTO (Descuenta 1 unidad de insumo)</option>
-                          <option value="NONE">SIN INVENTARIO (Solo cobro)</option>
+                          <option value="RECIPE">Receta (Descuenta insumos por porción)</option>
+                          <option value="DIRECT">Directo (Descuenta 1 insumo unitario)</option>
+                          <option value="NONE">Sin Inventario (Solo venta / cobro)</option>
                         </select>
                       </div>
                     </div>
@@ -2578,7 +2626,7 @@ export default function CatalogManagerPage() {
                             {prodForm.recipeItems.map((r, idx) => {
                               const selectedIng = ingredients.find((i) => i.id === r.inventoryItemId)
                               return (
-                                <div key={idx} className="flex items-center gap-2">
+                                <div key={idx} className={`p-2 sm:p-2.5 rounded-xl border flex flex-col sm:flex-row items-stretch sm:items-center gap-2 ${classes.card}`}>
                                   <select
                                     value={r.inventoryItemId}
                                     onChange={(e) => {
@@ -2586,7 +2634,7 @@ export default function CatalogManagerPage() {
                                       newItems[idx].inventoryItemId = e.target.value
                                       setProdForm({ ...prodForm, recipeItems: newItems })
                                     }}
-                                    className={`flex-1 px-2.5 py-1.5 rounded-lg border text-xs ${classes.input}`}
+                                    className={`w-full sm:flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border text-xs truncate ${classes.input}`}
                                   >
                                     {ingredients.map((ing) => (
                                       <option key={ing.id} value={ing.id}>
@@ -2595,51 +2643,54 @@ export default function CatalogManagerPage() {
                                     ))}
                                   </select>
 
-                                  <div className="flex items-center gap-1 w-28">
-                                    <input
-                                      type="number"
-                                      step="any"
-                                      value={r.quantityBase}
-                                      onChange={(e) => {
+                                  <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                                    <div className="flex items-center gap-1 w-28">
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={r.quantityBase}
+                                        onChange={(e) => {
+                                          const newItems = [...prodForm.recipeItems]
+                                          newItems[idx].quantityBase = e.target.value
+                                          setProdForm({ ...prodForm, recipeItems: newItems })
+                                        }}
+                                        className={`w-full px-2 py-1.5 rounded-lg border text-right text-xs ${classes.input}`}
+                                      />
+                                      <span className={`text-[10px] font-mono shrink-0 w-7 text-center ${classes.textSub}`}>
+                                        {formatUnitSymbol(selectedIng?.baseUnit)}
+                                      </span>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
                                         const newItems = [...prodForm.recipeItems]
-                                        newItems[idx].quantityBase = e.target.value
+                                        newItems[idx].onlyTakeaway = !newItems[idx].onlyTakeaway
                                         setProdForm({ ...prodForm, recipeItems: newItems })
                                       }}
-                                      className={`w-full px-2 py-1.5 rounded-lg border text-right text-xs ${classes.input}`}
-                                    />
-                                    <span className={`text-[10px] font-mono w-8 ${classes.textSub}`}>
-                                      {formatUnitSymbol(selectedIng?.baseUnit)}
-                                    </span>
+                                      className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors border shrink-0 ${
+                                        r.onlyTakeaway
+                                          ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40'
+                                          : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                                      }`}
+                                      title={
+                                        r.onlyTakeaway
+                                          ? '🥡 Solo para llevar (NO se descuenta si el cliente come en sucursal)'
+                                          : '🍵 Siempre (Se descuenta siempre, sea comer aquí o llevar)'
+                                      }
+                                    >
+                                      {r.onlyTakeaway ? '🥡 Solo llevar' : '🍵 Siempre'}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => removeRecipeRow(idx)}
+                                      className="text-rose-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer shrink-0"
+                                      title="Quitar ingrediente"
+                                    >
+                                      ✕
+                                    </button>
                                   </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const newItems = [...prodForm.recipeItems]
-                                      newItems[idx].onlyTakeaway = !newItems[idx].onlyTakeaway
-                                      setProdForm({ ...prodForm, recipeItems: newItems })
-                                    }}
-                                    className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors border ${
-                                      r.onlyTakeaway
-                                        ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40'
-                                        : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                                    }`}
-                                    title={
-                                      r.onlyTakeaway
-                                        ? '🥡 Solo para llevar (NO se descuenta si el cliente come en sucursal)'
-                                        : '🍵 Siempre (Se descuenta siempre, sea comer aquí o llevar)'
-                                    }
-                                  >
-                                    {r.onlyTakeaway ? '🥡 Solo llevar' : '🍵 Siempre'}
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => removeRecipeRow(idx)}
-                                    className="text-rose-500 hover:text-rose-400 p-1 cursor-pointer"
-                                  >
-                                    ✕
-                                  </button>
                                 </div>
                               )
                             })}
@@ -2676,11 +2727,11 @@ export default function CatalogManagerPage() {
                 )}
               </div>
 
-              <div className={`pt-3 flex justify-end gap-2 border-t ${classes.divider}`}>
+              <div className={`pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowProductModal(false)}
-                  className={`px-4 py-2 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
+                  className={`w-full sm:w-auto px-4 py-2 rounded-xl border font-medium cursor-pointer text-center justify-center ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
@@ -2688,7 +2739,7 @@ export default function CatalogManagerPage() {
                   type="submit"
                   disabled={submittingProduct}
                   style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-                  className="px-5 py-2 rounded-xl font-medium flex items-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95"
+                  className="w-full sm:w-auto px-5 py-2 rounded-xl font-medium flex items-center justify-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95 text-center"
                 >
                   {submittingProduct && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingProductId ? 'Actualizar Producto' : 'Guardar Producto'}</span>
@@ -2704,7 +2755,7 @@ export default function CatalogManagerPage() {
       {showModGroupModal && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-            <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
+            <div className={`w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl border p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
               <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
@@ -2813,7 +2864,7 @@ export default function CatalogManagerPage() {
                         key={idx}
                         className={`p-3 rounded-xl border space-y-2.5 ${classes.card}`}
                       >
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
                           <input
                             type="text"
                             required
@@ -2824,34 +2875,37 @@ export default function CatalogManagerPage() {
                               setModGroupForm({ ...modGroupForm, modifiers: copy })
                             }}
                             placeholder="Nombre (Ej: Jarabe de Avellana)"
-                            className={`flex-1 px-3 py-1.5 rounded-lg border text-xs ${classes.input}`}
+                            className={`w-full sm:flex-1 px-3 py-1.5 rounded-lg border text-xs ${classes.input}`}
                           />
 
-                          <div className="flex items-center gap-1 w-28">
-                            <span className={`text-[11px] ${classes.textSub}`}>+$</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={mod.extraPrice}
-                              onChange={(e) => {
-                                const copy = [...modGroupForm.modifiers]
-                                copy[idx].extraPrice = e.target.value
-                                setModGroupForm({ ...modGroupForm, modifiers: copy })
-                              }}
-                              placeholder="0.00"
-                              className={`w-full px-2 py-1.5 rounded-lg border text-right text-xs ${classes.input}`}
-                            />
-                          </div>
+                          <div className="flex items-center justify-between sm:justify-end gap-2">
+                            <div className="flex items-center gap-1 w-28">
+                              <span className={`text-[11px] ${classes.textSub}`}>+$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={mod.extraPrice}
+                                onChange={(e) => {
+                                  const copy = [...modGroupForm.modifiers]
+                                  copy[idx].extraPrice = e.target.value
+                                  setModGroupForm({ ...modGroupForm, modifiers: copy })
+                                }}
+                                placeholder="0.00"
+                                className={`w-full px-2 py-1.5 rounded-lg border text-right text-xs ${classes.input}`}
+                              />
+                            </div>
 
-                          {modGroupForm.modifiers.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeModifierRow(idx)}
-                              className="text-rose-500 hover:text-rose-400 p-1 cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          )}
+                            {modGroupForm.modifiers.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeModifierRow(idx)}
+                                className="text-rose-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer shrink-0"
+                                title="Eliminar opción"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Descuento de Insumo */}
@@ -2915,11 +2969,11 @@ export default function CatalogManagerPage() {
                 </div>
               </div>
 
-              <div className={`pt-3 flex justify-end gap-2 border-t ${classes.divider}`}>
+              <div className={`pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowModGroupModal(false)}
-                  className={`px-4 py-2 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
+                  className={`w-full sm:w-auto px-4 py-2 rounded-xl border font-medium cursor-pointer text-center justify-center ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
@@ -2927,7 +2981,7 @@ export default function CatalogManagerPage() {
                   type="submit"
                   disabled={submittingModGroup}
                   style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-                  className="px-5 py-2 rounded-xl font-medium flex items-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95"
+                  className="w-full sm:w-auto px-5 py-2 rounded-xl font-medium flex items-center justify-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95 text-center"
                 >
                   {submittingModGroup && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>{editingModGroupId ? 'Actualizar Grupo' : 'Guardar Grupo'}</span>
@@ -2943,7 +2997,7 @@ export default function CatalogManagerPage() {
       {showItemModal && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-            <div className={`w-full max-w-lg rounded-3xl border p-6 sm:p-8 space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
+            <div className={`w-full max-w-lg rounded-3xl border p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 shadow-2xl my-auto ${classes.modalContent}`}>
               <div className={`flex items-center justify-between border-b pb-4 ${classes.divider}`}>
               <div className="flex items-center gap-2.5">
                 <div
@@ -2967,7 +3021,7 @@ export default function CatalogManagerPage() {
             </div>
 
             <form onSubmit={handleCreateItem} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={`block font-medium mb-1 ${classes.textMuted}`}>Nombre del Insumo *</label>
                   <input
@@ -2992,7 +3046,7 @@ export default function CatalogManagerPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className={`block font-medium mb-1 ${classes.textMuted}`}>Unidad Base *</label>
                   <select
@@ -3027,7 +3081,7 @@ export default function CatalogManagerPage() {
                 <span className={`font-semibold block ${classes.textMain}`}>
                   Presentación de Compra (Opcional)
                 </span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="text"
                     value={itemForm.presentationName}
@@ -3045,11 +3099,11 @@ export default function CatalogManagerPage() {
                 </div>
               </div>
 
-              <div className={`pt-3 flex justify-end gap-2 border-t ${classes.divider}`}>
+              <div className={`pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowItemModal(false)}
-                  className={`px-4 py-2 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
+                  className={`w-full sm:w-auto px-4 py-2 rounded-xl border font-medium cursor-pointer text-center justify-center ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
@@ -3057,7 +3111,7 @@ export default function CatalogManagerPage() {
                   type="submit"
                   disabled={submittingItem}
                   style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-                  className="px-5 py-2 rounded-xl font-medium flex items-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95"
+                  className="w-full sm:w-auto px-5 py-2 rounded-xl font-medium flex items-center justify-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50 hover:opacity-95 text-center"
                 >
                   {submittingItem && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Guardar Insumo</span>
@@ -3119,7 +3173,7 @@ export default function CatalogManagerPage() {
       {showCupSizeModal && (
         <ModalPortal>
           <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-            <div className={`w-full max-w-lg rounded-3xl border p-6 space-y-4 shadow-2xl my-auto ${classes.modalContent}`}>
+            <div className={`w-full max-w-lg rounded-3xl border p-4 sm:p-6 lg:p-8 space-y-4 shadow-2xl my-auto ${classes.modalContent}`}>
               <div className="flex items-center justify-between pb-2 border-b border-border/30">
               <h3 className={`text-base font-bold flex items-center gap-2 ${classes.textMain}`}>
                 <Coffee className="w-5 h-5 text-amber-500" />
@@ -3225,11 +3279,11 @@ export default function CatalogManagerPage() {
                 </div>
               </div>
 
-              <div className={`flex justify-end gap-2 pt-3 border-t ${classes.divider}`}>
+              <div className={`flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t ${classes.divider}`}>
                 <button
                   type="button"
                   onClick={() => setShowCupSizeModal(false)}
-                  className={`px-4 py-2 rounded-xl border font-medium cursor-pointer ${classes.buttonGhost}`}
+                  className={`w-full sm:w-auto px-4 py-2 rounded-xl border font-medium cursor-pointer text-center justify-center ${classes.buttonGhost}`}
                 >
                   Cancelar
                 </button>
@@ -3237,7 +3291,7 @@ export default function CatalogManagerPage() {
                   type="submit"
                   disabled={submittingCupSize}
                   style={{ backgroundColor: buttonColor, color: contrastTextButton }}
-                  className="px-5 py-2 rounded-xl font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 hover:opacity-95 shadow-md"
+                  className="w-full sm:w-auto px-5 py-2 rounded-xl font-medium flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 hover:opacity-95 shadow-md text-center"
                 >
                   {submittingCupSize && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Guardar Tamaño</span>

@@ -374,10 +374,10 @@ export default function KitchenStationsPage() {
     <div className={`min-h-screen p-4 sm:p-6 lg:p-8  space-y-6`}>
       {/* Top Navbar unificada con botón hacia Dashboard */}
       <div className={`p-4 sm:p-5 rounded-3xl ${classes.card} shadow-sm backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2.5 rounded-2xl border transition-all cursor-pointer ${
+            className={`hidden lg:inline-flex p-2.5 rounded-2xl border transition-all cursor-pointer ${
               isLight
                 ? 'bg-[#F3E9DC] hover:bg-[#E8DCC9] border-[#DECEBD] text-[#5E3023]'
                 : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-200'
@@ -386,16 +386,17 @@ export default function KitchenStationsPage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-orange-500/10 text-orange-500">
-                <UtensilsCrossed className="w-5 h-5" />
+              <span className="p-1.5 sm:p-2 rounded-xl bg-orange-500/10 text-orange-500 shrink-0">
+                <UtensilsCrossed className="w-4 h-4 sm:w-5 sm:h-5" />
               </span>
-              <h1 className={`text-xl sm:text-2xl font-black ${classes.textMain}`}>
-                Áreas y Estaciones de Cocina
+              <h1 className={`text-base sm:text-2xl font-black truncate ${classes.textMain}`}>
+                <span className="inline sm:hidden">Estaciones de Cocina</span>
+                <span className="hidden sm:inline">Áreas y Estaciones de Cocina</span>
               </h1>
             </div>
-            <p className={`text-xs sm:text-sm ${classes.textMuted} mt-0.5`}>
+            <p className={`text-[11px] sm:text-sm ${classes.textMuted} mt-0.5 hidden sm:block`}>
               Divide tu cocina en estaciones de preparación (Bebidas, Fría, Caliente, etc.) y asigna preparaciones y personal.
             </p>
           </div>

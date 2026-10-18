@@ -32,8 +32,11 @@ import {
   X,
   ExternalLink,
   Trash2,
+  RotateCcw,
+  AlertOctagon,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
+import { ModalPortal } from '@/components/modal-portal'
 
 export interface SerializedBusiness {
   id: string
@@ -133,6 +136,17 @@ export default function AdminPanelClient({
   const [showEditPassword, setShowEditPassword] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [branchesStaff, setBranchesStaff] = useState<Array<{ id: string; name: string; code: string; maxStaff: number }>>([])
+
+  // Modal de Reinicio de Sucursal (Ventas y Stock a 0)
+  const [resettingBranch, setResettingBranch] = useState<{
+    branchId: string
+    branchName: string
+    branchCode: string
+    businessName: string
+  } | null>(null)
+  const [resetConfirmText, setResetConfirmText] = useState('')
+  const [resettingLoading, setResettingLoading] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
 
   // Modal Nuevo Negocio
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -359,6 +373,38 @@ export default function AdminPanelClient({
       buttonText: 'Confirmar Eliminación',
       onAction: () => executeDelete(businessId, businessName),
     })
+  }
+
+  // Reiniciar Operación de Sucursal (Ventas, Cajas, Stock a 0)
+  const handleResetBranch = async () => {
+    if (!resettingBranch || resetConfirmText.trim().toUpperCase() !== 'REINICIAR') return
+    setResettingLoading(true)
+    setResetError(null)
+
+    try {
+      const res = await fetch(`/api/admin/branches/${resettingBranch.branchId}/reset`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        notify.success('Sucursal Reiniciada', data.message)
+        const summary = data.data?.summary
+        if (summary) {
+          notify.info(
+            'Resumen de Reinicio Operativo',
+            `Órdenes eliminadas: ${summary.ordersDeleted} • Turnos de caja: ${summary.cashSessionsDeleted} • Insumos reseteados: ${summary.stockItemsReset} • Mesas liberadas: ${summary.tablesReset}`
+          )
+        }
+        setResettingBranch(null)
+        setResetConfirmText('')
+      } else {
+        setResetError(data.error?.message || 'No se pudo reiniciar la sucursal')
+      }
+    } catch {
+      setResetError('Error de red al procesar el reinicio de la sucursal')
+    } finally {
+      setResettingLoading(false)
+    }
   }
 
   // Crear Nuevo Tenant
@@ -821,6 +867,32 @@ export default function AdminPanelClient({
                               <span>Configurar</span>
                             </button>
 
+                            {biz.branches && biz.branches.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (biz.branches && biz.branches.length === 1) {
+                                    setResettingBranch({
+                                      branchId: biz.branches[0].id,
+                                      branchName: biz.branches[0].name,
+                                      branchCode: biz.branches[0].code,
+                                      businessName: biz.name,
+                                    })
+                                    setResetConfirmText('')
+                                    setResetError(null)
+                                  } else {
+                                    handleOpenConfig(biz)
+                                    setActiveTab('info')
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/40 text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                                title="Reiniciar ventas, cajas y stock de una sucursal"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                                <span className="hidden md:inline">Reiniciar</span>
+                              </button>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => handleDeleteBusiness(biz.id, biz.name)}
@@ -1099,24 +1171,45 @@ export default function AdminPanelClient({
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                              <label className="text-[11px] text-slate-400 whitespace-nowrap">
-                                Máx. Personal:
-                              </label>
-                              <input
-                                type="number"
-                                min={1}
-                                max={500}
-                                value={branch.maxStaff}
-                                onChange={(e) => {
-                                  const val = Math.max(1, parseInt(e.target.value) || 1)
-                                  setBranchesStaff((prev) =>
-                                    prev.map((b, i) => (i === idx ? { ...b, maxStaff: val } : b))
-                                  )
+                            <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-end sm:self-center">
+                              <div className="flex items-center gap-1.5">
+                                <label className="text-[11px] text-slate-400 whitespace-nowrap">
+                                  Máx. Personal:
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={500}
+                                  value={branch.maxStaff}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value) || 1)
+                                    setBranchesStaff((prev) =>
+                                      prev.map((b, i) => (i === idx ? { ...b, maxStaff: val } : b))
+                                    )
+                                  }}
+                                  className="w-16 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                />
+                                <span className="text-[10px] text-slate-500">colab.</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setResettingBranch({
+                                    branchId: branch.id,
+                                    branchName: branch.name,
+                                    branchCode: branch.code,
+                                    businessName: editForm.name || selectedBusiness.name,
+                                  })
+                                  setResetConfirmText('')
+                                  setResetError(null)
                                 }}
-                                className="w-20 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-violet-500"
-                              />
-                              <span className="text-[10px] text-slate-500">colaboradores</span>
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/30 flex items-center gap-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                                title={`Reiniciar ventas, cajas y stock a 0 para ${branch.name}`}
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span>Reiniciar Operación</span>
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -2504,6 +2597,183 @@ export default function AdminPanelClient({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL DE CONFIRMACIÓN DE REINICIO OPERATIVO DE SUCURSAL   */}
+      {/* ========================================================= */}
+      {resettingBranch && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-amber-500/30 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col">
+              {/* Encabezado de Advertencia */}
+              <div className="px-6 py-5 border-b border-slate-800 bg-amber-500/5 flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400">
+                  <AlertOctagon className="w-6 h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] font-bold tracking-wider uppercase text-amber-400 block">
+                    Acción de Mantenimiento / Purgado
+                  </span>
+                  <h3 className="text-base font-bold text-white mt-0.5">
+                    Reiniciar Operación de Sucursal
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Sucursal: <strong className="text-amber-300">{resettingBranch.branchName}</strong>{' '}
+                    <span className="text-slate-500 font-mono">({resettingBranch.branchCode})</span>
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Negocio: <strong className="text-white">{resettingBranch.businessName}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResettingBranch(null)
+                    setResetConfirmText('')
+                    setResetError(null)
+                  }}
+                  disabled={resettingLoading}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Cuerpo descriptivo */}
+              <div className="p-6 space-y-4 text-xs overflow-y-auto max-h-[60vh]">
+                {resetError && (
+                  <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{resetError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Se borrará / reseteará a 0 */}
+                  <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/20 space-y-2">
+                    <strong className="text-red-400 text-xs font-bold flex items-center gap-1.5">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Se reiniciará a Cero:
+                    </strong>
+                    <ul className="space-y-1.5 text-[11px] text-slate-300">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-red-400 font-bold">•</span>
+                        <span>Todas las <strong>ventas, comandas y pagos</strong> registrados.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-red-400 font-bold">•</span>
+                        <span><strong>Stock en 0</strong> de todos los insumos y almacenes.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-red-400 font-bold">•</span>
+                        <span>Historial de <strong>movimientos de stock</strong> y mermas.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-red-400 font-bold">•</span>
+                        <span>Cortes de caja y <strong>turnos de cobro</strong> anteriores.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-red-400 font-bold">•</span>
+                        <span><strong>Mesas liberadas</strong> (vuelven a estado Disponible).</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-red-400 font-bold">•</span>
+                        <span>Historial de <strong>compras y gastos</strong> de la sucursal.</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Se conserva intacto */}
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
+                    <strong className="text-emerald-400 text-xs font-bold flex items-center gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Se conserva intacto:
+                    </strong>
+                    <ul className="space-y-1.5 text-[11px] text-slate-300">
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-emerald-400 font-bold">✓</span>
+                        <span>Catálogo de <strong>productos, variantes y fotos</strong>.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-emerald-400 font-bold">✓</span>
+                        <span><strong>Recetas e ingredientes</strong> configurados.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-emerald-400 font-bold">✓</span>
+                        <span>Insumos y presentaciones creados en catálogo.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-emerald-400 font-bold">✓</span>
+                        <span><strong>Usuarios, contraseñas, PINs</strong> y roles.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-emerald-400 font-bold">✓</span>
+                        <span>Cajas físicas, distribución de mesas y áreas.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <span className="text-emerald-400 font-bold">✓</span>
+                        <span>Estaciones de cocina y colores de la sucursal.</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Input de confirmación estricta */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                  <label className="block text-slate-300 font-semibold text-xs">
+                    Para confirmar este reinicio irreversible, escribe{' '}
+                    <span className="text-amber-400 font-mono font-bold">REINICIAR</span>:
+                  </label>
+                  <input
+                    type="text"
+                    value={resetConfirmText}
+                    onChange={(e) => setResetConfirmText(e.target.value)}
+                    placeholder="REINICIAR"
+                    autoFocus
+                    disabled={resettingLoading}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-center tracking-widest text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResettingBranch(null)
+                    setResetConfirmText('')
+                    setResetError(null)
+                  }}
+                  disabled={resettingLoading}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetBranch}
+                  disabled={resetConfirmText.trim().toUpperCase() !== 'REINICIAR' || resettingLoading}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-red-600/30 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {resettingLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Reiniciando sistema...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Confirmar y Reiniciar a Cero</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
       )}
     </div>
   )

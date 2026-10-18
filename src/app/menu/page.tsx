@@ -66,14 +66,38 @@ export default async function PublicMenuPage(props: MenuPageProps) {
         ...(activeBranchId ? { branchId: activeBranchId } : { branch: { businessId: business.id } }),
         active: true,
       },
-      include: { area: true },
+      include: {
+        area: true,
+        currentWaiter: { select: { id: true, name: true } },
+        assignedWaiter: { select: { id: true, name: true } },
+        orders: {
+          where: {
+            status: { in: ['DRAFT', 'SENT', 'PREPARING', 'SERVED'] },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            waiter: { select: { id: true, name: true } },
+          },
+        },
+      },
     })
 
     if (table) {
+      const activeOrder = table.orders[0] || null
+      const isInitiated = Boolean(activeOrder || table.status === 'OCCUPIED' || table.currentWaiterId)
+      const assignedWaiter = activeOrder?.waiter || table.currentWaiter || table.assignedWaiter || null
+
       tableInfo = {
         id: table.id,
         name: table.name,
         area: table.area?.name || null,
+        branchId: table.branchId,
+        isInitiated,
+        activeOrderId: activeOrder?.id || null,
+        orderNumber: activeOrder?.orderNumber || null,
+        waiterId: assignedWaiter?.id || null,
+        waiterName: assignedWaiter?.name || null,
       }
     }
   }

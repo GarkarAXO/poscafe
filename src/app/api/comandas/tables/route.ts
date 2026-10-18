@@ -135,12 +135,15 @@ export async function GET(request: Request) {
       }
     }
 
-    // Estructurar respuesta con mesas enriquecidas con su orden
+    // Estructurar respuesta con mesas enriquecidas con su orden y llamadas de mesero
     const areasWithTables = areas.map((area) => ({
       id: area.id,
       name: area.name,
       tables: area.tables.map((table) => {
         const activeOrder = ordersByTableId.get(table.id) || null
+        const callKey = `${branchId}:${table.id}`
+        const waiterCall = globalThis.__waiterCalls?.get(callKey) || null
+
         return {
           id: table.id,
           name: table.name,
@@ -149,6 +152,15 @@ export async function GET(request: Request) {
           assignedWaiter: table.assignedWaiter ? { id: table.assignedWaiter.id, name: table.assignedWaiter.name } : null,
           currentWaiter: table.currentWaiter ? { id: table.currentWaiter.id, name: table.currentWaiter.name } : null,
           activeOrder,
+          waiterCall: waiterCall
+            ? {
+                calledAt: waiterCall.calledAt,
+                message: waiterCall.message,
+                waiterId: waiterCall.waiterId,
+                waiterName: waiterCall.waiterName,
+                isInitiated: waiterCall.isInitiated,
+              }
+            : null,
         }
       }),
     }))
@@ -165,6 +177,9 @@ export async function GET(request: Request) {
 
     const unassignedWithOrders = unassignedTables.map((table) => {
       const activeOrder = ordersByTableId.get(table.id) || null
+      const callKey = `${branchId}:${table.id}`
+      const waiterCall = globalThis.__waiterCalls?.get(callKey) || null
+
       return {
         id: table.id,
         name: table.name,
@@ -173,6 +188,15 @@ export async function GET(request: Request) {
         assignedWaiter: table.assignedWaiter ? { id: table.assignedWaiter.id, name: table.assignedWaiter.name } : null,
         currentWaiter: table.currentWaiter ? { id: table.currentWaiter.id, name: table.currentWaiter.name } : null,
         activeOrder,
+        waiterCall: waiterCall
+          ? {
+              calledAt: waiterCall.calledAt,
+              message: waiterCall.message,
+              waiterId: waiterCall.waiterId,
+              waiterName: waiterCall.waiterName,
+              isInitiated: waiterCall.isInitiated,
+            }
+          : null,
       }
     })
 

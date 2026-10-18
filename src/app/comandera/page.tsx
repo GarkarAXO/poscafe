@@ -37,6 +37,7 @@ import {
   ChevronDown,
   ChevronUp,
   Scissors,
+  BellRing,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
@@ -82,6 +83,13 @@ interface TableItem {
         modifier: { id: string; name: string; extraPrice: number }
       }>
     }>
+  } | null
+  waiterCall?: {
+    calledAt: string
+    message: string
+    waiterId: string | null
+    waiterName: string | null
+    isInitiated: boolean
   } | null
 }
 
@@ -619,6 +627,26 @@ export default function ComanderaPage() {
     }
 
     openTableOrder(table)
+  }
+
+  // Atender o descartar llamado de mesero originado desde el Menú Digital
+  const handleClearWaiterCall = async (tableId: string) => {
+    try {
+      if (!activeBranch?.id) return
+      await fetch('/api/comandas/tables/clear-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branchId: activeBranch.id, tableId }),
+      })
+      setAreas((prev) =>
+        prev.map((a) => ({
+          ...a,
+          tables: a.tables.map((t) => (t.id === tableId ? { ...t, waiterCall: null } : t)),
+        }))
+      )
+    } catch (e) {
+      console.error('Error al descartar llamado de mesero', e)
+    }
   }
 
   // Marcar platillo individual como servido a la mesa
@@ -2035,7 +2063,11 @@ export default function ComanderaPage() {
                         ? `${themeSecondary}20`
                         : `${themeBg}C0`
 
-                      const cardBorder = hasReadyItems
+                      const hasWaiterCall = Boolean(table.waiterCall)
+
+                      const cardBorder = hasWaiterCall
+                        ? '#F59E0B'
+                        : hasReadyItems
                         ? '#10b981'
                         : isLight
                         ? isTransferredToMe
@@ -2072,7 +2104,9 @@ export default function ComanderaPage() {
                               : {}),
                           }}
                           className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border text-left transition-all relative flex flex-col justify-between min-h-[118px] sm:min-h-[160px] cursor-pointer hover:scale-[1.02] active:scale-95 select-none shadow-sm ${
-                            hasReadyItems
+                            hasWaiterCall
+                              ? 'ring-2 ring-amber-500 shadow-xl shadow-amber-500/25 animate-pulse'
+                              : hasReadyItems
                               ? 'ring-2 ring-emerald-500 shadow-lg shadow-emerald-500/20'
                               : isTransferredToMe
                               ? 'shadow-lg shadow-cyan-500/15 ring-2 ring-cyan-500/40'
@@ -2205,6 +2239,28 @@ export default function ComanderaPage() {
                               />
                             </div>
                           </div>
+
+                          {/* Alerta de Llamado de Mesero desde Menú Digital */}
+                          {table.waiterCall && (
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleClearWaiterCall(table.id)
+                              }}
+                              className="my-1.5 p-2 rounded-xl bg-amber-500 text-slate-950 font-black text-[10px] sm:text-xs flex items-center justify-between gap-1 shadow-lg border border-amber-300 hover:bg-amber-400 transition-colors"
+                              title={`Llamado: ${table.waiterCall.message}. Clic para descartar.`}
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                <BellRing className="w-3.5 h-3.5 text-slate-950 shrink-0 animate-bounce" />
+                                <span className="truncate">
+                                  {table.waiterCall.isInitiated ? '¡Llama Comensal!' : '¡Solicita Apertura!'}
+                                </span>
+                              </div>
+                              <span className="px-1.5 py-0.5 rounded bg-black/25 text-[9px] uppercase font-bold shrink-0 hover:bg-black/35">
+                                Atender
+                              </span>
+                            </div>
+                          )}
 
                           {/* Cuerpo Central - Optimizado para Móvil vs Desktop */}
                           {table.activeOrder ? (

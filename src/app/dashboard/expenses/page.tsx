@@ -269,24 +269,25 @@ export default function ExpensesDashboardPage() {
   return (
     <div className="flex-1 flex flex-col w-full min-h-screen">
       {/* Top Navbar estandarizado con retorno al Dashboard */}
-      <header className="border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md bg-[#14100E]/95 border-[#2D1B15]">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+      <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className="p-2 rounded-xl border border-white/10 hover:bg-white/5 transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 text-white active:scale-95 touch-manipulation select-none"
+            className={`hidden lg:inline-flex p-2 rounded-xl border transition-all items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
 
-          <div className="h-5 w-px border-l border-white/10 shrink-0"></div>
+          <div className={`hidden lg:block h-5 w-px border-l ${classes.divider} shrink-0`}></div>
 
           <div className="min-w-0">
-            <h1 className="font-bold text-sm sm:text-base flex items-center gap-2 truncate text-white">
-              <Receipt className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
-              <span className="truncate">Gastos Operativos</span>
+            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-1.5 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Receipt className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="inline sm:hidden">Gastos</span>
+              <span className="hidden sm:inline">Gastos Operativos</span>
             </h1>
-            <p className="text-xs truncate hidden sm:block text-slate-400">
+            <p className={`text-[11px] sm:text-xs truncate hidden sm:block ${classes.textMuted}`}>
               Control de rentas, luz, agua, insumos de limpieza y servicios de cafetería
             </p>
           </div>
@@ -470,8 +471,8 @@ export default function ExpensesDashboardPage() {
             </div>
           ) : (
             <>
-              {/* Tabla para Escritorio */}
-              <div className="hidden md:block overflow-x-auto">
+              {/* Tabla para Escritorio (lg y superior) */}
+              <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className={`border-b font-bold uppercase tracking-wider text-[10px] ${classes.tableHeader}`}>
                     <tr>
@@ -523,10 +524,10 @@ export default function ExpensesDashboardPage() {
                 </table>
               </div>
 
-              {/* Vista Móvil en Tarjetas */}
-              <div className="md:hidden divide-y">
+              {/* Vista Móvil y Tablet en Tarjetas (< lg) */}
+              <div className="block lg:hidden p-3.5 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-3.5">
                 {expenses.map((exp) => (
-                  <div key={exp.id} className="p-4 space-y-2.5">
+                  <div key={exp.id} className={`p-4 rounded-2xl border space-y-2.5 transition-colors ${classes.subCard}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold border mb-1 ${classes.badge}`}>
@@ -697,11 +698,11 @@ export default function ExpensesDashboardPage() {
                   />
                 </div>
 
-                <div className={`pt-2 flex justify-end gap-2 border-t ${classes.divider}`}>
+                <div className={`pt-2 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t ${classes.divider}`}>
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${classes.buttonGhost}`}
+                    className={`w-full sm:w-auto px-4 py-2 rounded-xl font-bold cursor-pointer text-center justify-center ${classes.buttonGhost}`}
                   >
                     Cancelar
                   </button>
@@ -709,7 +710,7 @@ export default function ExpensesDashboardPage() {
                     type="submit"
                     disabled={submitting}
                     style={{ backgroundColor: buttonColor }}
-                    className="px-5 py-2 rounded-xl font-bold text-white flex items-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
+                    className="w-full sm:w-auto px-5 py-2 rounded-xl font-bold text-white flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 cursor-pointer"
                   >
                     {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     <span>Registrar Gasto</span>

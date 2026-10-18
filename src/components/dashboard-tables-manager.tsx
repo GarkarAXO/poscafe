@@ -86,8 +86,13 @@ export default function DashboardTablesManager({
   const [showAreaModal, setShowAreaModal] = useState(false)
   const [editingTable, setEditingTable] = useState<TableItem | null>(null)
 
-  // Modal de Código QR de Mesa
-  const [qrModalTable, setQrModalTable] = useState<TableItem | null>(null)
+  // Modal de Código QR de Mesa o Menú General
+  const [qrModalTarget, setQrModalTarget] = useState<{
+    id: string
+    name: string
+    areaName?: string | null
+    isGeneralMenu?: boolean
+  } | null>(null)
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('')
   const [generatingQr, setGeneratingQr] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
@@ -162,7 +167,7 @@ export default function DashboardTablesManager({
 
   // Bloquear scroll de la página de fondo cuando cualquier modal esté activo
   useEffect(() => {
-    const isAnyModalOpen = Boolean(showCreateModal || showBulkModal || showAreaModal || qrModalTable)
+    const isAnyModalOpen = Boolean(showCreateModal || showBulkModal || showAreaModal || qrModalTarget)
     if (isAnyModalOpen) {
       const originalOverflow = document.body.style.overflow
       document.body.style.overflow = 'hidden'
@@ -170,7 +175,7 @@ export default function DashboardTablesManager({
         document.body.style.overflow = originalOverflow
       }
     }
-  }, [showCreateModal, showBulkModal, showAreaModal, qrModalTable])
+  }, [showCreateModal, showBulkModal, showAreaModal, qrModalTarget])
 
   // Cambiar modo de servicio (LIBRE vs ASIGNADO)
   const handleToggleServiceMode = async (newMode: 'FREE' | 'ASSIGNED') => {
@@ -357,13 +362,18 @@ export default function DashboardTablesManager({
     }
   }
 
-  // Generar y abrir Código QR para comensales en mesa
+  // Generar y abrir Código QR para comensales en mesa individual
   const handleOpenTableQR = async (table: TableItem) => {
-    setQrModalTable(table)
+    setQrModalTarget({
+      id: table.id,
+      name: table.name,
+      areaName: table.areaName,
+      isGeneralMenu: false,
+    })
     setGeneratingQr(true)
     setCopiedLink(false)
     try {
-      const url = `${window.location.origin}/menu?table=${encodeURIComponent(table.name)}`
+      const url = `${window.location.origin}/menu?table=${encodeURIComponent(table.name)}&branch_id=${encodeURIComponent(branchId)}`
       const dataUrl = await QRCode.toDataURL(url, {
         width: 360,
         margin: 2,
@@ -381,9 +391,40 @@ export default function DashboardTablesManager({
     }
   }
 
+  // Generar y abrir Código QR para el Menú General (Mostrador / Barra / Carta)
+  const handleOpenGeneralQR = async () => {
+    setQrModalTarget({
+      id: 'general-menu',
+      name: 'Menú Digital General',
+      areaName: branchName || 'Mostrador / Barra',
+      isGeneralMenu: true,
+    })
+    setGeneratingQr(true)
+    setCopiedLink(false)
+    try {
+      const url = `${window.location.origin}/menu?branch_id=${encodeURIComponent(branchId)}`
+      const dataUrl = await QRCode.toDataURL(url, {
+        width: 360,
+        margin: 2,
+        color: {
+          dark: '#3E2723',
+          light: '#FFFFFF',
+        },
+      })
+      setQrCodeDataUrl(dataUrl)
+    } catch (err) {
+      console.error('Error generando QR del menú:', err)
+      notify.error('Error', 'No se pudo generar el código QR del menú')
+    } finally {
+      setGeneratingQr(false)
+    }
+  }
+
   const handleCopyLink = () => {
-    if (!qrModalTable) return
-    const url = `${window.location.origin}/menu?table=${encodeURIComponent(qrModalTable.name)}`
+    if (!qrModalTarget) return
+    const url = qrModalTarget.isGeneralMenu
+      ? `${window.location.origin}/menu?branch_id=${encodeURIComponent(branchId)}`
+      : `${window.location.origin}/menu?table=${encodeURIComponent(qrModalTarget.name)}&branch_id=${encodeURIComponent(branchId)}`
     navigator.clipboard.writeText(url)
     setCopiedLink(true)
     notify.success('Copiado', 'Enlace copiado al portapapeles')
@@ -391,15 +432,21 @@ export default function DashboardTablesManager({
   }
 
   const handlePrintQR = () => {
-    if (!qrModalTable || !qrCodeDataUrl) return
+    if (!qrModalTarget || !qrCodeDataUrl) return
     const printWindow = window.open('', '_blank', 'width=600,height=700')
     if (!printWindow) return
+
+    const titleText = qrModalTarget.isGeneralMenu ? 'Carta & Menú Digital' : qrModalTarget.name
+    const subtitleText = qrModalTarget.isGeneralMenu ? branchName : (qrModalTarget.areaName || branchName)
+    const instructionsText = qrModalTarget.isGeneralMenu
+      ? '📱 Escanea con tu cámara para explorar nuestro menú y carta de especialidades'
+      : '📱 Escanea con tu cámara para explorar el menú y ordenar'
 
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>QR ${qrModalTable.name} - ${branchName}</title>
+          <title>QR ${titleText} - ${branchName}</title>
           <style>
             @page { size: auto; margin: 10mm; }
             body {
@@ -464,10 +511,10 @@ export default function DashboardTablesManager({
         <body>
           <div class="card">
             <div class="tag">Menú Digital</div>
-            <h1>${qrModalTable.name}</h1>
-            <div class="subtitle">${qrModalTable.areaName || branchName}</div>
-            <img src="${qrCodeDataUrl}" alt="QR ${qrModalTable.name}" />
-            <div class="instructions">📱 Escanea con tu cámara para explorar el menú y ordenar</div>
+            <h1>${titleText}</h1>
+            <div class="subtitle">${subtitleText}</div>
+            <img src="${qrCodeDataUrl}" alt="QR ${titleText}" />
+            <div class="instructions">${instructionsText}</div>
             <div class="brand">${branchName}</div>
           </div>
           <script>
@@ -612,15 +659,15 @@ export default function DashboardTablesManager({
             <span>Zonas / Áreas</span>
           </button>
 
-          <a
-            href="/menu"
-            target="_blank"
+          <button
+            type="button"
+            onClick={handleOpenGeneralQR}
             className={`px-3.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95 ${classes.buttonGhost}`}
-            title="Abrir Menú Digital para Clientes"
+            title="Ver e Imprimir Código QR del Menú Digital"
           >
             <QrCode className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>Ver Menú QR</span>
-          </a>
+          </button>
 
           <button
             type="button"
@@ -1153,13 +1200,13 @@ export default function DashboardTablesManager({
         </div>
       )}
 
-      {/* MODAL CÓDIGO QR DE MESA */}
-      {qrModalTable && (
+      {/* MODAL CÓDIGO QR DE MESA O MENÚ GENERAL */}
+      {qrModalTarget && (
         <ModalPortal>
           <div
             className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setQrModalTable(null)
+              if (e.target === e.currentTarget) setQrModalTarget(null)
             }}
           >
             <div className={`w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl animate-in zoom-in-95 border text-center my-auto ${classes.modalContent}`}>
@@ -1169,12 +1216,12 @@ export default function DashboardTablesManager({
                     Menú Digital Interactivo
                   </span>
                   <h3 className={`text-base font-bold ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-                    QR de {qrModalTable.name}
+                    {qrModalTarget.isGeneralMenu ? `QR Menú (${branchName})` : `QR de ${qrModalTarget.name}`}
                   </h3>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setQrModalTable(null)}
+                  onClick={() => setQrModalTarget(null)}
                   className={`w-7 h-7 rounded-xl flex items-center justify-center cursor-pointer ${classes.buttonGhost}`}
                 >
                   ✕
@@ -1192,17 +1239,21 @@ export default function DashboardTablesManager({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={qrCodeDataUrl}
-                      alt={`Código QR ${qrModalTable.name}`}
+                      alt={`Código QR ${qrModalTarget.name}`}
                       className="w-52 h-52 mx-auto"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <p className={`text-xs font-semibold ${classes.textMain}`}>
-                      Tus comensales verán directamente el menú de {qrModalTable.name}
+                      {qrModalTarget.isGeneralMenu
+                        ? `Código QR oficial para mostrador, barra o redes de ${branchName}`
+                        : `Tus comensales verán directamente el menú de ${qrModalTarget.name}`}
                     </p>
                     <p className={`text-[11px] ${classes.textMuted}`}>
-                      Podrán explorar platillos, precios, variantes y solicitar asistencia a su mesero.
+                      {qrModalTarget.isGeneralMenu
+                        ? 'Permite a los comensales ver toda la carta, platillos, fotos y precios.'
+                        : 'Podrán explorar platillos, precios, variantes y solicitar asistencia a su mesero.'}
                     </p>
                   </div>
 
@@ -1214,7 +1265,7 @@ export default function DashboardTablesManager({
                       className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer hover:opacity-95"
                     >
                       <Printer className="w-4 h-4" />
-                      <span>Imprimir Código QR para Mesa</span>
+                      <span>{qrModalTarget.isGeneralMenu ? 'Imprimir Código QR para Mostrador' : 'Imprimir Código QR para Mesa'}</span>
                     </button>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -1229,7 +1280,7 @@ export default function DashboardTablesManager({
 
                       <a
                         href={qrCodeDataUrl}
-                        download={`QR-${qrModalTable.name.replace(/\s+/g, '-')}.png`}
+                        download={qrModalTarget.isGeneralMenu ? `QR-Menu-${branchName.replace(/\s+/g, '-')}.png` : `QR-${qrModalTarget.name.replace(/\s+/g, '-')}.png`}
                         className={`py-2 rounded-xl border font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -1238,9 +1289,9 @@ export default function DashboardTablesManager({
                     </div>
 
                     <a
-                      href={`/menu?table=${encodeURIComponent(qrModalTable.name)}`}
+                      href={qrModalTarget.isGeneralMenu ? `/menu?branch_id=${encodeURIComponent(branchId)}` : `/menu?table=${encodeURIComponent(qrModalTarget.name)}&branch_id=${encodeURIComponent(branchId)}`}
                       target="_blank"
-                      className={`py-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center justify-center gap-1`}
+                      className="py-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center justify-center gap-1"
                     >
                       <span>Probar vista de cliente en nueva pestaña</span>
                       <ExternalLink className="w-3 h-3" />

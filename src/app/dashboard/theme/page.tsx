@@ -90,6 +90,16 @@ interface MenuThemePreset {
 
 const MENU_THEME_PRESETS: MenuThemePreset[] = [
   {
+    id: 'alevan-bloom-brew',
+    name: 'Alevan Bloom & Brew (Vino & Porcelana)',
+    description: 'Tapa oxblood profunda, páginas en porcelana cálida, tinta vino y detalles en rosa empolvado.',
+    menuCoverColor: '#320001',
+    menuPaperColor: '#F8F1EE',
+    menuTextColor: '#5E1222',
+    menuAccentColor: '#B4566F',
+    tag: 'Estilo Alevan',
+  },
+  {
     id: 'cuero-oro',
     name: 'Cuero Imperial & Oro',
     description: 'Tapa negra espresso, hojas pergamino marfil y filigranas doradas de alta cocina.',
@@ -118,6 +128,16 @@ const MENU_THEME_PRESETS: MenuThemePreset[] = [
     menuTextColor: '#1C1917',
     menuAccentColor: '#B8860B',
     tag: 'Elegante',
+  },
+  {
+    id: 'esmeralda-champagne',
+    name: 'Esmeralda & Oro Champagne',
+    description: 'Tapa verde bosque profundo, hojas marfil botánico y acentos en oro pálido.',
+    menuCoverColor: '#0B1E16',
+    menuPaperColor: '#F6F8F5',
+    menuTextColor: '#133326',
+    menuAccentColor: '#C5A059',
+    tag: 'Boutique',
   },
   {
     id: 'nocturno-ambar',
@@ -633,22 +653,23 @@ export default function ThemeCustomizerPage() {
     <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
       {/* Top Navbar Sticky (estándar de Catálogo e Insumos) */}
       <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
-        <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
+        <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+            className={`hidden md:inline-flex p-2 rounded-xl border transition-all items-center gap-1.5 text-xs font-semibold cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
             title="Volver al Panel General"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="hidden sm:inline">Dashboard</span>
           </Link>
 
-          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`} />
+          <div className={`hidden md:block h-5 w-px border-l ${classes.divider} shrink-0`} />
 
           <div className="overflow-hidden">
-            <h1 className={`font-extrabold text-sm sm:text-base flex items-center gap-2 tracking-tight truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+            <h1 className={`font-extrabold text-sm sm:text-base flex items-center gap-1.5 tracking-tight truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
               <Palette className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: sysButtonColor }} />
-              <span className="truncate">Temas y Colores del Sistema</span>
+              <span className="inline sm:hidden">Temas</span>
+              <span className="hidden sm:inline">Temas y Colores del Sistema</span>
             </h1>
             <p className={`text-[11px] sm:text-xs truncate hidden sm:block ${classes.textMuted}`}>
               Personalización visual de Comandera, POS, Barra Lateral, Logos y KDS

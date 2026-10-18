@@ -436,20 +436,21 @@ export default function InventoryDashboardPage() {
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+            className={`hidden lg:inline-flex p-2 rounded-xl border transition-all items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
 
-          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
+          <div className={`hidden lg:block h-5 w-px border-l ${classes.divider} shrink-0`}></div>
 
           <div className="min-w-0">
             <h1 className={`font-bold text-sm sm:text-base flex items-center gap-2 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
               <Boxes className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
-              <span className="truncate">Inventario de Insumos y Materias Primas</span>
+              <span className="lg:hidden">Inventario</span>
+              <span className="hidden lg:inline truncate">Inventario de Insumos y Materias Primas</span>
             </h1>
-            <p className={`text-xs truncate hidden sm:block ${classes.textMuted}`}>
+            <p className={`text-xs truncate hidden lg:block ${classes.textMuted}`}>
               Existencias en almacenes, compras automáticas y alertas de stock
             </p>
           </div>
@@ -643,9 +644,10 @@ export default function InventoryDashboardPage() {
         </div>
       </div>
 
-      {/* Tabla de Insumos y Existencias */}
+      {/* Vista de Insumos y Existencias: Tabla en Desktop / Tarjetas en Móvil */}
       <div className={`rounded-3xl border overflow-hidden shadow-lg ${classes.card}`}>
-        <div className="overflow-x-auto">
+        {/* Tabla Desktop (lg y superior: >= 1024px) */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className={`w-full text-left text-xs ${classes.textMain}`}>
             <thead className={`uppercase font-semibold text-[10px] border-b ${classes.tableHeader}`}>
               <tr>
@@ -831,6 +833,170 @@ export default function InventoryDashboardPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Tarjetas Móvil y Tablet (< lg: < 1024px) */}
+        <div className="block lg:hidden">
+          {loading ? (
+            <div className={`p-8 text-center ${classes.textMuted}`}>
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" style={{ color: buttonColor }} />
+              Cargando inventario de insumos...
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className={`p-8 text-center text-xs ${classes.textMuted}`}>
+              No se encontraron insumos que coincidan con la búsqueda o filtro seleccionado.
+            </div>
+          ) : (
+            <div className="p-3.5 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {filteredItems.map((item) => {
+                const totalStock = item.warehouseStock.reduce(
+                  (acc, ws) => acc + (Number((ws as any).quantity ?? ws.currentStock) || 0),
+                  0
+                )
+                const unitLabel = formatUnitFull(item.baseUnit)
+                const unitSymbol = formatUnitSymbol(item.baseUnit)
+                const isOutOfStock = totalStock <= 0
+                const isLowStock = Boolean(item.reorderPoint && totalStock <= Number(item.reorderPoint))
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-4 rounded-2xl border space-y-3 transition-colors ${classes.subCard} ${classes.tableRow} ${
+                      !item.active ? 'opacity-60' : ''
+                    }`}
+                  >
+                  {/* Encabezado de la tarjeta */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                        <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${classes.badge}`}>
+                          {item.sku || 'SIN-SKU'}
+                        </span>
+                        {!item.active && (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded border ${classes.badge}`}>
+                            Descontinuado
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded-lg border font-mono text-[10px] font-semibold ${classes.badge}`}>
+                          {unitLabel}
+                        </span>
+                      </div>
+                      <h4 className={`text-sm font-bold truncate ${classes.textMain}`}>
+                        {item.name}
+                      </h4>
+                    </div>
+
+                    {/* Estado badge */}
+                    <div className="shrink-0">
+                      {!item.active ? (
+                        <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold inline-flex items-center gap-1 ${classes.badge}`}>
+                          Inactivo
+                        </span>
+                      ) : isOutOfStock ? (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                          <XCircle className="w-3 h-3" /> Agotado
+                        </span>
+                      ) : isLowStock ? (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" /> Stock Bajo
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold inline-flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> En Stock
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Métricas clave en grid */}
+                  <div className={`grid grid-cols-2 gap-2 p-2.5 rounded-xl border text-xs ${isLight ? 'bg-amber-50/40 border-[#E6D5C3]/70' : 'bg-black/20 border-white/5'}`}>
+                    <div>
+                      <span className={`text-[10px] block uppercase font-medium ${classes.textSub}`}>Stock Total</span>
+                      <strong className={`text-xs font-mono font-bold ${classes.textMain}`}>
+                        {totalStock.toLocaleString('es-MX')} {unitSymbol}
+                      </strong>
+                      {item.warehouseStock.length > 1 && (
+                        <div className={`text-[9px] mt-0.5 space-y-0.5 ${classes.textSub}`}>
+                          {item.warehouseStock.map((ws) => {
+                            const stockVal = Number((ws as any).quantity ?? ws.currentStock) || 0
+                            return (
+                              <div key={ws.id} className="truncate">
+                                {ws.warehouse?.name || 'Alm'}: {stockVal.toLocaleString('es-MX')}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className={`text-[10px] block uppercase font-medium ${classes.textSub}`}>Costo Unitario</span>
+                      <strong className={`text-xs font-mono font-medium ${classes.textMuted}`}>
+                        ${Number(item.costPerUnit).toFixed(2)} <span className={`text-[10px] ${classes.textSub}`}>/{unitSymbol}</span>
+                      </strong>
+                      <div className={`text-[9px] mt-0.5 ${classes.textSub}`}>
+                        Reorden: {item.reorderPoint ? `${Number(item.reorderPoint).toLocaleString('es-MX')} ${unitSymbol}` : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Presentaciones de compra si existen */}
+                  {item.presentations.length > 0 && (
+                    <div className={`text-[11px] flex items-center gap-1.5 flex-wrap ${classes.textSub}`}>
+                      <span className="font-semibold text-[10px]">Presentaciones:</span>
+                      {item.presentations.map((pr) => (
+                        <span key={pr.id} className={`px-1.5 py-0.5 rounded border text-[10px] ${classes.badge}`}>
+                          {pr.name} ({pr.factorToBase} {unitSymbol})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Barra de Acciones Móviles */}
+                  <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-inherit">
+                    <button
+                      type="button"
+                      onClick={() => openWasteModal(item)}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 text-xs font-medium inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <AlertOctagon className="w-3.5 h-3.5" />
+                      <span>Merma</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(item)}
+                      className={`px-2.5 py-1.5 rounded-xl border text-amber-600 dark:text-amber-400 text-xs font-medium inline-flex items-center gap-1.5 transition-all ${classes.buttonGhost}`}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Editar</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(item)}
+                      className={`p-1.5 rounded-xl border text-xs transition-all ${classes.buttonGhost} ${
+                        item.active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
+                      }`}
+                      title={item.active ? 'Desactivar' : 'Reactivar'}
+                    >
+                      <Power className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteItem(item)}
+                      className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 text-xs transition-all"
+                      title="Archivar"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+            </div>
+          )}
         </div>
       </div>
 

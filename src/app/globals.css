@@ -1,5 +1,67 @@
 @import "tailwindcss";
 
+.font-dancing {
+  font-family: 'Dancing Script', cursive;
+}
+.font-bodoni {
+  font-family: 'Bodoni Moda', 'Didot', Georgia, serif;
+}
+.font-marcellus {
+  font-family: 'Marcellus', 'Optima', Palatino, serif;
+}
+.font-script {
+  font-family: 'Pinyon Script', 'Snell Roundhand', cursive;
+}
+
+@keyframes drip {
+  0% { transform: scaleY(0); opacity: 1; }
+  60% { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 0; }
+}
+.animate-drip {
+  animation: drip 2.2s ease-in-out infinite;
+  transform-origin: top;
+}
+
+/* Alevan Bloom & Brew Design System */
+:root {
+  --oxblood: #320001;
+  --wine: #5E1222;
+  --porcelain: #F8F1EE;
+  --blush: #F0DADD;
+  --rose: #B4566F;
+  --muted: #7A5660;
+  --line: #E3CFD2;
+  --cream: #F6EEE4;
+}
+
+.alevan-arch {
+  display: block;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3/4.1;
+  border-radius: 20px;
+  overflow: hidden;
+  isolation: isolate;
+}
+.alevan-arch img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 1.1s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.alevan-arch:hover img {
+  transform: scale(1.045);
+}
+.alevan-arch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(94, 18, 34, 0.08);
+  pointer-events: none;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

@@ -40,23 +40,24 @@ export default async function DashboardTablesPage() {
     <div className="flex-1 flex flex-col w-full">
       {/* Top Navbar estandarizado con retorno al Dashboard idéntico a catalog/page.tsx */}
       <header className="border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md bg-[#14100E]/95 border-[#2D1B15]">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className="p-2 rounded-xl border border-white/10 hover:bg-white/5 transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 text-white active:scale-95 touch-manipulation select-none"
+            className="hidden lg:inline-flex p-2 rounded-xl border border-white/10 hover:bg-white/5 transition-all items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 text-white active:scale-95 touch-manipulation select-none"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
 
-          <div className="h-5 w-px border-l border-white/10 shrink-0"></div>
+          <div className="hidden lg:block h-5 w-px border-l border-white/10 shrink-0"></div>
 
           <div className="min-w-0">
-            <h1 className="font-bold text-sm sm:text-base flex items-center gap-2 truncate text-white">
-              <LayoutGrid className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
-              <span className="truncate">Control de Mesas y Meseros</span>
+            <h1 className="font-bold text-sm sm:text-base flex items-center gap-1.5 truncate text-white">
+              <LayoutGrid className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="inline sm:hidden">Mesas</span>
+              <span className="hidden sm:inline">Control de Mesas y Meseros</span>
             </h1>
-            <p className="text-xs truncate hidden sm:block text-slate-400">
+            <p className="text-[11px] sm:text-xs truncate hidden sm:block text-slate-400">
               Distribución de sala, códigos QR para mesas y modo de servicio de {activeBranch.name}
             </p>
           </div>
@@ -72,9 +73,10 @@ export default async function DashboardTablesPage() {
             <span className="hidden sm:inline">Ir a Comandera</span>
           </Link>
           <a
-            href="/menu"
+            href={`/menu?branch_id=${activeBranch.id}`}
             target="_blank"
             className="px-3 py-2 rounded-xl border border-white/10 hover:bg-white/5 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 touch-manipulation text-white"
+            title="Abrir Menú Digital para Clientes"
           >
             <QrCode className="w-4 h-4 text-emerald-400" />
             <span className="hidden sm:inline">Menú QR</span>

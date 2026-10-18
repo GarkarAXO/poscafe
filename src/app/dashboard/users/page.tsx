@@ -569,23 +569,24 @@ export default function UsersAndRolesPage() {
     <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
       {/* Top Navbar */}
       <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Link
             href="/dashboard"
-            className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
+            className={`hidden lg:inline-flex p-2 rounded-xl border transition-all items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0 active:scale-95 touch-manipulation select-none ${classes.buttonGhost}`}
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Dashboard</span>
           </Link>
 
-          <div className={`h-5 w-px border-l ${classes.divider} shrink-0`}></div>
+          <div className={`hidden lg:block h-5 w-px border-l ${classes.divider} shrink-0`}></div>
 
           <div className="min-w-0">
-            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-2 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
-              <Users className="w-5 h-5 shrink-0" style={{ color: buttonColor }} />
-              <span className="truncate">Personal y Roles</span>
+            <h1 className={`font-bold text-sm sm:text-base flex items-center gap-1.5 truncate ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+              <Users className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" style={{ color: buttonColor }} />
+              <span className="inline sm:hidden">Personal</span>
+              <span className="hidden sm:inline">Personal y Roles</span>
             </h1>
-            <p className={`text-xs truncate hidden sm:block ${classes.textMuted}`}>
+            <p className={`text-[11px] sm:text-xs truncate hidden sm:block ${classes.textMuted}`}>
               Credenciales, PINs de acceso rápido y permisos de autorización
             </p>
           </div>
