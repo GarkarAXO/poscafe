@@ -110,6 +110,25 @@ export default function DashboardSidebar({
     setMobileOpen(false)
   }, [pathname])
 
+  // Bloquear scroll del fondo cuando el drawer móvil está abierto (evitar scroll bleed)
+  useEffect(() => {
+    if (mobileOpen) {
+      const originalBodyOverflow = document.body.style.overflow
+      const originalBodyOverscroll = document.body.style.overscrollBehavior
+      const originalHtmlOverscroll = document.documentElement.style.overscrollBehavior
+
+      document.body.style.overflow = 'hidden'
+      document.body.style.overscrollBehavior = 'none'
+      document.documentElement.style.overscrollBehavior = 'none'
+
+      return () => {
+        document.body.style.overflow = originalBodyOverflow
+        document.body.style.overscrollBehavior = originalBodyOverscroll
+        document.documentElement.style.overscrollBehavior = originalHtmlOverscroll
+      }
+    }
+  }, [mobileOpen])
+
   const activeBranch =
     business.branches.find((b) => b.id === activeBranchId) || business.branches[0]
 
@@ -118,7 +137,23 @@ export default function DashboardSidebar({
   const secondaryColor = activeBranch?.secondaryColor || settings.secondaryColor || '#5E3023'
   const logoUrl = activeBranch?.logoUrl || settings.logoUrl
   const isotypeUrl = activeBranch?.isotypeUrl || settings.isotypeUrl
-  const sidebarTheme = (activeBranch?.sidebarTheme || settings.sidebarTheme || 'DARK').toUpperCase()
+  const rawSidebarTheme = (activeBranch?.sidebarTheme || settings.sidebarTheme || 'DARK').trim()
+  const sidebarTheme = rawSidebarTheme.startsWith('#') ? rawSidebarTheme.toUpperCase() : rawSidebarTheme.toUpperCase()
+
+  const isColorLight = (hex: string): boolean => {
+    try {
+      const clean = hex.replace('#', '')
+      const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean
+      if (full.length !== 6) return false
+      const r = parseInt(full.substring(0, 2), 16) / 255
+      const g = parseInt(full.substring(2, 4), 16) / 255
+      const b = parseInt(full.substring(4, 6), 16) / 255
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+      return lum > 0.65
+    } catch {
+      return false
+    }
+  }
 
   const isLight = sidebarTheme === 'LIGHT'
   const isWhite = sidebarTheme === 'WHITE'
@@ -127,10 +162,24 @@ export default function DashboardSidebar({
   const isNavy = sidebarTheme === 'NAVY'
   const isBurgundy = sidebarTheme === 'BURGUNDY'
   const isCharcoal = sidebarTheme === 'CHARCOAL'
-  const isLightMode = isLight || isWhite
+  const isAmber = sidebarTheme === 'AMBER'
+  const isTeal = sidebarTheme === 'TEAL'
+  const isPurple = sidebarTheme === 'PURPLE'
+  const isSlate = sidebarTheme === 'SLATE'
+  const isForest = sidebarTheme === 'FOREST'
+  const isRose = sidebarTheme === 'ROSE'
+  const isChocolate = sidebarTheme === 'CHOCOLATE'
+  const isMidnight = sidebarTheme === 'MIDNIGHT'
+  const isHex = sidebarTheme.startsWith('#')
+  const isCustomLight = isHex && isColorLight(sidebarTheme)
+  const isLightMode = isLight || isWhite || isCustomLight
 
   // Estilos de acuerdo al tema del sidebar configurado
-  const asideBgClass = isWhite
+  const asideBgClass = isHex
+    ? isCustomLight
+      ? 'border-r border-slate-300 text-slate-800'
+      : 'border-r border-white/10 text-[#F3E9DC]'
+    : isWhite
     ? 'bg-white border-r border-slate-200 text-slate-800'
     : isLight
     ? 'bg-[#FDFBF9]/98 border-r border-[#EAD8C7] text-[#3D1E16]'
@@ -144,9 +193,29 @@ export default function DashboardSidebar({
     ? 'bg-[#1F0C16]/98 border-r border-[#381628] text-[#F8E3EE]'
     : isCharcoal
     ? 'bg-[#15181C]/98 border-r border-[#262B32] text-[#E6EAF0]'
+    : isAmber
+    ? 'bg-[#1C1308]/98 border-r border-[#3B2610] text-[#FDE68A]'
+    : isTeal
+    ? 'bg-[#071719]/98 border-r border-[#133237] text-[#CCFBF1]'
+    : isPurple
+    ? 'bg-[#150A21]/98 border-r border-[#2D1645] text-[#F3E8FF]'
+    : isSlate
+    ? 'bg-[#0B1120]/98 border-r border-[#1E293B] text-[#E2E8F0]'
+    : isForest
+    ? 'bg-[#08150C]/98 border-r border-[#142F1C] text-[#DCFCE7]'
+    : isRose
+    ? 'bg-[#1C0D15]/98 border-r border-[#381A2A] text-[#FFE4E6]'
+    : isChocolate
+    ? 'bg-[#20120B]/98 border-r border-[#3A2013] text-[#FBE7DB]'
+    : isMidnight
+    ? 'bg-[#090A0D]/98 border-r border-[#1E2026] text-[#F8FAFC]'
     : 'bg-[#14100E]/98 border-r border-[#2D1B15] text-[#F3E9DC]'
 
-  const headerBorderClass = isWhite
+  const headerBorderClass = isHex
+    ? isCustomLight
+      ? 'border-slate-300'
+      : 'border-white/10'
+    : isWhite
     ? 'border-slate-200'
     : isLight
     ? 'border-[#EAD8C7]'
@@ -160,9 +229,29 @@ export default function DashboardSidebar({
     ? 'border-[#381628]'
     : isCharcoal
     ? 'border-[#262B32]'
+    : isAmber
+    ? 'border-[#3B2610]'
+    : isTeal
+    ? 'border-[#133237]'
+    : isPurple
+    ? 'border-[#2D1645]'
+    : isSlate
+    ? 'border-[#1E293B]'
+    : isForest
+    ? 'border-[#142F1C]'
+    : isRose
+    ? 'border-[#381A2A]'
+    : isChocolate
+    ? 'border-[#3A2013]'
+    : isMidnight
+    ? 'border-[#1E2026]'
     : 'border-[#2D1B15]'
 
-  const headingTextClass = isWhite
+  const headingTextClass = isHex
+    ? isCustomLight
+      ? 'text-slate-900'
+      : 'text-white'
+    : isWhite
     ? 'text-slate-900'
     : isLight
     ? 'text-[#3D1E16]'
@@ -174,9 +263,29 @@ export default function DashboardSidebar({
     ? 'text-[#F8E3EE]'
     : isCharcoal
     ? 'text-[#E6EAF0]'
+    : isAmber
+    ? 'text-[#FDE68A]'
+    : isTeal
+    ? 'text-[#CCFBF1]'
+    : isPurple
+    ? 'text-[#F3E8FF]'
+    : isSlate
+    ? 'text-[#E2E8F0]'
+    : isForest
+    ? 'text-[#DCFCE7]'
+    : isRose
+    ? 'text-[#FFE4E6]'
+    : isChocolate
+    ? 'text-[#FBE7DB]'
+    : isMidnight
+    ? 'text-[#F8FAFC]'
     : 'text-[#F3E9DC]'
 
-  const mutedTextClass = isWhite
+  const mutedTextClass = isHex
+    ? isCustomLight
+      ? 'text-slate-600'
+      : 'text-white/60'
+    : isWhite
     ? 'text-slate-500'
     : isLight
     ? 'text-[#8C6D58]'
@@ -190,9 +299,29 @@ export default function DashboardSidebar({
     ? 'text-[#C48FA9]'
     : isCharcoal
     ? 'text-[#9AA2B0]'
+    : isAmber
+    ? 'text-[#C9974B]'
+    : isTeal
+    ? 'text-[#5EEAD4]'
+    : isPurple
+    ? 'text-[#C084FC]'
+    : isSlate
+    ? 'text-[#94A3B8]'
+    : isForest
+    ? 'text-[#86EFAC]'
+    : isRose
+    ? 'text-[#FDA4AF]'
+    : isChocolate
+    ? 'text-[#D97706]'
+    : isMidnight
+    ? 'text-[#94A3B8]'
     : 'text-[#A88C7D]'
 
-  const toggleBtnClass = isWhite
+  const toggleBtnClass = isHex
+    ? isCustomLight
+      ? 'bg-black/5 hover:bg-black/10 text-slate-800 border border-black/10'
+      : 'bg-white/10 hover:bg-white/15 text-white border border-white/15'
+    : isWhite
     ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
     : isLight
     ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023] border border-[#DECEBD]'
@@ -206,9 +335,29 @@ export default function DashboardSidebar({
     ? 'bg-[#2D1221] hover:bg-[#3D1A2E] text-[#E8BBD2] border border-[#481D34]'
     : isCharcoal
     ? 'bg-[#1F2329] hover:bg-[#2A3038] text-[#D0D6E0] border border-[#2F353E]'
+    : isAmber
+    ? 'bg-[#2B1D0C] hover:bg-[#3D2912] text-[#FDE68A] border border-[#3B2610]'
+    : isTeal
+    ? 'bg-[#0E2327] hover:bg-[#15343A] text-[#CCFBF1] border border-[#133237]'
+    : isPurple
+    ? 'bg-[#231236] hover:bg-[#321A4D] text-[#F3E8FF] border border-[#2D1645]'
+    : isSlate
+    ? 'bg-[#162238] hover:bg-[#1F304E] text-[#E2E8F0] border border-[#1E293B]'
+    : isForest
+    ? 'bg-[#102616] hover:bg-[#163820] text-[#DCFCE7] border border-[#142F1C]'
+    : isRose
+    ? 'bg-[#2B1420] hover:bg-[#3D1D2E] text-[#FFE4E6] border border-[#381A2A]'
+    : isChocolate
+    ? 'bg-[#2C180E] hover:bg-[#3D2214] text-[#FBE7DB] border border-[#3A2013]'
+    : isMidnight
+    ? 'bg-[#14161C] hover:bg-[#1D2029] text-[#F8FAFC] border border-[#1E2026]'
     : 'bg-[#231713] hover:bg-[#331C14] text-[#DECEBD] border border-[#2D1B15]'
 
-  const branchPillClass = isWhite
+  const branchPillClass = isHex
+    ? isCustomLight
+      ? 'bg-black/5 border-black/10'
+      : 'bg-black/30 border-white/10'
+    : isWhite
     ? 'bg-slate-100/80 border-slate-200'
     : isLight
     ? 'bg-[#F3E9DC]/80 border-[#DECEBD]'
@@ -222,9 +371,29 @@ export default function DashboardSidebar({
     ? 'bg-[#14060E] border-[#381628]'
     : isCharcoal
     ? 'bg-[#0D0F12] border-[#262B32]'
+    : isAmber
+    ? 'bg-[#120B04] border-[#3B2610]'
+    : isTeal
+    ? 'bg-[#040E0F] border-[#133237]'
+    : isPurple
+    ? 'bg-[#0C0514] border-[#2D1645]'
+    : isSlate
+    ? 'bg-[#060A14] border-[#1E293B]'
+    : isForest
+    ? 'bg-[#040C07] border-[#142F1C]'
+    : isRose
+    ? 'bg-[#12070D] border-[#381A2A]'
+    : isChocolate
+    ? 'bg-[#140A06] border-[#3A2013]'
+    : isMidnight
+    ? 'bg-[#050608] border-[#1E2026]'
     : 'bg-[#1E100D] border-[#2D1B15]'
 
-  const navItemInactiveClass = isWhite
+  const navItemInactiveClass = isHex
+    ? isCustomLight
+      ? 'text-slate-700 hover:bg-black/5 hover:text-slate-900'
+      : 'text-white/80 hover:bg-white/10 hover:text-white'
+    : isWhite
     ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
     : isLight
     ? 'text-[#5E3023] hover:bg-[#F3E9DC] hover:text-[#2B1712]'
@@ -238,13 +407,33 @@ export default function DashboardSidebar({
     ? 'text-[#DCADC5] hover:bg-[#2D1221] hover:text-white'
     : isCharcoal
     ? 'text-[#BAC2CE] hover:bg-[#1F2329] hover:text-white'
+    : isAmber
+    ? 'text-[#FDE68A]/80 hover:bg-[#2B1D0C] hover:text-[#FDE68A]'
+    : isTeal
+    ? 'text-[#CCFBF1]/80 hover:bg-[#0E2327] hover:text-white'
+    : isPurple
+    ? 'text-[#F3E8FF]/80 hover:bg-[#231236] hover:text-white'
+    : isSlate
+    ? 'text-[#E2E8F0]/80 hover:bg-[#162238] hover:text-white'
+    : isForest
+    ? 'text-[#DCFCE7]/80 hover:bg-[#102616] hover:text-white'
+    : isRose
+    ? 'text-[#FFE4E6]/80 hover:bg-[#2B1420] hover:text-white'
+    : isChocolate
+    ? 'text-[#FBE7DB]/80 hover:bg-[#2C180E] hover:text-white'
+    : isMidnight
+    ? 'text-[#F8FAFC]/80 hover:bg-[#14161C] hover:text-white'
     : 'text-[#DECEBD] hover:bg-[#231713] hover:text-[#F3E9DC]'
 
   const navItemHighlightClass = isLightMode
     ? 'bg-[#C08552]/15 text-[#5E3023] hover:bg-[#C08552]/25 border border-[#C08552]/30'
     : 'bg-[#C08552]/20 text-[#F3E9DC] hover:bg-[#C08552]/30 border border-[#C08552]/40'
 
-  const footerBgClass = isWhite
+  const footerBgClass = isHex
+    ? isCustomLight
+      ? 'border-t border-slate-300 bg-black/5'
+      : 'border-t border-white/10 bg-black/25'
+    : isWhite
     ? 'border-t border-slate-200 bg-slate-50/80'
     : isLight
     ? 'border-t border-[#EAD8C7] bg-[#F7F2ED]/90'
@@ -258,9 +447,29 @@ export default function DashboardSidebar({
     ? 'border-t border-[#381628] bg-[#12050D]/90'
     : isCharcoal
     ? 'border-t border-[#262B32] bg-[#0C0E10]/90'
+    : isAmber
+    ? 'border-t border-[#3B2610] bg-[#120B04]/90'
+    : isTeal
+    ? 'border-t border-[#133237] bg-[#040E0F]/90'
+    : isPurple
+    ? 'border-t border-[#2D1645] bg-[#0C0514]/90'
+    : isSlate
+    ? 'border-t border-[#1E293B] bg-[#060A14]/90'
+    : isForest
+    ? 'border-t border-[#142F1C] bg-[#040C07]/90'
+    : isRose
+    ? 'border-t border-[#381A2A] bg-[#12070D]/90'
+    : isChocolate
+    ? 'border-t border-[#3A2013] bg-[#140A06]/90'
+    : isMidnight
+    ? 'border-t border-[#1E2026] bg-[#050608]/90'
     : 'border-t border-[#2D1B15] bg-[#0E0B0A]/90'
 
-  const footerLogoutBtnClass = isWhite
+  const footerLogoutBtnClass = isHex
+    ? isCustomLight
+      ? 'bg-black/5 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-black/10'
+      : 'bg-white/10 hover:bg-rose-500/20 text-white/80 hover:text-rose-300 border border-white/15'
+    : isWhite
     ? 'bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200'
     : isLight
     ? 'bg-[#F3E9DC] hover:bg-rose-50 text-[#8C6D58] hover:text-rose-600 border border-[#DECEBD]'
@@ -274,9 +483,29 @@ export default function DashboardSidebar({
     ? 'bg-[#2D1221] hover:bg-rose-500/20 text-[#DCADC5] hover:text-rose-300 border border-[#422214]'
     : isCharcoal
     ? 'bg-[#1F2329] hover:bg-rose-500/20 text-[#BAC2CE] hover:text-rose-300 border border-[#2F353E]'
+    : isAmber
+    ? 'bg-[#2B1D0C] hover:bg-rose-500/20 text-[#FDE68A] hover:text-rose-300 border border-[#3B2610]'
+    : isTeal
+    ? 'bg-[#0E2327] hover:bg-rose-500/20 text-[#CCFBF1] hover:text-rose-300 border border-[#133237]'
+    : isPurple
+    ? 'bg-[#231236] hover:bg-rose-500/20 text-[#F3E8FF] hover:text-rose-300 border border-[#2D1645]'
+    : isSlate
+    ? 'bg-[#162238] hover:bg-rose-500/20 text-[#E2E8F0] hover:text-rose-300 border border-[#1E293B]'
+    : isForest
+    ? 'bg-[#102616] hover:bg-rose-500/20 text-[#DCFCE7] hover:text-rose-300 border border-[#142F1C]'
+    : isRose
+    ? 'bg-[#2B1420] hover:bg-rose-500/20 text-[#FFE4E6] hover:text-rose-300 border border-[#381A2A]'
+    : isChocolate
+    ? 'bg-[#2C180E] hover:bg-rose-500/20 text-[#FBE7DB] hover:text-rose-300 border border-[#3A2013]'
+    : isMidnight
+    ? 'bg-[#14161C] hover:bg-rose-500/20 text-[#F8FAFC] hover:text-rose-300 border border-[#1E2026]'
     : 'bg-[#231713] hover:bg-rose-500/20 text-[#DECEBD] hover:text-rose-300 border border-[#2D1B15]'
 
-  const mobileBtnClass = isWhite
+  const mobileBtnClass = isHex
+    ? isCustomLight
+      ? 'border-slate-300 text-slate-800'
+      : 'border-white/15 text-white'
+    : isWhite
     ? 'bg-white border-slate-200 text-slate-800'
     : isLight
     ? 'bg-[#FDFBF9] border-[#EAD8C7] text-[#3D1E16]'
@@ -290,6 +519,22 @@ export default function DashboardSidebar({
     ? 'bg-[#1F0C16] border-[#381628] text-[#F8E3EE]'
     : isCharcoal
     ? 'bg-[#15181C] border-[#262B32] text-[#E6EAF0]'
+    : isAmber
+    ? 'bg-[#1C1308] border-[#3B2610] text-[#FDE68A]'
+    : isTeal
+    ? 'bg-[#071719] border-[#133237] text-[#CCFBF1]'
+    : isPurple
+    ? 'bg-[#150A21] border-[#2D1645] text-[#F3E8FF]'
+    : isSlate
+    ? 'bg-[#0B1120] border-[#1E293B] text-[#E2E8F0]'
+    : isForest
+    ? 'bg-[#08150C] border-[#142F1C] text-[#DCFCE7]'
+    : isRose
+    ? 'bg-[#1C0D15] border-[#381A2A] text-[#FFE4E6]'
+    : isChocolate
+    ? 'bg-[#20120B] border-[#3A2013] text-[#FBE7DB]'
+    : isMidnight
+    ? 'bg-[#090A0D] border-[#1E2026] text-[#F8FAFC]'
     : 'bg-[#14100E] border-[#2D1B15] text-[#F3E9DC]'
 
   interface NavItem {
@@ -484,25 +729,31 @@ export default function DashboardSidebar({
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
           className={`p-2.5 rounded-xl ${mobileBtnClass} shadow-lg cursor-pointer active:scale-95 touch-manipulation select-none transition-transform flex items-center justify-center`}
+          style={isHex ? { backgroundColor: sidebarTheme } : undefined}
           title="Menú de Navegación"
         >
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
 
-      {/* Overlay para móviles */}
+      {/* Overlay para móviles con bloqueo estricto de eventos de scroll */}
       {mobileOpen && (
         <div
           onClick={() => setMobileOpen(false)}
-          className="lg:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-xs"
+          onTouchMove={(e) => e.preventDefault()}
+          className="lg:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-xs overscroll-none touch-none"
         />
       )}
 
-      {/* Barra Lateral (Sidebar) con transición fluida */}
+      {/* Barra Lateral (Sidebar) con transición fluida y contención de scroll */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 ${asideBgClass} flex flex-col transition-all duration-300 backdrop-blur-md ${
+        className={`fixed top-0 bottom-0 left-0 z-50 ${asideBgClass} flex flex-col transition-all duration-300 backdrop-blur-md overscroll-contain touch-pan-y ${
           collapsed ? 'w-20' : 'w-64'
         } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        style={{
+          ...(isHex ? { backgroundColor: sidebarTheme } : {}),
+          overscrollBehavior: 'contain',
+        }}
       >
         {/* Cabecera del Sidebar */}
         <div
@@ -618,8 +869,11 @@ export default function DashboardSidebar({
           </div>
         )}
 
-        {/* Enlaces de Navegación */}
-        <div className="flex-1 p-3 space-y-5 overflow-y-auto">
+        {/* Enlaces de Navegación con scroll contenido */}
+        <div
+          className="flex-1 p-3 space-y-5 overflow-y-auto overscroll-contain touch-pan-y"
+          style={{ overscrollBehavior: 'contain' }}
+        >
           {navLinks.map((group, gIdx) => (
             <div key={gIdx} className="space-y-1">
               {!collapsed && (

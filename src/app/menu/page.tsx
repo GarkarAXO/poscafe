@@ -221,6 +221,25 @@ export default async function PublicMenuPage(props: MenuPageProps) {
     ? await prisma.branch.findFirst({ where: { id: branchIdParam, businessId: business.id } })
     : business.branches[0] || null
 
+  let extraMenuConfig: {
+    heroWallpaperUrl?: string | null
+    heroWallpaperOpacity?: number | null
+    instagramUrl?: string | null
+    facebookUrl?: string | null
+    tiktokUrl?: string | null
+    whatsappNumber?: string | null
+    mapsUrl?: string | null
+  } = {}
+
+  if (activeBranch?.addressLine2) {
+    try {
+      const parsed = JSON.parse(activeBranch.addressLine2)
+      if (typeof parsed === 'object' && parsed !== null) {
+        extraMenuConfig = parsed
+      }
+    } catch {}
+  }
+
   const businessData = {
     id: business.id,
     name: business.name,
@@ -229,6 +248,15 @@ export default async function PublicMenuPage(props: MenuPageProps) {
     isotypeUrl: activeBranch?.isotypeUrl || settings?.isotypeUrl || null,
     currency: business.currencyCode || 'MXN',
     timezone: business.timezone || 'America/Mexico_City',
+    socialLinks: {
+      instagram: extraMenuConfig.instagramUrl || null,
+      facebook: extraMenuConfig.facebookUrl || null,
+      tiktok: extraMenuConfig.tiktokUrl || null,
+      whatsapp: extraMenuConfig.whatsappNumber || activeBranch?.phone || business.phone || null,
+      maps: extraMenuConfig.mapsUrl || null,
+    },
+    heroWallpaperUrl: extraMenuConfig.heroWallpaperUrl || null,
+    heroWallpaperOpacity: extraMenuConfig.heroWallpaperOpacity ?? 0.35,
     theme: {
       primaryColor: activeBranch?.primaryColor || settings?.primaryColor || '#C08552',
       secondaryColor: activeBranch?.secondaryColor || settings?.secondaryColor || '#5E3023',
@@ -241,8 +269,15 @@ export default async function PublicMenuPage(props: MenuPageProps) {
       menuCoverTitle: activeBranch?.menuCoverTitle || settings?.menuCoverTitle || 'CARTA DE ESPECIALIDADES',
       menuCoverSubtitle: activeBranch?.menuCoverSubtitle || settings?.menuCoverSubtitle || 'Café de especialidad y gastronomía artesanal',
       businessHours: activeBranch?.businessHours || settings?.businessHours || 'Lunes a Domingo: 8:00 AM - 10:00 PM',
-      phone: activeBranch?.phone || null,
+      phone: activeBranch?.phone || business.phone || null,
       address: activeBranch?.addressLine1 || null,
+      heroWallpaperUrl: extraMenuConfig.heroWallpaperUrl || null,
+      heroWallpaperOpacity: extraMenuConfig.heroWallpaperOpacity ?? 0.35,
+      instagramUrl: extraMenuConfig.instagramUrl || null,
+      facebookUrl: extraMenuConfig.facebookUrl || null,
+      tiktokUrl: extraMenuConfig.tiktokUrl || null,
+      whatsappNumber: extraMenuConfig.whatsappNumber || null,
+      mapsUrl: extraMenuConfig.mapsUrl || null,
     },
   }
 

@@ -95,6 +95,7 @@ export async function PUT(
       menuAccentColor,
       menuCoverTitle,
       menuCoverSubtitle,
+      addressLine2,
     } = body
 
     const existing = await prisma.branch.findFirst({
@@ -144,6 +145,7 @@ export async function PUT(
         ...(phone !== undefined && { phone: phone?.trim() || null }),
         ...(email !== undefined && { email: email?.trim() || null }),
         ...(addressLine1 !== undefined && { addressLine1: addressLine1?.trim() || null }),
+        ...(addressLine2 !== undefined && { addressLine2: addressLine2?.trim() || null }),
         ...(city !== undefined && { city: city?.trim() || null }),
         ...(state !== undefined && { state: state?.trim() || null }),
         ...(postalCode !== undefined && { postalCode: postalCode?.trim() || null }),

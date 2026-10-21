@@ -50,7 +50,10 @@ import {
   Pencil,
   Sliders,
   Calendar,
+  MapPin,
+  MessageCircle,
 } from 'lucide-react'
+import { InstagramIcon, FacebookIcon, TikTokIcon, WhatsAppIcon } from '@/components/brand-icons'
 import ElegantMenu from '@/components/elegant-menu'
 import { DISPLAY_THEMES, CustomDisplayColors, QUICK_COLOR_PALETTES } from '@/app/display/display-client'
 import { notify } from '@/lib/notify'
@@ -68,6 +71,7 @@ interface Branch {
   primaryColor: string | null
   secondaryColor: string | null
   buttonColor: string | null
+  addressLine2?: string | null
   businessHours?: string | null
   menuCoverColor?: string | null
   menuPaperColor?: string | null
@@ -76,6 +80,101 @@ interface Branch {
   menuCoverTitle?: string | null
   menuCoverSubtitle?: string | null
 }
+
+export interface HeroWallpaperPreset {
+  id: string
+  name: string
+  tag: string
+  url: string
+  recommendedOpacity: number
+}
+
+export const HERO_WALLPAPER_PRESETS: HeroWallpaperPreset[] = [
+  {
+    id: 'cafe-artesanal',
+    name: 'Café Artesanal & Grano Tostado',
+    tag: 'Especialidad',
+    url: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1920&q=80',
+    recommendedOpacity: 0.35,
+  },
+  {
+    id: 'marmol-blanco',
+    name: 'Mármol Blanco & Porcelana',
+    tag: 'Minimalista',
+    url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80',
+    recommendedOpacity: 0.30,
+  },
+  {
+    id: 'cinepolis-vip',
+    name: 'Gala Nocturna & Ámbar Cálido',
+    tag: 'Gala & Ámbar',
+    url: '/wallpapers/cinepolis-vip.jpg',
+    recommendedOpacity: 0.38,
+  },
+  {
+    id: 'san-valentin',
+    name: 'San Valentín & Rosas Florales',
+    tag: 'Temporada',
+    url: '/wallpapers/san-valentin.jpg',
+    recommendedOpacity: 0.40,
+  },
+  {
+    id: 'navidad',
+    name: 'Navidad & Pinos Invernales',
+    tag: 'Festivo',
+    url: '/wallpapers/navidad.jpg',
+    recommendedOpacity: 0.40,
+  },
+  {
+    id: 'dia-de-muertos',
+    name: 'Día de Muertos & Cempasúchil',
+    tag: 'Tradición',
+    url: '/wallpapers/dia-de-muertos.jpg',
+    recommendedOpacity: 0.40,
+  },
+  {
+    id: 'fiestas-patrias',
+    name: 'Fiestas Patrias & Folclor',
+    tag: 'Patrio',
+    url: '/wallpapers/fiestas-patrias.jpg',
+    recommendedOpacity: 0.38,
+  },
+  {
+    id: 'ano-nuevo',
+    name: 'Año Nuevo & Brillo Dorado',
+    tag: 'Gala',
+    url: '/wallpapers/ano-nuevo.jpg',
+    recommendedOpacity: 0.38,
+  },
+  {
+    id: 'matcha-organico',
+    name: 'Matcha & Naturaleza Botánica',
+    tag: 'Orgánico',
+    url: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=1920&q=80',
+    recommendedOpacity: 0.35,
+  },
+  {
+    id: 'midnight-neon',
+    name: 'Midnight Bistro & Neón Sutil',
+    tag: 'Nocturno',
+    url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1920&q=80',
+    recommendedOpacity: 0.35,
+  },
+  {
+    id: 'otono-especias',
+    name: 'Otoño & Especias Dulces',
+    tag: 'Cálido',
+    url: 'https://images.unsplash.com/photo-1508746829417-e6f548d8d6ed?auto=format&fit=crop&w=1920&q=80',
+    recommendedOpacity: 0.35,
+  },
+  {
+    id: 'cerezo-primavera',
+    name: 'Flor de Cerezo & Primavera',
+    tag: 'Floral',
+    url: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?auto=format&fit=crop&w=1920&q=80',
+    recommendedOpacity: 0.35,
+  },
+]
 
 interface MenuThemePreset {
   id: string
@@ -90,28 +189,28 @@ interface MenuThemePreset {
 
 const MENU_THEME_PRESETS: MenuThemePreset[] = [
   {
-    id: 'alevan-bloom-brew',
-    name: 'Alevan Bloom & Brew (Vino & Porcelana)',
-    description: 'Tapa oxblood profunda, páginas en porcelana cálida, tinta vino y detalles en rosa empolvado.',
+    id: 'vino-porcelana',
+    name: 'Vino Borgoña & Porcelana Cálida',
+    description: 'Tapa borgoña profunda, páginas en porcelana cálida, tinta vino y detalles en rosa empolvado.',
     menuCoverColor: '#320001',
     menuPaperColor: '#F8F1EE',
     menuTextColor: '#5E1222',
     menuAccentColor: '#B4566F',
-    tag: 'Estilo Alevan',
+    tag: 'Boutique',
   },
   {
     id: 'cuero-oro',
-    name: 'Cuero Imperial & Oro',
+    name: 'Negro Imperial & Oro Puro',
     description: 'Tapa negra espresso, hojas pergamino marfil y filigranas doradas de alta cocina.',
     menuCoverColor: '#18120F',
     menuPaperColor: '#FDFBF7',
     menuTextColor: '#2C1810',
     menuAccentColor: '#D4AF37',
-    tag: 'Recomendado',
+    tag: 'Gala & Oro',
   },
   {
     id: 'pergamino-vintage',
-    name: 'Pergamino & Cobre Tostado',
+    name: 'Café Tostado & Canela Artesanal',
     description: 'Tapa café tostado con hojas cálidas envejecidas y detalles en cobre y canela.',
     menuCoverColor: '#2C1E17',
     menuPaperColor: '#F6EFE3',
@@ -121,33 +220,53 @@ const MENU_THEME_PRESETS: MenuThemePreset[] = [
   },
   {
     id: 'marfil-minimalista',
-    name: 'Marfil & Bronce Sofisticado',
+    name: 'Carbón & Blanco Marfil',
     description: 'Tapa carbón moderno con páginas blanco hueso y acentos bronce contemporáneos.',
     menuCoverColor: '#201E1C',
     menuPaperColor: '#FAF8F5',
     menuTextColor: '#1C1917',
     menuAccentColor: '#B8860B',
-    tag: 'Elegante',
+    tag: 'Minimalista',
   },
   {
     id: 'esmeralda-champagne',
-    name: 'Esmeralda & Oro Champagne',
+    name: 'Verde Esmeralda & Oro Champán',
     description: 'Tapa verde bosque profundo, hojas marfil botánico y acentos en oro pálido.',
     menuCoverColor: '#0B1E16',
     menuPaperColor: '#F6F8F5',
     menuTextColor: '#133326',
     menuAccentColor: '#C5A059',
-    tag: 'Boutique',
+    tag: 'Botánico',
   },
   {
     id: 'nocturno-ambar',
-    name: 'Edición Nocturna & Ámbar',
+    name: 'Obsidiana & Ámbar Cálido',
     description: 'Atmósfera tenue con páginas oscuras, contraste suave y acentos ámbar radiante.',
     menuCoverColor: '#0E0C0B',
     menuPaperColor: '#1A1513',
     menuTextColor: '#EFE5DA',
     menuAccentColor: '#F59E0B',
-    tag: 'Alto Contraste',
+    tag: 'Nocturno',
+  },
+  {
+    id: 'zafiro-plata',
+    name: 'Azul Zafiro & Plata Marfil',
+    description: 'Tapa azul marino medianoche con páginas plata marfil y detalles en acero pulido.',
+    menuCoverColor: '#0B1524',
+    menuPaperColor: '#F4F7FB',
+    menuTextColor: '#162740',
+    menuAccentColor: '#64748B',
+    tag: 'Contemporáneo',
+  },
+  {
+    id: 'terracota-cobre',
+    name: 'Terracota Rústica & Cobre',
+    description: 'Tapa arcilla terracota, hojas en tono arena suave y detalles en cobre bruñido.',
+    menuCoverColor: '#381B15',
+    menuPaperColor: '#FDF8F3',
+    menuTextColor: '#422019',
+    menuAccentColor: '#D97706',
+    tag: 'Rústico',
   },
 ]
 
@@ -295,6 +414,11 @@ export default function ThemeCustomizerPage() {
     textColor: '#FFFFFF',
   })
 
+  // Estados para nombres editables de estilos de cartas prediseñados
+  const [menuPresetNames, setMenuPresetNames] = useState<Record<string, string>>({})
+  const [editingMenuPresetId, setEditingMenuPresetId] = useState<string | null>(null)
+  const [tempMenuPresetName, setTempMenuPresetName] = useState<string>('')
+
   // Colores y ajustes visuales para la sucursal seleccionada
   const [themeData, setThemeData] = useState({
     bgColor: '#14100E',
@@ -312,7 +436,64 @@ export default function ThemeCustomizerPage() {
     menuAccentColor: '#D4AF37',
     menuCoverTitle: 'CARTA DE ESPECIALIDADES',
     menuCoverSubtitle: 'Café de especialidad y gastronomía artesanal',
+    // Fondo de Pantalla Hero y Redes Sociales del Menú Digital
+    heroWallpaperUrl: '',
+    heroWallpaperOpacity: 0.35,
+    instagramUrl: '',
+    facebookUrl: '',
+    tiktokUrl: '',
+    whatsappNumber: '',
+    mapsUrl: '',
   })
+
+  const parseBranchExtraMenuConfig = (branch: any) => {
+    let heroWallpaperUrl = ''
+    let heroWallpaperOpacity = 0.35
+    let instagramUrl = ''
+    let facebookUrl = ''
+    let tiktokUrl = ''
+    let whatsappNumber = ''
+    let mapsUrl = ''
+
+    if (branch?.addressLine2) {
+      try {
+        const parsed = JSON.parse(branch.addressLine2)
+        if (typeof parsed === 'object' && parsed !== null) {
+          if (parsed.heroWallpaperUrl) heroWallpaperUrl = parsed.heroWallpaperUrl
+          if (typeof parsed.heroWallpaperOpacity === 'number') heroWallpaperOpacity = parsed.heroWallpaperOpacity
+          if (parsed.instagramUrl) instagramUrl = parsed.instagramUrl
+          if (parsed.facebookUrl) facebookUrl = parsed.facebookUrl
+          if (parsed.tiktokUrl) tiktokUrl = parsed.tiktokUrl
+          if (parsed.whatsappNumber) whatsappNumber = parsed.whatsappNumber
+          if (parsed.mapsUrl) mapsUrl = parsed.mapsUrl
+        }
+      } catch {}
+    } else if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('poscafe_menu_social_hero')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (parsed.heroWallpaperUrl) heroWallpaperUrl = parsed.heroWallpaperUrl
+          if (typeof parsed.heroWallpaperOpacity === 'number') heroWallpaperOpacity = parsed.heroWallpaperOpacity
+          if (parsed.instagramUrl) instagramUrl = parsed.instagramUrl
+          if (parsed.facebookUrl) facebookUrl = parsed.facebookUrl
+          if (parsed.tiktokUrl) tiktokUrl = parsed.tiktokUrl
+          if (parsed.whatsappNumber) whatsappNumber = parsed.whatsappNumber
+          if (parsed.mapsUrl) mapsUrl = parsed.mapsUrl
+        }
+      } catch {}
+    }
+
+    return {
+      heroWallpaperUrl,
+      heroWallpaperOpacity,
+      instagramUrl,
+      facebookUrl,
+      tiktokUrl,
+      whatsappNumber,
+      mapsUrl,
+    }
+  }
 
   // Cargar sucursales
   const fetchBranches = async () => {
@@ -324,6 +505,7 @@ export default function ThemeCustomizerPage() {
         setBranches(json.data.branches)
         const initialBranch = json.data.branches[0]
         setSelectedBranchId(initialBranch.id)
+        const extras = parseBranchExtraMenuConfig(initialBranch)
         setThemeData({
           bgColor: initialBranch.bgColor || '#14100E',
           primaryColor: initialBranch.primaryColor || '#C08552',
@@ -339,6 +521,13 @@ export default function ThemeCustomizerPage() {
           menuAccentColor: initialBranch.menuAccentColor || '#D4AF37',
           menuCoverTitle: initialBranch.menuCoverTitle || 'CARTA DE ESPECIALIDADES',
           menuCoverSubtitle: initialBranch.menuCoverSubtitle || 'Café de especialidad y gastronomía artesanal',
+          heroWallpaperUrl: extras.heroWallpaperUrl,
+          heroWallpaperOpacity: extras.heroWallpaperOpacity,
+          instagramUrl: extras.instagramUrl,
+          facebookUrl: extras.facebookUrl,
+          tiktokUrl: extras.tiktokUrl,
+          whatsappNumber: extras.whatsappNumber,
+          mapsUrl: extras.mapsUrl,
         })
       }
     } catch {
@@ -394,8 +583,49 @@ export default function ThemeCustomizerPage() {
           setDisplayCustomColors(JSON.parse(savedColors))
         }
       } catch {}
+
+      // Cargar nombres personalizados de estilos de cartas prediseñados
+      try {
+        const savedMenuPresetNames = localStorage.getItem('poscafe_menu_preset_names')
+        if (savedMenuPresetNames) {
+          setMenuPresetNames(JSON.parse(savedMenuPresetNames))
+        }
+      } catch {}
     }
   }, [])
+
+  const handleSaveMenuPresetName = (presetId: string, newName: string) => {
+    const trimmed = newName.trim()
+    const updated = { ...menuPresetNames }
+    if (trimmed) {
+      updated[presetId] = trimmed
+    } else {
+      delete updated[presetId]
+    }
+    setMenuPresetNames(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('poscafe_menu_preset_names', JSON.stringify(updated))
+    }
+    setEditingMenuPresetId(null)
+    setTempMenuPresetName('')
+    const defaultPreset = MENU_THEME_PRESETS.find((p) => p.id === presetId)
+    notify.success(
+      'Nombre actualizado',
+      `El estilo de carta ahora se llamará "${trimmed || defaultPreset?.name}".`
+    )
+  }
+
+  const handleResetMenuPresetName = (presetId: string) => {
+    const updated = { ...menuPresetNames }
+    delete updated[presetId]
+    setMenuPresetNames(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('poscafe_menu_preset_names', JSON.stringify(updated))
+    }
+    setEditingMenuPresetId(null)
+    setTempMenuPresetName('')
+    notify.info('Nombre restablecido', 'Se recuperó el nombre original del estilo de carta.')
+  }
 
   const handleSaveDisplayThemeName = (themeId: string, newName: string) => {
     const trimmed = newName.trim()
@@ -482,6 +712,7 @@ export default function ThemeCustomizerPage() {
     setSelectedBranchId(branchId)
     const branch = branches.find((b) => b.id === branchId)
     if (branch) {
+      const extras = parseBranchExtraMenuConfig(branch)
       setThemeData({
         bgColor: branch.bgColor || '#14100E',
         primaryColor: branch.primaryColor || '#C08552',
@@ -497,6 +728,13 @@ export default function ThemeCustomizerPage() {
         menuAccentColor: branch.menuAccentColor || '#D4AF37',
         menuCoverTitle: branch.menuCoverTitle || 'CARTA DE ESPECIALIDADES',
         menuCoverSubtitle: branch.menuCoverSubtitle || 'Café de especialidad y gastronomía artesanal',
+        heroWallpaperUrl: extras.heroWallpaperUrl,
+        heroWallpaperOpacity: extras.heroWallpaperOpacity,
+        instagramUrl: extras.instagramUrl,
+        facebookUrl: extras.facebookUrl,
+        tiktokUrl: extras.tiktokUrl,
+        whatsappNumber: extras.whatsappNumber,
+        mapsUrl: extras.mapsUrl,
       })
     }
   }
@@ -532,6 +770,17 @@ export default function ThemeCustomizerPage() {
     if (!selectedBranchId) return
     setSaving(true)
 
+    const menuExtraConfig = {
+      heroWallpaperUrl: themeData.heroWallpaperUrl || null,
+      heroWallpaperOpacity: themeData.heroWallpaperOpacity,
+      instagramUrl: themeData.instagramUrl || null,
+      facebookUrl: themeData.facebookUrl || null,
+      tiktokUrl: themeData.tiktokUrl || null,
+      whatsappNumber: themeData.whatsappNumber || null,
+      mapsUrl: themeData.mapsUrl || null,
+    }
+    const addressLine2Payload = JSON.stringify(menuExtraConfig)
+
     try {
       const res = await fetch(`/api/branches/${selectedBranchId}`, {
         method: 'PUT',
@@ -551,14 +800,16 @@ export default function ThemeCustomizerPage() {
           menuAccentColor: themeData.menuAccentColor,
           menuCoverTitle: themeData.menuCoverTitle,
           menuCoverSubtitle: themeData.menuCoverSubtitle,
+          addressLine2: addressLine2Payload,
         }),
       })
 
       const json = await res.json()
       if (json.success) {
-        // Guardar también el tema de pantalla digital TV en localStorage
+        // Guardar configuración del menú digital y pantalla en localStorage para persistencia instantánea
         if (typeof window !== 'undefined') {
           try {
+            localStorage.setItem('poscafe_menu_social_hero', addressLine2Payload)
             localStorage.setItem('poscafe_display_theme', displayThemeId)
             localStorage.setItem('poscafe_display_custom_names', JSON.stringify(displayThemeNames))
             localStorage.setItem('poscafe_display_show_wallpaper', String(displayShowWallpaper))
@@ -943,30 +1194,50 @@ export default function ThemeCustomizerPage() {
             </div>
 
             {/* Selector de Tema de la Barra Lateral (Sidebar) */}
-            <div className={`p-3.5 rounded-2xl border space-y-2.5 ${classes.subCard}`}>
-              <div>
-                <label className={`block text-xs font-bold ${classes.textMain}`}>
-                  Tema de la Barra Lateral (Sidebar)
-                </label>
-                <p className={`text-[10px] ${classes.textMuted}`}>
-                  Elige entre 8 estilos diseñados para contrastar perfectamente con tu logotipo:
-                </p>
+            <div className={`p-3.5 rounded-2xl border space-y-3 ${classes.subCard}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className={`block text-xs font-bold ${classes.textMain}`}>
+                    Tema de la Barra Lateral (Sidebar)
+                  </label>
+                  <p className={`text-[10px] ${classes.textMuted}`}>
+                    Elige entre 16 paletas diseñadas o define tu propio color exacto:
+                  </p>
+                </div>
+                {themeData.sidebarTheme.startsWith('#') && (
+                  <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    HEX: {themeData.sidebarTheme}
+                  </span>
+                )}
               </div>
+
+              {/* Cuadrícula de Presets de Sidebar */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { id: 'DARK', name: 'Espresso', desc: '#14100E', bg: '#14100E', text: '#F3E9DC' },
-                  { id: 'COFFEE', name: 'Tostado', desc: '#2B1712', bg: '#2B1712', text: '#F3E9DC' },
-                  { id: 'LIGHT', name: 'Crema', desc: '#FDFBF9', bg: '#FDFBF9', text: '#3D1E16', border: '#DECEBD' },
-                  { id: 'WHITE', name: 'Blanco', desc: '#FFFFFF', bg: '#FFFFFF', text: '#1E293B', border: '#CBD5E1' },
-                  { id: 'EMERALD', name: 'Esmeralda', desc: '#0C1E17', bg: '#0C1E17', text: '#E2F2EB' },
+                  { id: 'COFFEE', name: 'Tostado Moka', desc: '#2B1712', bg: '#2B1712', text: '#F3E9DC' },
+                  { id: 'LIGHT', name: 'Crema Pergamino', desc: '#FDFBF9', bg: '#FDFBF9', text: '#3D1E16', border: '#DECEBD' },
+                  { id: 'WHITE', name: 'Blanco Pulcro', desc: '#FFFFFF', bg: '#FFFFFF', text: '#1E293B', border: '#CBD5E1' },
+                  { id: 'EMERALD', name: 'Verde Esmeralda', desc: '#0C1E17', bg: '#0C1E17', text: '#E2F2EB' },
                   { id: 'NAVY', name: 'Azul Marino', desc: '#0B1524', bg: '#0B1524', text: '#E0EBF7' },
-                  { id: 'BURGUNDY', name: 'Borgoña', desc: '#1F0C16', bg: '#1F0C16', text: '#F8E3EE' },
-                  { id: 'CHARCOAL', name: 'Carbón', desc: '#15181C', bg: '#15181C', text: '#E6EAF0' },
+                  { id: 'BURGUNDY', name: 'Borgoña Vino', desc: '#1F0C16', bg: '#1F0C16', text: '#F8E3EE' },
+                  { id: 'CHARCOAL', name: 'Gris Carbón', desc: '#15181C', bg: '#15181C', text: '#E6EAF0' },
+                  { id: 'AMBER', name: 'Ámbar Dorado', desc: '#1C1308', bg: '#1C1308', text: '#FDE68A' },
+                  { id: 'TEAL', name: 'Petróleo Turquesa', desc: '#071719', bg: '#071719', text: '#CCFBF1' },
+                  { id: 'PURPLE', name: 'Amatista Imperial', desc: '#150A21', bg: '#150A21', text: '#F3E8FF' },
+                  { id: 'SLATE', name: 'Pizarra Azulada', desc: '#0B1120', bg: '#0B1120', text: '#E2E8F0' },
+                  { id: 'FOREST', name: 'Verde Bosque', desc: '#08150C', bg: '#08150C', text: '#DCFCE7' },
+                  { id: 'ROSE', name: 'Rosa Noir', desc: '#1C0D15', bg: '#1C0D15', text: '#FFE4E6' },
+                  { id: 'CHOCOLATE', name: 'Cacao Puro', desc: '#20120B', bg: '#20120B', text: '#FBE7DB' },
+                  { id: 'MIDNIGHT', name: 'Titanio Negro', desc: '#090A0D', bg: '#090A0D', text: '#F8FAFC' },
                 ].map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => setThemeData({ ...themeData, sidebarTheme: opt.id })}
+                    onClick={() => {
+                      setThemeData({ ...themeData, sidebarTheme: opt.id })
+                      setPreviewTab('sidebar')
+                    }}
                     className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-between gap-1 select-none ${
                       themeData.sidebarTheme === opt.id
                         ? 'ring-2 ring-[#C08552] border-[#C08552] shadow-sm scale-102'
@@ -981,6 +1252,79 @@ export default function ThemeCustomizerPage() {
                     )}
                   </button>
                 ))}
+              </div>
+
+              {/* Selector de Color Personalizado Libre (HEX) */}
+              <div className={`p-3 rounded-xl border space-y-2 ${classes.card}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className={`text-[11px] font-bold block ${classes.textMain}`}>
+                      Color Personalizado de Barra Lateral (Libre)
+                    </span>
+                    <p className={`text-[9px] ${classes.textMuted}`}>
+                      Define cualquier tono hexadecimal exacto con contraste automático inteligente
+                    </p>
+                  </div>
+                  {themeData.sidebarTheme.startsWith('#') && (
+                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      Activo
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <input
+                    type="color"
+                    value={themeData.sidebarTheme.startsWith('#') ? themeData.sidebarTheme : '#14100E'}
+                    onChange={(e) => {
+                      const hex = e.target.value.toUpperCase()
+                      setThemeData({ ...themeData, sidebarTheme: hex })
+                      setPreviewTab('sidebar')
+                    }}
+                    className="w-10 h-9 rounded-lg border border-slate-300 cursor-pointer p-0.5 shrink-0"
+                    title="Elegir color exacto"
+                  />
+                  <input
+                    type="text"
+                    value={themeData.sidebarTheme}
+                    onChange={(e) => {
+                      const val = e.target.value.trim()
+                      setThemeData({ ...themeData, sidebarTheme: val })
+                    }}
+                    placeholder="#14100E"
+                    className={`w-28 px-2.5 py-1.5 rounded-lg border font-mono text-xs uppercase text-center font-bold ${classes.input}`}
+                  />
+                  {/* Swatches rápidos recomendados */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+                    {[
+                      '#18181B',
+                      '#022C22',
+                      '#1E1B4B',
+                      '#31102A',
+                      '#3F1206',
+                      '#082F49',
+                      '#14532D',
+                      '#2E1065',
+                      '#111827',
+                    ].map((hex) => (
+                      <button
+                        key={hex}
+                        type="button"
+                        onClick={() => {
+                          setThemeData({ ...themeData, sidebarTheme: hex })
+                          setPreviewTab('sidebar')
+                        }}
+                        className={`w-6 h-6 rounded-md border shrink-0 transition-transform hover:scale-115 cursor-pointer ${
+                          themeData.sidebarTheme.toUpperCase() === hex
+                            ? 'ring-2 ring-amber-500 scale-105'
+                            : 'border-white/20'
+                        }`}
+                        style={{ backgroundColor: hex }}
+                        title={`Aplicar ${hex}`}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1089,14 +1433,16 @@ export default function ThemeCustomizerPage() {
                       themeData.menuPaperColor === mp.menuPaperColor &&
                       themeData.menuAccentColor === mp.menuAccentColor
 
+                    const displayName = menuPresetNames[mp.id] || mp.name
+                    const isCustomName = Boolean(menuPresetNames[mp.id])
+                    const isEditingThis = editingMenuPresetId === mp.id
+
                     return (
-                      <button
+                      <div
                         key={mp.id}
-                        type="button"
-                        onClick={() => handleApplyMenuPreset(mp)}
-                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 select-none ${
+                        className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 select-none ${
                           isCurrent
-                            ? 'ring-2 ring-amber-500 border-amber-500 shadow-sm'
+                            ? 'ring-2 ring-amber-500 border-amber-500 shadow-md'
                             : 'border-slate-300/40 opacity-85 hover:opacity-100'
                         }`}
                         style={{
@@ -1104,33 +1450,110 @@ export default function ThemeCustomizerPage() {
                           color: '#FFFFFF',
                         }}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-black">{mp.name}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/20 font-bold">
-                            {mp.tag}
-                          </span>
-                        </div>
+                        {/* Cabecera de la tarjeta: Nombre o Input de Edición */}
+                        {isEditingThis ? (
+                          <div
+                            className="space-y-1.5 pt-0.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="text"
+                              value={tempMenuPresetName}
+                              onChange={(e) => setTempMenuPresetName(e.target.value)}
+                              placeholder="Nombre del estilo..."
+                              autoFocus
+                              className="w-full px-2 py-1 rounded-md text-[11px] font-bold text-slate-900 bg-white border border-amber-400 focus:outline-none"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveMenuPresetName(mp.id, tempMenuPresetName)
+                                if (e.key === 'Escape') setEditingMenuPresetId(null)
+                              }}
+                            />
+                            <div className="flex items-center gap-1 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveMenuPresetName(mp.id, tempMenuPresetName)}
+                                className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
+                              >
+                                Guardar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingMenuPresetId(null)}
+                                className="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-white font-semibold cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                              {isCustomName && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleResetMenuPresetName(mp.id)}
+                                  className="px-1.5 py-0.5 rounded bg-rose-600/80 hover:bg-rose-600 text-white font-semibold cursor-pointer ml-auto"
+                                  title="Restablecer nombre de fábrica"
+                                >
+                                  Restablecer
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-[11px] font-black truncate">{displayName}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingMenuPresetId(mp.id)
+                                  setTempMenuPresetName(displayName)
+                                }}
+                                className="p-1 rounded hover:bg-white/20 opacity-70 hover:opacity-100 transition-opacity cursor-pointer shrink-0"
+                                title="Editar nombre del estilo"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/20 font-bold shrink-0">
+                              {mp.tag}
+                            </span>
+                          </div>
+                        )}
+
                         <p className="text-[9px] text-white/70 line-clamp-1 leading-tight">
                           {mp.description}
                         </p>
-                        <div className="flex items-center gap-1.5 pt-1">
-                          <div
-                            className="w-3.5 h-3.5 rounded-full border border-white/30"
-                            style={{ backgroundColor: mp.menuCoverColor }}
-                            title="Tapa / Portada"
-                          />
-                          <div
-                            className="w-3.5 h-3.5 rounded-full border border-black/20"
-                            style={{ backgroundColor: mp.menuPaperColor }}
-                            title="Hojas / Papel"
-                          />
-                          <div
-                            className="w-3.5 h-3.5 rounded-full border border-black/20"
-                            style={{ backgroundColor: mp.menuAccentColor }}
-                            title="Acento / Oro"
-                          />
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className="w-3.5 h-3.5 rounded-full border border-white/30"
+                              style={{ backgroundColor: mp.menuCoverColor }}
+                              title="Tapa / Portada"
+                            />
+                            <div
+                              className="w-3.5 h-3.5 rounded-full border border-black/20"
+                              style={{ backgroundColor: mp.menuPaperColor }}
+                              title="Hojas / Papel"
+                            />
+                            <div
+                              className="w-3.5 h-3.5 rounded-full border border-black/20"
+                              style={{ backgroundColor: mp.menuAccentColor }}
+                              title="Acento / Oro"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleApplyMenuPreset(mp)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase transition-all cursor-pointer ${
+                              isCurrent
+                                ? 'bg-amber-500 text-black shadow-xs'
+                                : 'bg-white/20 hover:bg-white/30 text-white'
+                            }`}
+                          >
+                            {isCurrent ? '● Aplicado' : 'Aplicar'}
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     )
                   })}
                 </div>
@@ -1312,6 +1735,262 @@ export default function ThemeCustomizerPage() {
                   placeholder="Ej: Lunes a Domingo: 8:00 AM - 10:00 PM"
                   className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
                 />
+              </div>
+
+              {/* SUB-SECCIÓN: FONDO DE PANTALLA TEMÁTICO DEL HERO */}
+              <div className="space-y-3 pt-2 border-t" style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-amber-500" />
+                    <div>
+                      <h5 className={`text-[11px] font-black uppercase tracking-wider ${classes.textMain}`}>
+                        Fondo Cinematográfico del Hero
+                      </h5>
+                      <p className={`text-[9px] ${classes.textMuted}`}>
+                        Aparece detrás de tu logo, frase y ventana especial con overlay protector
+                      </p>
+                    </div>
+                  </div>
+                  {themeData.heroWallpaperUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setThemeData({ ...themeData, heroWallpaperUrl: '' })
+                        setPreviewTab('menu')
+                        notify.info('Fondo removido', 'Se restableció el fondo al color plano de la portada.')
+                      }}
+                      className="text-[10px] text-rose-500 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Quitar Fondo</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Galería de Fondos Temáticos Preconfigurados */}
+                <div className="space-y-1.5">
+                  <span className={`text-[10px] font-bold block ${classes.textMuted}`}>
+                    Fondos Temáticos de Temporada y Cafetería (1 Clic)
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {HERO_WALLPAPER_PRESETS.map((wp) => {
+                      const isSelected = themeData.heroWallpaperUrl === wp.url
+                      return (
+                        <button
+                          key={wp.id}
+                          type="button"
+                          onClick={() => {
+                            setThemeData({
+                              ...themeData,
+                              heroWallpaperUrl: wp.url,
+                              heroWallpaperOpacity: wp.recommendedOpacity,
+                            })
+                            setPreviewTab('menu')
+                          }}
+                          className={`group relative h-16 rounded-xl overflow-hidden border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'ring-2 ring-amber-500 border-amber-500 shadow-md scale-[1.02]'
+                              : 'border-white/10 opacity-75 hover:opacity-100 hover:scale-[1.01]'
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={wp.url}
+                            alt={wp.name}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-1.5 flex flex-col justify-end">
+                            <span className="text-[9px] font-bold text-white leading-tight line-clamp-1 drop-shadow">
+                              {wp.name}
+                            </span>
+                            <span className="text-[8px] text-amber-300 font-medium">
+                              {wp.tag}
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-md">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Control de Opacidad del Fondo */}
+                {themeData.heroWallpaperUrl && (
+                  <div
+                    className={`p-3 rounded-xl border space-y-2 ${classes.card}`}
+                    style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}
+                  >
+                    <div className="flex items-center justify-between text-[10px] font-bold">
+                      <span className={classes.textMain}>Intensidad / Opacidad del Fondo</span>
+                      <span className="font-mono text-amber-500">
+                        {Math.round(themeData.heroWallpaperOpacity * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.10"
+                      max="0.85"
+                      step="0.05"
+                      value={themeData.heroWallpaperOpacity}
+                      onChange={(e) => {
+                        setThemeData({
+                          ...themeData,
+                          heroWallpaperOpacity: parseFloat(e.target.value),
+                        })
+                        setPreviewTab('menu')
+                      }}
+                      className="w-full cursor-pointer accent-amber-500"
+                    />
+                    <p className={`text-[9px] ${classes.textMuted} leading-tight`}>
+                      El overlay protege la lectura del logo, lema y platos mientras mantiene la textura visual.
+                    </p>
+                  </div>
+                )}
+
+                {/* URL Propia de Fondo */}
+                <div className="space-y-1">
+                  <label className={`block text-[10px] font-bold ${classes.textMuted}`}>
+                    URL de Fondo Personalizado (Opcional)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={themeData.heroWallpaperUrl}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, heroWallpaperUrl: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      placeholder="https://images.unsplash.com/..."
+                      className={`flex-1 px-3 py-1.5 rounded-xl border text-[11px] focus:outline-none ${classes.input}`}
+                    />
+                    {themeData.heroWallpaperUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setThemeData({ ...themeData, heroWallpaperUrl: '' })
+                          setPreviewTab('menu')
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl border text-[10px] font-bold opacity-75 hover:opacity-100 cursor-pointer"
+                        title="Borrar fondo"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* SUB-SECCIÓN: REDES SOCIALES CONFIGURABLES */}
+              <div className="space-y-3 pt-2 border-t" style={{ borderColor: isLight ? '#E5D5C5' : 'rgba(255,255,255,0.1)' }}>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <div>
+                    <h5 className={`text-[11px] font-black uppercase tracking-wider ${classes.textMain}`}>
+                      Botones de Redes Sociales (Barra Superior)
+                    </h5>
+                    <p className={`text-[9px] ${classes.textMuted}`}>
+                      Solo se mostrarán los botones de las redes sociales que tengan un enlace o usuario configurado.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Instagram */}
+                  <div className="space-y-1">
+                    <label className={`flex items-center gap-1.5 text-[10px] font-bold ${classes.textMain}`}>
+                      <InstagramIcon className="w-3.5 h-3.5 text-pink-500" />
+                      <span>Instagram</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={themeData.instagramUrl}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, instagramUrl: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      placeholder="@tu_cafeteria o enlace"
+                      className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+
+                  {/* Facebook */}
+                  <div className="space-y-1">
+                    <label className={`flex items-center gap-1.5 text-[10px] font-bold ${classes.textMain}`}>
+                      <FacebookIcon className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Facebook</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={themeData.facebookUrl}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, facebookUrl: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      placeholder="facebook.com/tu_pagina"
+                      className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+
+                  {/* TikTok */}
+                  <div className="space-y-1">
+                    <label className={`flex items-center gap-1.5 text-[10px] font-bold ${classes.textMain}`}>
+                      <svg className="w-3.5 h-3.5 text-slate-800 dark:text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
+                      </svg>
+                      <span>TikTok</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={themeData.tiktokUrl}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, tiktokUrl: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      placeholder="@tu_cafeteria o enlace"
+                      className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+
+                  {/* WhatsApp */}
+                  <div className="space-y-1">
+                    <label className={`flex items-center gap-1.5 text-[10px] font-bold ${classes.textMain}`}>
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>WhatsApp (Pedidos)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={themeData.whatsappNumber}
+                      onChange={(e) => {
+                        setThemeData({ ...themeData, whatsappNumber: e.target.value })
+                        setPreviewTab('menu')
+                      }}
+                      placeholder="Ej: 5512345678 o wa.me/..."
+                      className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] focus:outline-none ${classes.input}`}
+                    />
+                  </div>
+                </div>
+
+                {/* Google Maps */}
+                <div className="space-y-1">
+                  <label className={`flex items-center gap-1.5 text-[10px] font-bold ${classes.textMain}`}>
+                    <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Google Maps (Ubicación de la Cafetería)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={themeData.mapsUrl}
+                    onChange={(e) => {
+                      setThemeData({ ...themeData, mapsUrl: e.target.value })
+                      setPreviewTab('menu')
+                    }}
+                    placeholder="Enlace de Google Maps para cómo llegar (ej: maps.google.com/... o dirección)"
+                    className={`w-full px-2.5 py-1.5 rounded-xl border text-[11px] focus:outline-none ${classes.input}`}
+                  />
+                </div>
               </div>
             </div>
 
@@ -2022,55 +2701,79 @@ export default function ThemeCustomizerPage() {
           {/* CONTENEDOR PRINCIPAL DE PREVISUALIZACIÓN VIVA */}
           {(() => {
             // Colores calculados para la previsualización del sidebar
-            const sTheme = themeData.sidebarTheme
-            const sBg =
-              sTheme === 'WHITE'
-                ? '#FFFFFF'
-                : sTheme === 'LIGHT'
-                ? '#FDFBF9'
-                : sTheme === 'COFFEE'
-                ? '#2B1712'
-                : sTheme === 'EMERALD'
-                ? '#0C1E17'
-                : sTheme === 'NAVY'
-                ? '#0B1524'
-                : sTheme === 'BURGUNDY'
-                ? '#1F0C16'
-                : sTheme === 'CHARCOAL'
-                ? '#15181C'
-                : '#14100E'
+            const sTheme = (themeData.sidebarTheme || 'DARK').trim()
+            const isHex = sTheme.startsWith('#')
+            const isHexLight = isHex && isLightColor(sTheme)
 
-            const sBorder =
-              sTheme === 'WHITE'
-                ? '#E2E8F0'
-                : sTheme === 'LIGHT'
-                ? '#EAD8C7'
-                : sTheme === 'COFFEE'
-                ? '#42221A'
-                : sTheme === 'EMERALD'
-                ? '#153428'
-                : sTheme === 'NAVY'
-                ? '#162740'
-                : sTheme === 'BURGUNDY'
-                ? '#381628'
-                : sTheme === 'CHARCOAL'
-                ? '#262B32'
-                : '#2D1B15'
+            let sBg = '#14100E'
+            let sBorder = '#2D1B15'
+            let sText = '#F3E9DC'
 
-            const sText =
-              sTheme === 'WHITE'
-                ? '#1E293B'
-                : sTheme === 'LIGHT'
-                ? '#3D1E16'
-                : sTheme === 'EMERALD'
-                ? '#E2F2EB'
-                : sTheme === 'NAVY'
-                ? '#E0EBF7'
-                : sTheme === 'BURGUNDY'
-                ? '#F8E3EE'
-                : sTheme === 'CHARCOAL'
-                ? '#E6EAF0'
-                : '#F3E9DC'
+            if (isHex) {
+              sBg = sTheme
+              sBorder = isHexLight ? '#CBD5E1' : 'rgba(255,255,255,0.14)'
+              sText = isHexLight ? '#1E293B' : '#F3E9DC'
+            } else if (sTheme === 'WHITE') {
+              sBg = '#FFFFFF'
+              sBorder = '#E2E8F0'
+              sText = '#1E293B'
+            } else if (sTheme === 'LIGHT') {
+              sBg = '#FDFBF9'
+              sBorder = '#EAD8C7'
+              sText = '#3D1E16'
+            } else if (sTheme === 'COFFEE') {
+              sBg = '#2B1712'
+              sBorder = '#42221A'
+              sText = '#F3E9DC'
+            } else if (sTheme === 'EMERALD') {
+              sBg = '#0C1E17'
+              sBorder = '#153428'
+              sText = '#E2F2EB'
+            } else if (sTheme === 'NAVY') {
+              sBg = '#0B1524'
+              sBorder = '#162740'
+              sText = '#E0EBF7'
+            } else if (sTheme === 'BURGUNDY') {
+              sBg = '#1F0C16'
+              sBorder = '#381628'
+              sText = '#F8E3EE'
+            } else if (sTheme === 'CHARCOAL') {
+              sBg = '#15181C'
+              sBorder = '#262B32'
+              sText = '#E6EAF0'
+            } else if (sTheme === 'AMBER') {
+              sBg = '#1C1308'
+              sBorder = '#3B2610'
+              sText = '#FDE68A'
+            } else if (sTheme === 'TEAL') {
+              sBg = '#071719'
+              sBorder = '#133237'
+              sText = '#CCFBF1'
+            } else if (sTheme === 'PURPLE') {
+              sBg = '#150A21'
+              sBorder = '#2D1645'
+              sText = '#F3E8FF'
+            } else if (sTheme === 'SLATE') {
+              sBg = '#0B1120'
+              sBorder = '#1E293B'
+              sText = '#E2E8F0'
+            } else if (sTheme === 'FOREST') {
+              sBg = '#08150C'
+              sBorder = '#142F1C'
+              sText = '#DCFCE7'
+            } else if (sTheme === 'ROSE') {
+              sBg = '#1C0D15'
+              sBorder = '#381A2A'
+              sText = '#FFE4E6'
+            } else if (sTheme === 'CHOCOLATE') {
+              sBg = '#20120B'
+              sBorder = '#3A2013'
+              sText = '#FBE7DB'
+            } else if (sTheme === 'MIDNIGHT') {
+              sBg = '#090A0D'
+              sBorder = '#1E2026'
+              sText = '#F8FAFC'
+            }
 
             // VISTA 1: COMANDERA DE PISO
             if (previewTab === 'comandera') {
@@ -3116,6 +3819,15 @@ export default function ThemeCustomizerPage() {
                         logoUrl: themeData.logoUrl || selectedBranch?.logoUrl || null,
                         isotypeUrl: themeData.isotypeUrl || selectedBranch?.isotypeUrl || null,
                         currency: 'MXN',
+                        heroWallpaperUrl: themeData.heroWallpaperUrl || null,
+                        heroWallpaperOpacity: themeData.heroWallpaperOpacity,
+                        socialLinks: {
+                          instagram: themeData.instagramUrl || null,
+                          facebook: themeData.facebookUrl || null,
+                          tiktok: themeData.tiktokUrl || null,
+                          whatsapp: themeData.whatsappNumber || null,
+                          maps: themeData.mapsUrl || null,
+                        },
                         theme: {
                           menuCoverColor: themeData.menuCoverColor,
                           menuPaperColor: themeData.menuPaperColor,
@@ -3124,6 +3836,13 @@ export default function ThemeCustomizerPage() {
                           menuCoverTitle: themeData.menuCoverTitle,
                           menuCoverSubtitle: themeData.menuCoverSubtitle,
                           businessHours: themeData.businessHours,
+                          heroWallpaperUrl: themeData.heroWallpaperUrl || null,
+                          heroWallpaperOpacity: themeData.heroWallpaperOpacity,
+                          instagramUrl: themeData.instagramUrl || null,
+                          facebookUrl: themeData.facebookUrl || null,
+                          tiktokUrl: themeData.tiktokUrl || null,
+                          whatsappNumber: themeData.whatsappNumber || null,
+                          mapsUrl: themeData.mapsUrl || null,
                         },
                       }}
                       categories={previewCategories}
@@ -3136,6 +3855,13 @@ export default function ThemeCustomizerPage() {
                         menuCoverTitle: themeData.menuCoverTitle,
                         menuCoverSubtitle: themeData.menuCoverSubtitle,
                         businessHours: themeData.businessHours,
+                        heroWallpaperUrl: themeData.heroWallpaperUrl || null,
+                        heroWallpaperOpacity: themeData.heroWallpaperOpacity,
+                        instagramUrl: themeData.instagramUrl || null,
+                        facebookUrl: themeData.facebookUrl || null,
+                        tiktokUrl: themeData.tiktokUrl || null,
+                        whatsappNumber: themeData.whatsappNumber || null,
+                        mapsUrl: themeData.mapsUrl || null,
                       }}
                       isPreview={true}
                     />
@@ -3638,7 +4364,9 @@ export default function ThemeCustomizerPage() {
                         className="p-2.5 rounded-xl flex items-center gap-2 opacity-80"
                         style={{
                           backgroundColor:
-                            sTheme === 'LIGHT' || sTheme === 'WHITE' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)',
+                            isHexLight || sTheme === 'LIGHT' || sTheme === 'WHITE'
+                              ? 'rgba(0,0,0,0.06)'
+                              : 'rgba(255,255,255,0.08)',
                         }}
                       >
                         <CreditCard className="w-4 h-4" />
@@ -3648,7 +4376,9 @@ export default function ThemeCustomizerPage() {
                         className="p-2.5 rounded-xl flex items-center gap-2 opacity-80"
                         style={{
                           backgroundColor:
-                            sTheme === 'LIGHT' || sTheme === 'WHITE' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)',
+                            isHexLight || sTheme === 'LIGHT' || sTheme === 'WHITE'
+                              ? 'rgba(0,0,0,0.06)'
+                              : 'rgba(255,255,255,0.08)',
                         }}
                       >
                         <MonitorPlay className="w-4 h-4" />

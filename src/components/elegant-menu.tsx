@@ -20,6 +20,7 @@ import {
   Flame,
   MessageCircle,
 } from 'lucide-react'
+import { InstagramIcon, FacebookIcon, TikTokIcon, WhatsAppIcon } from '@/components/brand-icons'
 import { isLightColor } from '@/lib/theme-utils'
 
 function hexToRgba(hex?: string | null, alpha = 1): string {
@@ -109,6 +110,15 @@ export interface BusinessData {
   isotypeUrl?: string | null
   currency: string
   timezone?: string
+  heroWallpaperUrl?: string | null
+  heroWallpaperOpacity?: number | null
+  socialLinks?: {
+    instagram?: string | null
+    facebook?: string | null
+    tiktok?: string | null
+    whatsapp?: string | null
+    maps?: string | null
+  }
   theme?: {
     primaryColor?: string
     secondaryColor?: string
@@ -124,6 +134,13 @@ export interface BusinessData {
     businessHours?: string
     phone?: string | null
     address?: string | null
+    heroWallpaperUrl?: string | null
+    heroWallpaperOpacity?: number | null
+    instagramUrl?: string | null
+    facebookUrl?: string | null
+    tiktokUrl?: string | null
+    whatsappNumber?: string | null
+    mapsUrl?: string | null
   }
 }
 
@@ -146,6 +163,13 @@ interface ElegantMenuProps {
     businessHours?: string
     phone?: string | null
     address?: string | null
+    heroWallpaperUrl?: string | null
+    heroWallpaperOpacity?: number | null
+    instagramUrl?: string | null
+    facebookUrl?: string | null
+    tiktokUrl?: string | null
+    whatsappNumber?: string | null
+    mapsUrl?: string | null
   }
   isPreview?: boolean
 }
@@ -228,6 +252,93 @@ export default function ElegantMenu({
     'Lunes a Domingo: 8:00 AM - 10:00 PM'
   const phone = customColors?.phone || business.theme?.phone || null
   const address = customColors?.address || business.theme?.address || null
+
+  // Fondo cinematográfico del Hero y Redes Sociales
+  const heroWallpaperUrl =
+    customColors?.heroWallpaperUrl ||
+    business.heroWallpaperUrl ||
+    business.theme?.heroWallpaperUrl ||
+    null
+
+  const heroWallpaperOpacity =
+    customColors?.heroWallpaperOpacity ??
+    business.heroWallpaperOpacity ??
+    business.theme?.heroWallpaperOpacity ??
+    0.35
+
+  const rawInstagram =
+    customColors?.instagramUrl ||
+    business.socialLinks?.instagram ||
+    business.theme?.instagramUrl ||
+    null
+
+  const rawFacebook =
+    customColors?.facebookUrl ||
+    business.socialLinks?.facebook ||
+    business.theme?.facebookUrl ||
+    null
+
+  const rawTiktok =
+    customColors?.tiktokUrl ||
+    business.socialLinks?.tiktok ||
+    business.theme?.tiktokUrl ||
+    null
+
+  const rawWhatsapp =
+    customColors?.whatsappNumber ||
+    business.socialLinks?.whatsapp ||
+    business.theme?.whatsappNumber ||
+    phone ||
+    null
+
+  const rawMaps =
+    customColors?.mapsUrl ||
+    business.socialLinks?.maps ||
+    business.theme?.mapsUrl ||
+    address ||
+    null
+
+  const instagramLink = useMemo(() => {
+    if (!rawInstagram?.trim()) return null
+    const val = rawInstagram.trim()
+    if (val.startsWith('http://') || val.startsWith('https://')) return val
+    const cleanUser = val.replace(/^@/, '')
+    return `https://instagram.com/${cleanUser}`
+  }, [rawInstagram])
+
+  const facebookLink = useMemo(() => {
+    if (!rawFacebook?.trim()) return null
+    const val = rawFacebook.trim()
+    if (val.startsWith('http://') || val.startsWith('https://')) return val
+    return `https://facebook.com/${val.replace(/^\//, '')}`
+  }, [rawFacebook])
+
+  const tiktokLink = useMemo(() => {
+    if (!rawTiktok?.trim()) return null
+    const val = rawTiktok.trim()
+    if (val.startsWith('http://') || val.startsWith('https://')) return val
+    const cleanUser = val.replace(/^@/, '')
+    return `https://tiktok.com/@${cleanUser}`
+  }, [rawTiktok])
+
+  const whatsappLink = useMemo(() => {
+    if (!rawWhatsapp?.trim()) return null
+    const val = rawWhatsapp.trim()
+    if (val.startsWith('http://') || val.startsWith('https://')) return val
+    const digits = val.replace(/[^0-9]/g, '')
+    return digits ? `https://wa.me/${digits}` : null
+  }, [rawWhatsapp])
+
+  const mapsLink = useMemo(() => {
+    if (!rawMaps?.trim()) return null
+    const val = rawMaps.trim()
+    if (val.startsWith('http://') || val.startsWith('https://')) return val
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(val)}`
+  }, [rawMaps])
+
+  const hasAnySocial = Boolean(
+    instagramLink || facebookLink || tiktokLink || whatsappLink || mapsLink
+  )
 
   // Scroll interactivo para animación de arco y lectura
   const [heroProgress, setHeroProgress] = useState(0)
@@ -367,7 +478,13 @@ export default function ElegantMenu({
   }, [categories])
 
   const heroCoverProduct = allProductsWithImage[0] || null
-  const introDuoProducts = allProductsWithImage.slice(0, 2)
+  const introDuoProducts = useMemo(() => {
+    if (allProductsWithImage.length <= 2) return allProductsWithImage
+    // Si el primer especial coincide con la primera foto, elegimos fotos alternas para mayor riqueza visual
+    const firstSpecialId = allProductsWithImage[0]?.id
+    const nonHero = allProductsWithImage.filter((p) => p.id !== firstSpecialId)
+    return nonHero.length >= 2 ? nonHero.slice(0, 2) : allProductsWithImage.slice(0, 2)
+  }, [allProductsWithImage])
 
   // Platillos especiales con fotografía para el cuadro interactivo del Hero
   const specialProducts = useMemo(() => {
@@ -649,14 +766,40 @@ export default function ElegantMenu({
       <header
         id="top"
         ref={heroRef}
-        className="relative w-full"
+        className={`relative w-full ${
+          isPreview
+            ? 'min-h-[100svh]'
+            : hasHeroImages
+            ? 'min-h-[100svh] lg:h-[185vh]'
+            : 'min-h-[100svh]'
+        }`}
         style={{
-          height: isPreview ? '100vh' : hasHeroImages ? '185vh' : '100vh',
           backgroundColor: palette.cover,
           color: palette.coverText,
         }}
       >
-        <div className="sticky top-0 h-screen w-full overflow-hidden flex flex-col justify-center items-center">
+        <div className="relative lg:sticky lg:top-0 min-h-[100svh] lg:h-screen w-full overflow-hidden flex flex-col justify-center items-center py-5 sm:py-8 lg:py-0">
+          {/* Fondo cinematográfico temático del Hero (Wallpaper con overlay protector) */}
+          {heroWallpaperUrl && (
+            <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={heroWallpaperUrl}
+                alt="Fondo temático Hero"
+                className="w-full h-full object-cover select-none transition-all duration-700 scale-105"
+                style={{ opacity: heroWallpaperOpacity }}
+              />
+              <div
+                className="absolute inset-0 transition-colors duration-700"
+                style={{
+                  backgroundColor: hexToRgba(palette.cover, 0.72),
+                  backgroundImage:
+                    'radial-gradient(circle at center, transparent 20%, rgba(0,0,0,0.65) 100%)',
+                }}
+              />
+            </div>
+          )}
+
           {/* Fondo ambiental sutil con viñeta y textura suave */}
           <div
             className="absolute inset-0 pointer-events-none opacity-40"
@@ -678,25 +821,25 @@ export default function ElegantMenu({
           />
 
           {/* Contenedor principal */}
-          <div className="relative z-10 max-w-7xl mx-auto w-full px-6 sm:px-10 lg:px-14 py-8">
+          <div className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-10 lg:px-14 py-2 sm:py-6 lg:py-8">
             {hasHeroImages ? (
-              /* Caso con imágenes: Dos columnas (Lado izquierdo branding fijo + Lado derecho ventana animada) */
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+              /* Caso con imágenes: En móvil layout vertical proporcionado sin recortes; en desktop 2 columnas lado a lado */
+              <div className="flex flex-col lg:grid lg:grid-cols-12 gap-4 sm:gap-6 lg:gap-14 items-center">
                 {/* ---------------------------------------------------- */}
                 {/* COLUMNA IZQUIERDA: LOGO, TÍTULO, FRASE Y VER MENÚ   */}
                 {/* ---------------------------------------------------- */}
-                <div className="lg:col-span-6 flex flex-col items-center text-center space-y-5 sm:space-y-6">
+                <div className="w-full lg:col-span-6 flex flex-col items-center text-center space-y-3 sm:space-y-5 lg:space-y-6">
                   {/* Logo o Marca */}
                   {business.logoUrl || business.isotypeUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={business.logoUrl || business.isotypeUrl || ''}
                       alt={business.name}
-                      className="w-auto h-20 sm:h-28 lg:h-32 max-w-[min(85vw,340px)] object-contain drop-shadow-2xl transition-transform hover:scale-102"
+                      className="w-auto h-14 sm:h-20 lg:h-32 max-w-[min(78vw,340px)] object-contain drop-shadow-2xl transition-transform hover:scale-102"
                     />
                   ) : (
                     <h1
-                      className="text-4xl sm:text-5xl lg:text-6xl font-bodoni italic tracking-tight drop-shadow-xl"
+                      className="text-3xl sm:text-5xl lg:text-6xl font-bodoni italic tracking-tight drop-shadow-xl"
                       style={{ color: palette.coverText }}
                     >
                       {business.name}
@@ -704,26 +847,26 @@ export default function ElegantMenu({
                   )}
 
                   {/* Título de la cafetería / rubro */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 sm:gap-3">
                     <span
-                      className="w-7 h-[1.5px]"
+                      className="w-5 sm:w-7 h-[1.5px]"
                       style={{ backgroundColor: palette.coverAccent }}
                     />
                     <p
-                      className="font-marcellus text-xs sm:text-sm tracking-[0.28em] uppercase font-medium"
+                      className="font-marcellus text-[11px] sm:text-xs lg:text-sm tracking-[0.24em] sm:tracking-[0.28em] uppercase font-medium"
                       style={{ color: palette.coverAccent }}
                     >
                       {coverTitle}
                     </p>
                     <span
-                      className="w-7 h-[1.5px]"
+                      className="w-5 sm:w-7 h-[1.5px]"
                       style={{ backgroundColor: palette.coverAccent }}
                     />
                   </div>
 
                   {/* Frase / Slogan en tipografía Dancing Script */}
                   <p
-                    className="font-dancing text-3xl sm:text-4xl lg:text-5xl leading-tight font-medium max-w-lg drop-shadow-sm"
+                    className="font-dancing text-2xl sm:text-3xl lg:text-5xl leading-tight font-medium max-w-lg drop-shadow-sm px-2"
                     style={{ color: palette.coverText }}
                   >
                     {coverSubtitle}
@@ -731,9 +874,9 @@ export default function ElegantMenu({
 
                   {/* Si está en mesa: Chip identificador de mesa */}
                   {liveTable && (
-                    <div className="pt-1">
+                    <div className="pt-0.5 sm:pt-1">
                       <div
-                        className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-marcellus uppercase tracking-widest border shadow-xl backdrop-blur-md"
+                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-marcellus uppercase tracking-widest border shadow-xl backdrop-blur-md"
                         style={{
                           backgroundColor: liveTable.isInitiated
                             ? 'rgba(16, 185, 129, 0.22)'
@@ -743,26 +886,26 @@ export default function ElegantMenu({
                         }}
                       >
                         <span
-                          className="w-2.5 h-2.5 rounded-full animate-ping"
+                          className="w-2 h-2 rounded-full animate-ping"
                           style={{
                             backgroundColor: liveTable.isInitiated
                               ? '#10B981'
                               : palette.coverAccent,
                           }}
                         />
-                        <span className="font-semibold">Mesa {liveTable.name}</span>
+                        <span className="font-semibold text-[11px] sm:text-xs">Mesa {liveTable.name}</span>
                         {liveTable.area && (
-                          <span className="opacity-75">({liveTable.area})</span>
+                          <span className="opacity-75 text-[10px] sm:text-xs">({liveTable.area})</span>
                         )}
-                        <span className="text-[10px] opacity-80 pl-1 border-l border-white/20">
+                        <span className="text-[9px] sm:text-[10px] opacity-80 pl-1 border-l border-white/20">
                           {liveTable.isInitiated ? 'Abierta' : 'En espera'}
                         </span>
                       </div>
                     </div>
                   )}
 
-                  {/* Botón Ver menú y línea centradas */}
-                  <div className="w-full flex justify-center pt-3 sm:pt-5">
+                  {/* Botón Ver menú y redes para DESKTOP (en móvil va debajo del cuadro de especiales) */}
+                  <div className="hidden lg:flex w-full flex-col items-center justify-center pt-3 sm:pt-5 space-y-3">
                     <button
                       type="button"
                       onClick={scrollToBar}
@@ -779,17 +922,110 @@ export default function ElegantMenu({
                         }}
                       />
                     </button>
+
+                    {/* Redes sociales sutiles en Hero Desktop */}
+                    {hasAnySocial && (
+                      <div className="flex items-center justify-center gap-2 pt-1">
+                        {instagramLink && (
+                          <a
+                            href={instagramLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Instagram"
+                            title="Instagram"
+                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            style={{
+                              borderColor: hexToRgba(palette.coverAccent, 0.45),
+                              backgroundColor: hexToRgba(palette.cover, 0.55),
+                              color: palette.coverText,
+                            }}
+                          >
+                            <InstagramIcon className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                        {facebookLink && (
+                          <a
+                            href={facebookLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Facebook"
+                            title="Facebook"
+                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            style={{
+                              borderColor: hexToRgba(palette.coverAccent, 0.45),
+                              backgroundColor: hexToRgba(palette.cover, 0.55),
+                              color: palette.coverText,
+                            }}
+                          >
+                            <FacebookIcon className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                        {tiktokLink && (
+                          <a
+                            href={tiktokLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="TikTok"
+                            title="TikTok"
+                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            style={{
+                              borderColor: hexToRgba(palette.coverAccent, 0.45),
+                              backgroundColor: hexToRgba(palette.cover, 0.55),
+                              color: palette.coverText,
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
+                            </svg>
+                          </a>
+                        )}
+                        {whatsappLink && (
+                          <a
+                            href={whatsappLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="WhatsApp"
+                            title="WhatsApp"
+                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            style={{
+                              borderColor: hexToRgba(palette.coverAccent, 0.45),
+                              backgroundColor: hexToRgba(palette.cover, 0.55),
+                              color: palette.coverText,
+                            }}
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                        {mapsLink && (
+                          <a
+                            href={mapsLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Ubicación"
+                            title="Ubicación"
+                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            style={{
+                              borderColor: hexToRgba(palette.coverAccent, 0.45),
+                              backgroundColor: hexToRgba(palette.cover, 0.55),
+                              color: palette.coverText,
+                            }}
+                          >
+                            <MapPin className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* ---------------------------------------------------- */}
-                {/* COLUMNA DERECHA: CUADRO VENTANA MÁS ALTO CON SCROLL  */}
+                {/* COLUMNA DERECHA: CUADRO VENTANA DE ESPECIALES        */}
                 {/* ---------------------------------------------------- */}
-                <div className="lg:col-span-6 flex justify-center lg:justify-end w-full">
+                <div className="w-full lg:col-span-6 flex justify-center lg:justify-end">
                   <div
-                    className="relative w-full max-w-[340px] sm:max-w-[390px] lg:max-w-[420px] aspect-[3/4.2] overflow-hidden shadow-2xl border cursor-pointer will-change-transform"
+                    className="relative w-full max-w-[240px] sm:max-w-[300px] lg:max-w-[420px] aspect-[4/4.8] lg:aspect-[3/4.2] max-h-[35vh] sm:max-h-[42vh] lg:max-h-none overflow-hidden shadow-2xl border cursor-pointer will-change-transform rounded-[28px] lg:rounded-none"
                     style={{
-                      borderRadius: `${32 + heroProgress * 160}px ${32 + heroProgress * 160}px 24px 24px`,
+                      borderRadius: `${28 + heroProgress * 164}px ${28 + heroProgress * 164}px 24px 24px`,
                       transform: `scale(${Math.max(0.88, 1 - heroProgress * 0.1)})`,
                       borderColor: hexToRgba(palette.coverAccent, 0.32),
                       backgroundColor: hexToRgba(palette.cover, 0.45),
@@ -834,6 +1070,119 @@ export default function ElegantMenu({
                       }}
                     />
                   </div>
+                </div>
+
+                {/* BOTÓN VER MENÚ Y REDES PARA MÓVIL (debajo del cuadro interactivo) */}
+                <div className="w-full flex lg:hidden flex-col items-center justify-center pt-2 space-y-2">
+                  <button
+                    type="button"
+                    onClick={scrollToBar}
+                    className="group flex flex-col items-center gap-1.5 cursor-pointer text-xs font-marcellus uppercase tracking-[0.25em] transition-opacity hover:opacity-100 active:scale-95"
+                    style={{
+                      color: palette.coverText,
+                    }}
+                  >
+                    <span className="opacity-90 group-hover:opacity-100 transition-opacity text-[11px]">Ver menú</span>
+                    <i
+                      className="block w-[1.5px] h-7 animate-drip"
+                      style={{
+                        background: `linear-gradient(to bottom, ${palette.coverText}, transparent)`,
+                      }}
+                    />
+                  </button>
+
+                  {/* Redes sociales en móvil */}
+                  {hasAnySocial && (
+                    <div className="flex items-center justify-center gap-2 pt-0.5">
+                      {instagramLink && (
+                        <a
+                          href={instagramLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Instagram"
+                          title="Instagram"
+                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <InstagramIcon className="w-3 h-3" />
+                        </a>
+                      )}
+                      {facebookLink && (
+                        <a
+                          href={facebookLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Facebook"
+                          title="Facebook"
+                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <FacebookIcon className="w-3 h-3" />
+                        </a>
+                      )}
+                      {tiktokLink && (
+                        <a
+                          href={tiktokLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="TikTok"
+                          title="TikTok"
+                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
+                          </svg>
+                        </a>
+                      )}
+                      {whatsappLink && (
+                        <a
+                          href={whatsappLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="WhatsApp"
+                          title="WhatsApp"
+                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                        </a>
+                      )}
+                      {mapsLink && (
+                        <a
+                          href={mapsLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Ubicación"
+                          title="Ubicación"
+                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <MapPin className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -911,7 +1260,7 @@ export default function ElegantMenu({
                 )}
 
                 {/* Botón Ver menú y línea centradas */}
-                <div className="w-full flex justify-center pt-4 sm:pt-6">
+                <div className="w-full flex flex-col items-center justify-center pt-4 sm:pt-6 space-y-3">
                   <button
                     type="button"
                     onClick={scrollToBar}
@@ -928,6 +1277,99 @@ export default function ElegantMenu({
                       }}
                     />
                   </button>
+
+                  {/* Redes sociales sutiles en Hero */}
+                  {hasAnySocial && (
+                    <div className="flex items-center justify-center gap-2 pt-1">
+                      {instagramLink && (
+                        <a
+                          href={instagramLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Instagram"
+                          title="Instagram"
+                          className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <InstagramIcon className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {facebookLink && (
+                        <a
+                          href={facebookLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Facebook"
+                          title="Facebook"
+                          className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <FacebookIcon className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {tiktokLink && (
+                        <a
+                          href={tiktokLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="TikTok"
+                          title="TikTok"
+                          className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
+                          </svg>
+                        </a>
+                      )}
+                      {whatsappLink && (
+                        <a
+                          href={whatsappLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="WhatsApp"
+                          title="WhatsApp"
+                          className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {mapsLink && (
+                        <a
+                          href={mapsLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Ubicación"
+                          title="Ubicación"
+                          className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                          style={{
+                            borderColor: hexToRgba(palette.coverAccent, 0.45),
+                            backgroundColor: hexToRgba(palette.cover, 0.55),
+                            color: palette.coverText,
+                          }}
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -952,21 +1394,21 @@ export default function ElegantMenu({
         }}
       >
         {/* Fila Superior: Logo + Enlaces y Llamada a Mesero */}
-        <div className="max-w-[1120px] mx-auto px-4 sm:px-8 py-2.5 flex items-center justify-between gap-3">
+        <div className="max-w-[1120px] mx-auto px-3.5 sm:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-3">
           <a
             href="#top"
-            className="flex items-center gap-2 text-inherit no-underline cursor-pointer group"
+            className="flex items-center gap-2 text-inherit no-underline cursor-pointer group shrink-0"
           >
             {business.logoUrl || business.isotypeUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={business.logoUrl || business.isotypeUrl || ''}
                 alt={business.name}
-                className="h-7 sm:h-8 w-auto max-w-[110px] object-contain drop-shadow-xs"
+                className="h-6 sm:h-8 w-auto max-w-[95px] sm:max-w-[110px] object-contain drop-shadow-xs"
               />
             ) : (
               <span
-                className="font-bodoni italic text-xl font-bold tracking-tight"
+                className="font-bodoni italic text-lg sm:text-xl font-bold tracking-tight"
                 style={{ color: palette.text }}
               >
                 {business.name}
@@ -974,14 +1416,14 @@ export default function ElegantMenu({
             )}
           </a>
 
-          {/* Botones de acción circular de Alevan */}
-          <div className="flex items-center gap-2">
+          {/* Botones de acción circular de Alevan (Redes sociales y utilidades) */}
+          <div className="flex items-center gap-1 sm:gap-2">
             {liveTable && (
               <button
                 type="button"
                 onClick={handleCallWaiter}
                 disabled={isCallingWaiter || waiterCalled}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-marcellus tracking-wider uppercase border transition-all cursor-pointer shadow-xs active:scale-95"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-marcellus tracking-wider uppercase border transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
                 style={{
                   backgroundColor: waiterCalled ? '#10B981' : palette.tint,
                   borderColor: waiterCalled ? '#10B981' : palette.accent,
@@ -995,20 +1437,96 @@ export default function ElegantMenu({
               </button>
             )}
 
-            {phone && (
+            {/* Redes sociales secundarias (en móvil se ocultan para dar prioridad a contacto directo) */}
+            {instagramLink && (
               <a
-                href={`https://wa.me/${phone.replace(/[^0-9]/g, '')}`}
+                href={instagramLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="WhatsApp"
-                className="w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:opacity-85"
+                aria-label="Instagram"
+                title="Síguenos en Instagram"
+                className="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 rounded-full border items-center justify-center transition-all cursor-pointer hover:opacity-85 hover:scale-105 active:scale-95 shadow-xs"
                 style={{
                   backgroundColor: palette.tint,
                   borderColor: palette.line,
                   color: palette.text,
                 }}
               >
-                <MessageCircle className="w-4 h-4" />
+                <InstagramIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </a>
+            )}
+
+            {facebookLink && (
+              <a
+                href={facebookLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook"
+                title="Síguenos en Facebook"
+                className="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 rounded-full border items-center justify-center transition-all cursor-pointer hover:opacity-85 hover:scale-105 active:scale-95 shadow-xs"
+                style={{
+                  backgroundColor: palette.tint,
+                  borderColor: palette.line,
+                  color: palette.text,
+                }}
+              >
+                <FacebookIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </a>
+            )}
+
+            {tiktokLink && (
+              <a
+                href={tiktokLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="TikTok"
+                title="Síguenos en TikTok"
+                className="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 rounded-full border items-center justify-center transition-all cursor-pointer hover:opacity-85 hover:scale-105 active:scale-95 shadow-xs"
+                style={{
+                  backgroundColor: palette.tint,
+                  borderColor: palette.line,
+                  color: palette.text,
+                }}
+              >
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
+                </svg>
+              </a>
+            )}
+
+            {whatsappLink && (
+              <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="WhatsApp"
+                title="Escríbenos por WhatsApp"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:opacity-85 hover:scale-105 active:scale-95 shadow-xs"
+                style={{
+                  backgroundColor: palette.tint,
+                  borderColor: palette.line,
+                  color: palette.text,
+                }}
+              >
+                <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </a>
+            )}
+
+            {mapsLink && (
+              <a
+                href={mapsLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Ubicación en Google Maps"
+                title="Cómo llegar (Google Maps)"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:opacity-85 hover:scale-105 active:scale-95 shadow-xs"
+                style={{
+                  backgroundColor: palette.tint,
+                  borderColor: palette.line,
+                  color: palette.text,
+                }}
+              >
+                <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </a>
             )}
 
@@ -1016,78 +1534,90 @@ export default function ElegantMenu({
               type="button"
               onClick={() => setShowInfoModal(true)}
               aria-label="Información y Horarios"
-              className="w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:opacity-85"
+              title="Información y Horarios"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:opacity-85 hover:scale-105 active:scale-95 shadow-xs"
               style={{
                 backgroundColor: palette.tint,
                 borderColor: palette.line,
                 color: palette.text,
               }}
             >
-              <Info className="w-4 h-4" />
+              <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
 
         {/* Fila Inferior: Chips de Categorías scrolleables (.chips de Alevan) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-4 sm:px-8 py-2 max-w-[1120px] mx-auto">
-          <button
-            type="button"
-            onClick={() => setSelectedCategoryId('all')}
-            className="flex-shrink-0 px-3.5 py-2 rounded-full text-[12px] font-marcellus tracking-[0.14em] uppercase transition-all cursor-pointer"
-            style={{
-              backgroundColor: selectedCategoryId === 'all' ? palette.text : 'transparent',
-              color: selectedCategoryId === 'all' ? palette.paper : palette.muted,
-            }}
+        <div className="relative max-w-[1120px] mx-auto">
+          <div
+            className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-3.5 sm:px-8 py-2 scroll-smooth"
+            style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            Toda la Carta
-          </button>
-
-          {categories.map((cat) => {
-            const isOn = selectedCategoryId === cat.id
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => scrollToCategory(cat.id)}
-                className="flex-shrink-0 px-3.5 py-2 rounded-full text-[12px] font-marcellus tracking-[0.14em] uppercase transition-all cursor-pointer"
-                style={{
-                  backgroundColor: isOn ? palette.text : 'transparent',
-                  color: isOn ? palette.paper : palette.muted,
-                }}
-              >
-                {cat.name}
-              </button>
-            )
-          })}
-
-          {/* Mini buscador minimalista dentro del chip rail */}
-          <div className="ml-auto relative flex-shrink-0 w-32 sm:w-48 pl-2">
-            <Search
-              className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 opacity-50"
-              style={{ color: palette.text }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar..."
-              className="w-full pl-7 pr-3 py-1.5 rounded-full text-xs outline-none border transition-all"
-              style={{
-                backgroundColor: palette.cardBg,
-                borderColor: palette.line,
-                color: palette.text,
+            <button
+              type="button"
+              onClick={(e) => {
+                setSelectedCategoryId('all')
+                e.currentTarget.scrollIntoView({ inline: 'center', behavior: 'smooth' })
               }}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 opacity-60 hover:opacity-100"
+              className="flex-shrink-0 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-[12px] font-marcellus tracking-[0.14em] uppercase transition-all cursor-pointer active:scale-95"
+              style={{
+                backgroundColor: selectedCategoryId === 'all' ? palette.text : 'transparent',
+                color: selectedCategoryId === 'all' ? palette.paper : palette.muted,
+              }}
+            >
+              Toda la Carta
+            </button>
+
+            {categories.map((cat) => {
+              const isOn = selectedCategoryId === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={(e) => {
+                    scrollToCategory(cat.id)
+                    e.currentTarget.scrollIntoView({ inline: 'center', behavior: 'smooth' })
+                  }}
+                  className="flex-shrink-0 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-[12px] font-marcellus tracking-[0.14em] uppercase transition-all cursor-pointer active:scale-95"
+                  style={{
+                    backgroundColor: isOn ? palette.text : 'transparent',
+                    color: isOn ? palette.paper : palette.muted,
+                  }}
+                >
+                  {cat.name}
+                </button>
+              )
+            })}
+
+            {/* Mini buscador minimalista dentro del chip rail */}
+            <div className="ml-auto relative flex-shrink-0 w-28 sm:w-48 pl-2">
+              <Search
+                className="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none"
                 style={{ color: palette.text }}
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full pl-7 pr-3 py-1.5 rounded-full text-xs outline-none border transition-all"
+                style={{
+                  backgroundColor: palette.cardBg,
+                  borderColor: palette.line,
+                  color: palette.text,
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 opacity-60 hover:opacity-100"
+                  style={{ color: palette.text }}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1298,26 +1828,26 @@ export default function ElegantMenu({
                   </div>
                 )}
 
-                <section id={`cat-${category.id}`} className="scroll-mt-28 space-y-8">
+                <section id={`cat-${category.id}`} className="scroll-mt-24 sm:scroll-mt-28 space-y-6 sm:space-y-8">
                   {/* Encabezado de Sección (.sec-head de Alevan) */}
                   <header
-                    className="space-y-1 text-left border-b pb-4"
+                    className="space-y-1 text-left border-b pb-3 sm:pb-4"
                     style={{ borderColor: palette.line }}
                   >
                     <p
-                      className="font-script text-3xl sm:text-4xl m-0"
+                      className="font-script text-2xl sm:text-4xl m-0"
                       style={{ color: palette.accent }}
                     >
                       {kicker}
                     </p>
                     <h2
-                      className="font-bodoni italic text-4xl sm:text-6xl lg:text-7xl font-normal leading-[0.95] tracking-tight m-0"
+                      className="font-bodoni italic text-3xl sm:text-5xl lg:text-7xl font-normal leading-[1.05] tracking-tight m-0"
                       style={{ color: palette.text }}
                     >
                       {category.name}
                     </h2>
                     <p
-                      className="text-sm sm:text-base max-w-xl pt-1.5"
+                      className="text-xs sm:text-base max-w-xl pt-1"
                       style={{ color: palette.muted }}
                     >
                       {note}
@@ -1325,10 +1855,48 @@ export default function ElegantMenu({
                   </header>
 
                   {/* Cuerpo de Sección (.sec-body de Alevan) */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-start">
-                    {/* COLUMNA IZQUIERDA: Rail Fotográfico de Arcos Desfasados */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-14 items-start">
+                    {/* EN MÓVIL: Carrusel horizontal compacto de platillos con foto */}
                     {railPhotos.length > 0 && (
-                      <div className="lg:col-span-5 lg:sticky lg:top-36 space-y-4">
+                      <div className="lg:hidden w-full overflow-x-auto no-scrollbar pb-2 pt-0.5 -mx-1 px-1 flex gap-3">
+                        {railPhotos.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleOpenProduct(item)}
+                            className="flex-shrink-0 w-36 h-28 rounded-2xl overflow-hidden relative shadow-md border cursor-pointer active:scale-95 transition-transform"
+                            style={{
+                              borderColor: palette.line,
+                              backgroundColor: palette.cardBg,
+                            }}
+                          >
+                            {item.imageUrl ? (
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center opacity-30">
+                                <Coffee className="w-6 h-6" style={{ color: palette.text }} />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex flex-col justify-end p-2.5 text-left pointer-events-none">
+                              <span className="text-[11px] font-marcellus text-white font-medium uppercase tracking-wider truncate">
+                                {item.name}
+                              </span>
+                              <span className="text-xs font-bodoni text-white/90">
+                                ${item.minPrice.toFixed(0)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* EN DESKTOP: Rail Fotográfico de Arcos Desfasados (.rail de Alevan) */}
+                    {railPhotos.length > 0 && (
+                      <div className="hidden lg:block lg:col-span-5 lg:sticky lg:top-36 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           {railPhotos.map((item, rIdx) => (
                             <figure
@@ -1387,15 +1955,16 @@ export default function ElegantMenu({
                           <div
                             key={product.id}
                             onClick={() => handleOpenProduct(product)}
-                            className="py-4.5 sm:py-5 group cursor-pointer transition-colors duration-200 rounded-xl px-2 -mx-2 select-none border-b"
+                            className="py-3.5 sm:py-5 group cursor-pointer transition-all duration-150 rounded-xl px-2.5 -mx-2.5 select-none border-b active:scale-[0.99] active:bg-black/[0.03]"
                             style={{
                               borderColor: palette.line,
+                              touchAction: 'manipulation',
                             }}
                           >
                             {/* Fila del Título, Línea Guía Punteada y Precio */}
-                            <div className="flex items-baseline justify-between gap-3">
+                            <div className="flex items-baseline justify-between gap-2.5 sm:gap-3">
                               <h4
-                                className="font-marcellus text-[15px] sm:text-[17px] uppercase tracking-[0.12em] font-normal transition-colors m-0"
+                                className="font-marcellus text-[14px] sm:text-[17px] uppercase tracking-[0.1em] sm:tracking-[0.12em] font-normal transition-colors m-0"
                                 style={{ color: palette.text }}
                               >
                                 {product.name}
@@ -1403,7 +1972,7 @@ export default function ElegantMenu({
 
                               {/* Línea punteada de guía (.lead de Alevan) */}
                               <span
-                                className="flex-1 border-b border-dotted opacity-40 min-w-4 sm:min-w-8"
+                                className="flex-1 border-b border-dotted opacity-40 min-w-3 sm:min-w-6"
                                 style={{ borderColor: palette.text }}
                               />
 
@@ -1681,7 +2250,7 @@ export default function ElegantMenu({
               exit={{ y: '100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 320 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg max-h-[90vh] rounded-t-[32px] sm:rounded-[32px] overflow-hidden flex flex-col shadow-2xl border"
+              className="w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] rounded-t-[32px] sm:rounded-[32px] overflow-hidden flex flex-col shadow-2xl border"
               style={{
                 backgroundColor: palette.paper,
                 borderColor: palette.line,
@@ -1689,11 +2258,11 @@ export default function ElegantMenu({
               }}
             >
               {/* Tirador táctil móvil */}
-              <div className="w-12 h-1.5 rounded-full bg-black/15 mx-auto my-2 sm:hidden shrink-0" />
+              <div className="w-12 h-1.5 rounded-full bg-current opacity-25 mx-auto my-2.5 sm:hidden shrink-0" />
 
               {/* Imagen con arco en cabecera */}
               <div
-                className="relative w-full h-52 sm:h-64 shrink-0 overflow-hidden"
+                className="relative w-full h-40 sm:h-60 shrink-0 overflow-hidden"
                 style={{ backgroundColor: palette.tint }}
               >
                 {selectedProduct.imageUrl ? (
@@ -1720,24 +2289,27 @@ export default function ElegantMenu({
                 <button
                   type="button"
                   onClick={() => setSelectedProduct(null)}
-                  className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center cursor-pointer hover:bg-black/70 transition-all shadow-md"
+                  className="absolute top-3.5 right-3.5 w-9 h-9 rounded-full bg-black/55 text-white flex items-center justify-center cursor-pointer hover:bg-black/75 active:scale-90 transition-all shadow-md"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Contenido scrolleable */}
-              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 text-left">
+              {/* Contenido scrolleable con contención de sobre-scroll táctil */}
+              <div
+                className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 text-left"
+                style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
+              >
                 <div>
                   <h3
-                    className="font-bodoni italic text-3xl sm:text-4xl leading-tight m-0"
+                    className="font-bodoni italic text-2xl sm:text-4xl leading-tight m-0"
                     style={{ color: palette.text }}
                   >
                     {selectedProduct.name}
                   </h3>
                   {selectedProduct.description && (
                     <p
-                      className="text-xs sm:text-sm mt-1.5 leading-relaxed"
+                      className="text-xs sm:text-sm mt-1 leading-relaxed"
                       style={{ color: palette.muted }}
                     >
                       {selectedProduct.description}
@@ -1770,7 +2342,7 @@ export default function ElegantMenu({
                             key={v.id}
                             type="button"
                             onClick={() => setSelectedVariant(v)}
-                            className="p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col justify-center"
+                            className="p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col justify-center active:scale-95"
                             style={{
                               backgroundColor: isSelected ? palette.text : palette.cardBg,
                               borderColor: isSelected ? palette.text : palette.line,
@@ -1811,7 +2383,7 @@ export default function ElegantMenu({
                                 key={mod.id}
                                 type="button"
                                 onClick={() => handleToggleModifier(group.id, mod.id, group.maxSelect)}
-                                className="p-2.5 rounded-xl border text-left flex items-center justify-between text-xs transition-all cursor-pointer"
+                                className="p-2.5 rounded-xl border text-left flex items-center justify-between text-xs transition-all cursor-pointer active:scale-95"
                                 style={{
                                   backgroundColor: isChecked ? palette.tint : palette.cardBg,
                                   borderColor: isChecked ? palette.accent : palette.line,
@@ -1848,7 +2420,7 @@ export default function ElegantMenu({
                   </div>
                 )}
 
-                {/* Instrucciones de cocina */}
+                {/* Instrucciones de cocina (font-size 16px en móvil para evitar zoom en iOS) */}
                 {liveTable && (
                   <div className="space-y-1.5 pt-1">
                     <label
@@ -1862,7 +2434,7 @@ export default function ElegantMenu({
                       value={itemNotes}
                       onChange={(e) => setItemNotes(e.target.value)}
                       placeholder="Ej: Sin azúcar, leche de almendras, salsa aparte..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border text-xs outline-none transition-all"
+                      className="w-full px-3.5 py-2.5 rounded-xl border text-[16px] sm:text-xs outline-none transition-all"
                       style={{
                         backgroundColor: palette.cardBg,
                         borderColor: palette.line,
@@ -1873,12 +2445,13 @@ export default function ElegantMenu({
                 )}
               </div>
 
-              {/* Pie de modal con precio y comanda */}
+              {/* Pie de modal con precio y comanda (safe-area inferior para celulares) */}
               <div
                 className="p-4 sm:p-5 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0"
                 style={{
                   borderColor: palette.line,
                   backgroundColor: palette.modalFooterBg,
+                  paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
                 }}
               >
                 <div className="flex items-center justify-between sm:block text-left">
@@ -1929,7 +2502,7 @@ export default function ElegantMenu({
                       <button
                         type="button"
                         onClick={() => setSelectedProduct(null)}
-                        className="px-4 py-2.5 rounded-full border text-xs font-marcellus uppercase tracking-wider cursor-pointer"
+                        className="px-4 py-2.5 rounded-full border text-xs font-marcellus uppercase tracking-wider cursor-pointer active:scale-95"
                         style={{
                           borderColor: palette.line,
                           color: palette.text,
@@ -1991,25 +2564,30 @@ export default function ElegantMenu({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setShowInfoModal(false)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-sm"
           >
             <motion.div
               key="info-modal-content"
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-[28px] p-6 space-y-5 shadow-2xl relative border text-left"
+              className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-t-[28px] sm:rounded-[28px] p-6 space-y-5 shadow-2xl relative border text-left"
               style={{
                 backgroundColor: palette.paper,
                 borderColor: palette.line,
                 color: palette.text,
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
               }}
             >
+              {/* Tirador táctil móvil */}
+              <div className="w-12 h-1.5 rounded-full bg-current opacity-25 mx-auto -mt-2 mb-3 sm:hidden" />
+
               <button
                 type="button"
                 onClick={() => setShowInfoModal(false)}
-                className="absolute top-4 right-4 p-1 rounded-full opacity-60 hover:opacity-100 cursor-pointer"
+                className="absolute top-4 right-4 p-1 rounded-full opacity-60 hover:opacity-100 cursor-pointer active:scale-90"
                 style={{ color: palette.text }}
               >
                 <X className="w-5 h-5" />
@@ -2088,6 +2666,108 @@ export default function ElegantMenu({
                         Teléfono / Pedidos
                       </strong>
                       <span style={{ color: palette.muted }}>{phone}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Redes Sociales en el Modal */}
+                {hasAnySocial && (
+                  <div
+                    className="p-3.5 rounded-2xl border space-y-2.5"
+                    style={{
+                      backgroundColor: palette.cardBg,
+                      borderColor: palette.line,
+                    }}
+                  >
+                    <strong
+                      className="block font-marcellus uppercase tracking-wider text-[11px]"
+                      style={{ color: palette.text }}
+                    >
+                      Síguenos en Redes Sociales
+                    </strong>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {instagramLink && (
+                        <a
+                          href={instagramLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all hover:scale-105 active:scale-95"
+                          style={{
+                            borderColor: palette.line,
+                            backgroundColor: palette.paper,
+                            color: palette.text,
+                          }}
+                        >
+                          <InstagramIcon className="w-3.5 h-3.5" />
+                          <span>Instagram</span>
+                        </a>
+                      )}
+                      {facebookLink && (
+                        <a
+                          href={facebookLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all hover:scale-105 active:scale-95"
+                          style={{
+                            borderColor: palette.line,
+                            backgroundColor: palette.paper,
+                            color: palette.text,
+                          }}
+                        >
+                          <FacebookIcon className="w-3.5 h-3.5" />
+                          <span>Facebook</span>
+                        </a>
+                      )}
+                      {tiktokLink && (
+                        <a
+                          href={tiktokLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all hover:scale-105 active:scale-95"
+                          style={{
+                            borderColor: palette.line,
+                            backgroundColor: palette.paper,
+                            color: palette.text,
+                          }}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
+                          </svg>
+                          <span>TikTok</span>
+                        </a>
+                      )}
+                      {whatsappLink && (
+                        <a
+                          href={whatsappLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all hover:scale-105 active:scale-95"
+                          style={{
+                            borderColor: palette.line,
+                            backgroundColor: palette.paper,
+                            color: palette.text,
+                          }}
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>WhatsApp</span>
+                        </a>
+                      )}
+                      {mapsLink && (
+                        <a
+                          href={mapsLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-all hover:scale-105 active:scale-95"
+                          style={{
+                            borderColor: palette.line,
+                            backgroundColor: palette.paper,
+                            color: palette.text,
+                          }}
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                          <span>Google Maps</span>
+                        </a>
+                      )}
                     </div>
                   </div>
                 )}

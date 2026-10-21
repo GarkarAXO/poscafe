@@ -513,11 +513,11 @@ export const DISPLAY_THEMES: Record<string, DisplayThemeConfig> = {
   // =========================================================================
   'cinepolis-gold': {
     id: 'cinepolis-gold',
-    name: 'Cinépolis Dark Gold',
-    tag: 'Cine & Gala',
+    name: 'Oro Negro & Gala',
+    tag: 'Gala & Ámbar',
     category: 'classic',
     monthOrSeason: 'Todo el año',
-    icon: '🎬',
+    icon: '✨',
     bg: '#0A0807',
     glow1: '#F59E0B',
     glow2: '#B45309',
@@ -534,9 +534,9 @@ export const DISPLAY_THEMES: Record<string, DisplayThemeConfig> = {
     badgeText: '#FCD34D',
     bgWallpaperUrl: '/wallpapers/cinepolis-vip.jpg',
     wallpaperOverlay: 'rgba(10, 8, 6, 0.40)',
-    stickerEmoji: '🎬',
+    stickerEmoji: '✨',
     stickerSecondaryEmoji: '⭐',
-    stickerTag: 'Cinépolis Gala',
+    stickerTag: 'Noche de Gala',
     cardBorderAccent: 'linear-gradient(90deg, #F59E0B 0%, #FDE047 50%, #B45309 100%)',
   },
   'specialty-coffee': {

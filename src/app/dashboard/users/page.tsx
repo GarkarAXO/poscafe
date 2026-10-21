@@ -566,7 +566,7 @@ export default function UsersAndRolesPage() {
   })
 
   return (
-    <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
+    <div className={`flex-1 flex flex-col w-full max-w-full overflow-x-hidden ${classes.textMain}`}>
       {/* Top Navbar */}
       <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
@@ -713,33 +713,36 @@ export default function UsersAndRolesPage() {
                 return (
                   <div
                     key={user.id}
-                    className={`p-5 rounded-3xl border transition-all ${classes.card} ${
+                    className={`p-4 sm:p-5 rounded-3xl border transition-all overflow-hidden ${classes.card} ${
                       !user.active ? 'opacity-60' : ''
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
+                    <div className="flex items-start justify-between gap-3 min-w-0">
+                      <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className={`text-sm font-bold ${classes.textMain}`}>{user.name}</h3>
+                          <h3 className={`text-sm sm:text-base font-bold truncate ${classes.textMain}`}>
+                            {user.name}
+                          </h3>
                           {!user.active && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0">
                               Inactivo
                             </span>
                           )}
                         </div>
 
-                        <div className={`flex items-center gap-2 text-xs ${classes.textMuted}`}>
+                        {/* Rol debajo del nombre y username opcional compacto */}
+                        <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 shrink-0 ${classes.badge}`}>
+                            <Shield className="w-3 h-3 opacity-75" />
+                            {primaryRole?.name || 'Sin Rol'}
+                          </span>
                           {user.username && (
-                            <span className={`font-mono ${classes.textSub}`}>@{user.username}</span>
+                            <span className={`text-[11px] font-mono ${classes.textSub} truncate max-w-[140px]`}>
+                              @{user.username}
+                            </span>
                           )}
-                          {user.email && <span>• {user.email}</span>}
                         </div>
                       </div>
-
-                      {/* Badge de Rol */}
-                      <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${classes.badge}`}>
-                        {primaryRole?.name || 'Sin Rol'}
-                      </span>
                     </div>
 
                     {/* PIN y Autorizaciones Rápidas */}
@@ -782,7 +785,10 @@ export default function UsersAndRolesPage() {
                       </div>
 
                       {/* Sucursales Asignadas */}
-                      <div className={`text-xs pt-1 ${classes.textMuted}`}>
+                      <div
+                        className={`text-xs pt-1 truncate block ${classes.textMuted}`}
+                        title={user.branches.map((b) => b.name).join(', ') || 'Sin sucursal'}
+                      >
                         <span className={classes.textSub}>Sucursales: </span>
                         {user.branches.map((b) => b.name).join(', ') || 'Sin sucursal'}
                       </div>

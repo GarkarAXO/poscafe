@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   Boxes,
@@ -31,6 +31,7 @@ import {
   History,
   Calendar,
   DollarSign,
+  MoreVertical,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { UNIT_DEFINITIONS, formatUnitName, formatUnitSymbol, formatUnitFull } from '@/lib/units'
@@ -162,6 +163,26 @@ export default function InventoryDashboardPage() {
       setLoadingWasteHistory(false)
     }
   }
+
+  // Menú de opciones secundarias en móviles (Cargar compra, Historial de merma, Recetarios)
+  const [showMoreActions, setShowMoreActions] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent | TouchEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreActions(false)
+      }
+    }
+    if (showMoreActions) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('touchstart', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [showMoreActions])
 
   const handleSaveWaste = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -430,7 +451,7 @@ export default function InventoryDashboardPage() {
   })
 
   return (
-    <div className={`flex-1 flex flex-col w-full ${classes.textMain}`}>
+    <div className={`flex-1 flex flex-col w-full max-w-full overflow-x-hidden ${classes.textMain}`}>
       {/* Top Navbar */}
       <header className={`border-b pl-14 sm:pl-16 lg:pl-6 pr-4 sm:pr-6 py-3.5 sm:py-4 flex items-center justify-between sticky top-0 z-30 transition-colors backdrop-blur-md ${classes.header}`}>
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -456,19 +477,20 @@ export default function InventoryDashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Botonera Desktop (>= 1024px) */}
+        <div className="hidden lg:flex items-center gap-2 shrink-0">
           <Link
             href="/dashboard/purchases"
             style={{ backgroundColor: buttonColor, color: contrastTextButton }}
             className="px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer hover:opacity-95 active:scale-95 touch-manipulation"
           >
             <Truck className="w-4 h-4" />
-            <span className="hidden sm:inline">Cargar Compra</span>
+            <span>Cargar Compra</span>
           </Link>
 
           <Link
             href="/dashboard/catalog"
-            className={`px-3 py-2 rounded-xl border font-semibold text-xs hidden sm:flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
+            className={`px-3 py-2 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${classes.buttonGhost}`}
           >
             <Coffee className="w-4 h-4 text-amber-500" />
             <span>Recetarios</span>
@@ -491,7 +513,7 @@ export default function InventoryDashboardPage() {
             title="Consultar historial de mermas registradas"
           >
             <History className="w-4 h-4 text-slate-400" />
-            <span className="hidden sm:inline">Historial</span>
+            <span>Historial</span>
           </button>
 
           <button
@@ -502,6 +524,100 @@ export default function InventoryDashboardPage() {
             <Plus className="w-4 h-4" style={{ color: buttonColor }} />
             <span>Alta Manual</span>
           </button>
+        </div>
+
+        {/* Botonera Móvil / Tablet (< 1024px) */}
+        <div className="flex lg:hidden items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => openWasteModal()}
+            className="px-2.5 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-semibold text-xs flex items-center gap-1 transition-all cursor-pointer active:scale-95 touch-manipulation"
+            title="Registrar merma"
+          >
+            <AlertOctagon className="w-3.5 h-3.5 text-rose-500" />
+            <span className="hidden sm:inline">Merma</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className={`px-2.5 py-1.5 rounded-xl border font-semibold text-xs flex items-center gap-1 transition-all cursor-pointer active:scale-95 touch-manipulation ${classes.buttonGhost}`}
+            title="Alta de insumo"
+          >
+            <Plus className="w-3.5 h-3.5" style={{ color: buttonColor }} />
+            <span className="hidden sm:inline">Alta</span>
+          </button>
+
+          {/* Menú de 3 puntos desplegable */}
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowMoreActions(!showMoreActions)}
+              className={`p-2 rounded-xl border transition-all cursor-pointer active:scale-95 touch-manipulation flex items-center justify-center ${showMoreActions ? (isLight ? 'bg-amber-100/70 border-amber-300' : 'bg-white/10 border-white/20') : classes.buttonGhost}`}
+              aria-label="Más opciones de inventario"
+              title="Más acciones"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {showMoreActions && (
+              <div
+                className={`absolute right-0 top-full mt-2 w-56 rounded-2xl border shadow-2xl z-50 py-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-150 ${
+                  isLight
+                    ? 'bg-[#FDFBF7] border-[#E6D5C3] text-[#2B1712]'
+                    : 'bg-[#18120F] border-[#3E2723] text-white'
+                }`}
+              >
+                <Link
+                  href="/dashboard/purchases"
+                  onClick={() => setShowMoreActions(false)}
+                  className={`px-3.5 py-2.5 text-xs font-semibold flex items-center gap-2.5 transition-colors ${classes.buttonGhost} border-0 rounded-none w-full text-left`}
+                >
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${buttonColor}20`, color: buttonColor }}
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block font-bold">Cargar Compra</span>
+                    <span className={`text-[10px] block truncate ${classes.textMuted}`}>Registrar compras y stock</span>
+                  </div>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMoreActions(false)
+                    openWasteHistory()
+                  }}
+                  className={`px-3.5 py-2.5 text-xs font-semibold flex items-center gap-2.5 transition-colors ${classes.buttonGhost} border-0 rounded-none w-full text-left`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-slate-500/10 text-slate-400 flex items-center justify-center shrink-0">
+                    <History className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block font-bold">Historial de Mermas</span>
+                    <span className={`text-[10px] block truncate ${classes.textMuted}`}>Consultar bajas previas</span>
+                  </div>
+                </button>
+
+                <Link
+                  href="/dashboard/catalog"
+                  onClick={() => setShowMoreActions(false)}
+                  className={`px-3.5 py-2.5 text-xs font-semibold flex items-center gap-2.5 transition-colors ${classes.buttonGhost} border-0 rounded-none w-full text-left`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                    <Coffee className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block font-bold">Recetarios</span>
+                    <span className={`text-[10px] block truncate ${classes.textMuted}`}>Fichas técnicas y subrecetas</span>
+                  </div>
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

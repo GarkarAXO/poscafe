@@ -29,6 +29,13 @@ export default function MenuClient({ business, categories, table }: MenuClientPr
         businessHours: business.theme?.businessHours,
         phone: business.theme?.phone,
         address: business.theme?.address,
+        heroWallpaperUrl: business.heroWallpaperUrl || business.theme?.heroWallpaperUrl,
+        heroWallpaperOpacity: business.heroWallpaperOpacity ?? business.theme?.heroWallpaperOpacity,
+        instagramUrl: business.socialLinks?.instagram || business.theme?.instagramUrl,
+        facebookUrl: business.socialLinks?.facebook || business.theme?.facebookUrl,
+        tiktokUrl: business.socialLinks?.tiktok || business.theme?.tiktokUrl,
+        whatsappNumber: business.socialLinks?.whatsapp || business.theme?.whatsappNumber,
+        mapsUrl: business.socialLinks?.maps || business.theme?.mapsUrl,
       }}
     />
   )
