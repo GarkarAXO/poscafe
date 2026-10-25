@@ -154,6 +154,7 @@ export default async function DashboardLayout({
         name: session.name,
         roleCodes: session.roleCodes,
         permissions: session.permissions,
+        permissionCodes: session.permissionCodes || [],
       }}
       activeBranchId={session.activeBranchId}
     >

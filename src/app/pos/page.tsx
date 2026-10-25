@@ -38,6 +38,7 @@ import {
   Laptop,
   Settings,
   ArrowUpDown,
+  Send,
 } from 'lucide-react'
 import ModalPortal from '@/components/modal-portal'
 import { notify } from '@/lib/notify'
@@ -52,6 +53,7 @@ import ProductCustomizerModal, {
   CustomizedItemResult,
   CustomizerProduct,
 } from '@/components/product-customizer-modal'
+import DynamicFavicon from '@/components/dynamic-favicon'
 
 interface Table {
   id: string
@@ -535,8 +537,11 @@ export default function PosTerminalPage() {
   const [takeawayPackaging, setTakeawayPackaging] = useState({
     includeBag: true,
     includeTray: true,
+    includeSleeve: true,
     includeCutlery: false,
   })
+  const [activeLoadedOrderId, setActiveLoadedOrderId] = useState<string | null>(null)
+  const [submittingKitchenOrder, setSubmittingKitchenOrder] = useState(false)
 
   // Success Modal State
   const [saleSuccess, setSaleSuccess] = useState<SaleSuccessData | null>(null)
@@ -818,6 +823,7 @@ export default function PosTerminalPage() {
     })
 
     setCart(loadedCart)
+    setActiveLoadedOrderId(table.activeOrder.id)
     setSelectedTableId(table.id)
     const loadedOrderType = (table.activeOrder.orderType as any) || 'DINE_IN'
     setOrderType(loadedOrderType)
@@ -829,6 +835,7 @@ export default function PosTerminalPage() {
       setTakeawayPackaging({
         includeBag: !orderNotes.includes('Sin Bolsa'),
         includeTray: orderNotes.includes('Portavasos') || orderNotes.includes('Charola') || loadedCart.length >= 2,
+        includeSleeve: !orderNotes.includes('Sin Faja') && !orderNotes.includes('Sin Manga'),
         includeCutlery: orderNotes.includes('Cubiertos'),
       })
     }
@@ -920,6 +927,7 @@ export default function PosTerminalPage() {
     setCustomerName('')
     setDiscount(null)
     setCourtesy(null)
+    setActiveLoadedOrderId(null)
     if (notifyUser) {
       notify.info('Ticket vaciado', 'Se eliminaron los productos de la orden en curso.')
     }
@@ -1079,6 +1087,94 @@ export default function PosTerminalPage() {
     )
   }
 
+  // Enviar / Marchar comanda a Cocina y Barra (sin requerir comanderas ni tablets)
+  const handleSendToKitchen = async () => {
+    if (cart.length === 0) {
+      notify.warning('Ticket vacío', 'Agrega productos a la comanda antes de marchar a cocina')
+      return
+    }
+
+    if (orderType === 'DINE_IN' && !selectedTableId) {
+      notify.warning('Mesa requerida', 'Selecciona la mesa a la cual marchar la comanda')
+      return
+    }
+
+    setSubmittingKitchenOrder(true)
+    setError(null)
+
+    try {
+      const selectedTable = tables.find((t) => t.id === selectedTableId)
+      const tableName = selectedTable ? selectedTable.name : 'Mesa'
+
+      let finalNotes = ''
+      if (orderType === 'TAKEAWAY') {
+        const pkgs: string[] = []
+        if (takeawayPackaging.includeBag) pkgs.push('Bolsa')
+        if (takeawayPackaging.includeSleeve) pkgs.push('Faja para vaso')
+        if (takeawayPackaging.includeTray) pkgs.push('Portavasos/Charola')
+        if (takeawayPackaging.includeCutlery) pkgs.push('Cubiertos')
+        finalNotes = pkgs.length > 0 ? `[PARA LLEVAR: ${pkgs.join(', ')}]` : '[PARA LLEVAR]'
+      }
+
+      const payload = {
+        tableId: orderType === 'DINE_IN' ? selectedTableId : null,
+        orderType,
+        customerName: customerName.trim() || undefined,
+        notes: finalNotes || undefined,
+        takeawayPackaging: orderType === 'TAKEAWAY' ? {
+          bags: takeawayPackaging.includeBag ? 1 : 0,
+          cupTrays: takeawayPackaging.includeTray ? 1 : 0,
+          cutlerySets: takeawayPackaging.includeCutlery ? 1 : 0,
+          sleeves: takeawayPackaging.includeSleeve ? 1 : 0,
+        } : undefined,
+        items: cart.map((it) => ({
+          variantId: it.variantId,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          notes: it.notes || '',
+          modifiers: it.modifiers?.map((m) => ({
+            modifierId: m.modifierId,
+            unitPrice: m.unitPrice,
+          })) || [],
+        })),
+      }
+
+      const res = await fetch('/api/comandas/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const json = await res.json()
+
+      if (json.success) {
+        notify.success(
+          orderType === 'TAKEAWAY' ? '🥡 Comanda para llevar marchada' : '👨‍🍳 Comanda enviada a Cocina',
+          orderType === 'TAKEAWAY'
+            ? 'Enviada a preparación en barra/cocina. Lista para preparar y cobrar.'
+            : `Mesa ${tableName} actualizada y enviada a cocina (${json.data?.orderNumber || 'Comanda'}).`
+        )
+
+        try {
+          localStorage.setItem('poscafe_kitchen_event', JSON.stringify({ type: 'NEW_ORDER', timestamp: Date.now() }))
+          window.dispatchEvent(new CustomEvent('poscafe:kitchen-updated'))
+        } catch {}
+
+        clearCart(false)
+        await refreshTablesData()
+      } else {
+        const errMsg = json.error?.message || 'Error al enviar la comanda a cocina'
+        setError(errMsg)
+        notify.error('Error al marchar', errMsg)
+      }
+    } catch {
+      setError('Error de comunicación con el servidor')
+      notify.error('Error de red', 'No fue posible marchar la comanda')
+    } finally {
+      setSubmittingKitchenOrder(false)
+    }
+  }
+
   // Procesar Cobro
   const handleConfirmPayment = async () => {
     if (cart.length === 0) return
@@ -1105,6 +1201,7 @@ export default function PosTerminalPage() {
         discount: discount ? { amount: discount.amount, reason: discount.reason, approvedBy: discount.approvedBy } : undefined,
         courtesy: courtesy ? { amount: courtesy.amount, reason: courtesy.reason, beneficiary: courtesy.beneficiary, approvedBy: courtesy.approvedBy } : undefined,
         takeawayPackaging: orderType !== 'DINE_IN' ? takeawayPackaging : undefined,
+        activeOrderId: activeLoadedOrderId || undefined,
       }
 
       const res = await fetch('/api/pos/orders', {
@@ -1119,6 +1216,7 @@ export default function PosTerminalPage() {
         setShowCheckoutModal(false)
         setSaleSuccess(json.data)
         clearCart(false)
+        refreshTablesData()
         notify.success(
           total === 0 ? 'Cortesía emitida' : 'Cobro completado',
           total === 0
@@ -1188,6 +1286,11 @@ export default function PosTerminalPage() {
       }`}
       style={{ backgroundColor: themeBg }}
     >
+      {/* Favicon dinámico específico de la sucursal activa en POS */}
+      <DynamicFavicon
+        branchId={activeBranch?.id}
+        iconUrl={activeBranch?.faviconUrl || activeBranch?.isotypeUrl}
+      />
       {/* Resplandores cálidos de ambiente con colores de la BD */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div
@@ -1716,6 +1819,129 @@ export default function PosTerminalPage() {
             />
           </div>
 
+          {/* Banner de Comanda Activa en Mesa si DINE_IN */}
+          {orderType === 'DINE_IN' && (() => {
+            const selectedTable = tables.find((t) => t.id === selectedTableId)
+            if (!selectedTable || !selectedTable.activeOrder) return null
+
+            const isLoaded = activeLoadedOrderId === selectedTable.activeOrder.id
+
+            return (
+              <div
+                className={`px-3 py-2 border-b flex items-center justify-between gap-2 text-xs transition-all ${
+                  isLoaded
+                    ? isLight
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                      : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                    : isLight
+                    ? 'bg-amber-50 border-amber-200 text-amber-950'
+                    : 'bg-amber-950/40 border-amber-500/40 text-amber-300'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <ReceiptText className="w-4 h-4 shrink-0 text-amber-500" />
+                  <div className="truncate">
+                    <span className="font-bold">Mesa {selectedTable.name}:</span>{' '}
+                    <span className="text-[11px] opacity-90">
+                      {selectedTable.activeOrder.orderNumber} (${selectedTable.activeOrder.total.toFixed(2)})
+                    </span>
+                  </div>
+                </div>
+
+                {!isLoaded ? (
+                  <button
+                    type="button"
+                    onClick={() => handleLoadTableOrder(selectedTable)}
+                    className={`px-2 py-1 rounded-md font-bold text-[11px] shrink-0 border cursor-pointer transition-all ${
+                      isLight
+                        ? 'bg-amber-200 hover:bg-amber-300 border-amber-400 text-amber-950'
+                        : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400'
+                    }`}
+                  >
+                    Cargar para Cobrar
+                  </button>
+                ) : (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0">
+                    ✓ Cargada
+                  </span>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Opciones Rápidas de Empaque si TAKEAWAY */}
+          {orderType === 'TAKEAWAY' && (
+            <div
+              className={`px-3 py-2 border-b text-[11px] flex flex-wrap items-center gap-1.5 transition-all ${
+                isLight ? 'bg-amber-50/60 border-[#DECEBD]' : 'bg-slate-900/60 border-slate-800'
+              }`}
+            >
+              <span className={`font-bold mr-1 shrink-0 ${isLight ? 'text-[#5E3023]' : 'text-amber-400'}`}>
+                Empaque:
+              </span>
+              <button
+                type="button"
+                onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeBag: !prev.includeBag }))}
+                className={`px-2 py-0.5 rounded-lg border font-semibold text-[10px] cursor-pointer transition-all ${
+                  takeawayPackaging.includeBag
+                    ? isLight
+                      ? 'bg-amber-200 border-amber-400 text-amber-950 font-bold shadow-xs'
+                      : 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-bold'
+                    : isLight
+                    ? 'bg-white border-[#DECEBD] text-[#7A5A43] opacity-60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 opacity-60'
+                }`}
+              >
+                🛍️ Bolsa {takeawayPackaging.includeBag ? '✓' : ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeSleeve: !prev.includeSleeve }))}
+                className={`px-2 py-0.5 rounded-lg border font-semibold text-[10px] cursor-pointer transition-all ${
+                  takeawayPackaging.includeSleeve
+                    ? isLight
+                      ? 'bg-amber-200 border-amber-400 text-amber-950 font-bold shadow-xs'
+                      : 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-bold'
+                    : isLight
+                    ? 'bg-white border-[#DECEBD] text-[#7A5A43] opacity-60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 opacity-60'
+                }`}
+              >
+                ☕ Faja para vaso {takeawayPackaging.includeSleeve ? '✓' : ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeTray: !prev.includeTray }))}
+                className={`px-2 py-0.5 rounded-lg border font-semibold text-[10px] cursor-pointer transition-all ${
+                  takeawayPackaging.includeTray
+                    ? isLight
+                      ? 'bg-amber-200 border-amber-400 text-amber-950 font-bold shadow-xs'
+                      : 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-bold'
+                    : isLight
+                    ? 'bg-white border-[#DECEBD] text-[#7A5A43] opacity-60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 opacity-60'
+                }`}
+              >
+                🥤 Charola {takeawayPackaging.includeTray ? '✓' : ''}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTakeawayPackaging((prev) => ({ ...prev, includeCutlery: !prev.includeCutlery }))}
+                className={`px-2 py-0.5 rounded-lg border font-semibold text-[10px] cursor-pointer transition-all ${
+                  takeawayPackaging.includeCutlery
+                    ? isLight
+                      ? 'bg-amber-200 border-amber-400 text-amber-950 font-bold shadow-xs'
+                      : 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-bold'
+                    : isLight
+                    ? 'bg-white border-[#DECEBD] text-[#7A5A43] opacity-60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 opacity-60'
+                }`}
+              >
+                🍴 Cubiertos {takeawayPackaging.includeCutlery ? '✓' : ''}
+              </button>
+            </div>
+          )}
+
           {/* Cart Items List */}
           <div className="flex-1 p-3 overflow-y-auto space-y-2">
             {cart.length === 0 ? (
@@ -1975,32 +2201,58 @@ export default function PosTerminalPage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setAmountReceived(total.toString())
-                setShowCheckoutModal(true)
-              }}
-              disabled={cart.length === 0}
-              style={{
-                backgroundColor: total === 0 ? '#059669' : themeButton,
-                color: total === 0 ? '#ffffff' : (isLightButton ? '#2B1712' : '#ffffff'),
-                ...(total > 0 ? { boxShadow: `0 4px 14px ${themeButton}40` } : {}),
-              }}
-              className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {total === 0 ? (
-                <>
-                  <Gift className="w-4 h-4" />
-                  <span>Emitir Ticket sin Cobro ($0.00)</span>
-                </>
-              ) : (
-                <>
-                  <CreditCard className="w-4 h-4" />
-                  <span>Cobrar ${total.toFixed(2)}</span>
-                </>
-              )}
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleSendToKitchen}
+                disabled={cart.length === 0 || submittingKitchenOrder}
+                className={`py-3 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs ${
+                  isLight
+                    ? 'border-amber-400 bg-amber-100 hover:bg-amber-200 text-amber-950'
+                    : 'border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300'
+                }`}
+                title="Marchar pedido a Cocina / Barra (KDS) y guardar comanda"
+              >
+                {submittingKitchenOrder ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Marchando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>{orderType === 'DINE_IN' ? 'Enviar a Cocina / Mesa' : 'Marchar para Llevar'}</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAmountReceived(total.toString())
+                  setShowCheckoutModal(true)
+                }}
+                disabled={cart.length === 0}
+                style={{
+                  backgroundColor: total === 0 ? '#059669' : themeButton,
+                  color: total === 0 ? '#ffffff' : (isLightButton ? '#2B1712' : '#ffffff'),
+                  ...(total > 0 ? { boxShadow: `0 4px 14px ${themeButton}40` } : {}),
+                }}
+                className="py-3 px-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {total === 0 ? (
+                  <>
+                    <Gift className="w-4 h-4" />
+                    <span>Sin Cobro ($0.00)</span>
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="w-4 h-4" />
+                    <span>Cobrar ${total.toFixed(2)}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -2073,7 +2325,7 @@ export default function PosTerminalPage() {
                     Descontar de stock
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
@@ -2084,6 +2336,18 @@ export default function PosTerminalPage() {
                       className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500"
                     />
                     <span className={isLight ? 'text-[#2B1712] font-medium' : 'text-slate-200'}>Bolsa</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={takeawayPackaging.includeSleeve}
+                      onChange={(e) =>
+                        setTakeawayPackaging((prev) => ({ ...prev, includeSleeve: e.target.checked }))
+                      }
+                      className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className={isLight ? 'text-[#2B1712] font-medium' : 'text-slate-200'}>Faja vaso</span>
                   </label>
 
                   <label className="flex items-center gap-1.5 cursor-pointer">

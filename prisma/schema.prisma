@@ -206,6 +206,7 @@ model Branch {
   // Personalización visual por sucursal
   logoUrl        String?
   isotypeUrl     String?
+  faviconUrl     String?
   sidebarTheme   String?   @default("DARK")
   primaryColor   String?   @default("#C08552")
   secondaryColor String?   @default("#5E3023")
@@ -253,7 +254,8 @@ model User {
   username     String?
   passwordHash String
   pinHash      String?
-  gender       String?   @default("MALE") // 'MALE' | 'FEMALE'
+  gender       String?   @default("MALE") // 'MALE' | 'FEMALE' | 'OTHER'
+  age          Int?
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -290,15 +292,16 @@ model UserBranch {
   @@map("user_branches")
 }
 
-// Roles Dinámicos con Flags de Permisos
+// Roles / Puestos de Trabajo Dinámicos
 model Role {
-  id         String   @id @default(uuid())
-  businessId String?  // NULL = Rol del sistema / Plantilla global
-  name       String
-  code       String
-  isSystem   Boolean  @default(false)
+  id          String   @id @default(uuid())
+  businessId  String?  // NULL = Rol del sistema / Plantilla global
+  name        String
+  code        String
+  description String?
+  isSystem    Boolean  @default(false)
 
-  // Flags dinámicos de permisos
+  // Flags heredados de permisos (mantenidos para retrocompatibilidad directa)
   canAccessPOS            Boolean @default(false)
   canManageCatalog        Boolean @default(false)
   canManageInventory      Boolean @default(false)
@@ -318,8 +321,9 @@ model Role {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  business Business?  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  users    UserRole[]
+  business        Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  users           UserRole[]
+  rolePermissions RolePermission[]
 
   @@unique([businessId, code])
   @@map("roles")
@@ -334,6 +338,56 @@ model UserRole {
 
   @@id([userId, roleId])
   @@map("user_roles")
+}
+
+// Módulos del Sistema (Dashboard, POS, Comandera, KDS)
+model Module {
+  id          String       @id @default(uuid())
+  code        String       @unique // ej: DASHBOARD, POS, COMANDERA, KDS
+  name        String
+  description String?
+  icon        String?      // ej: LayoutDashboard, CreditCard, UtensilsCrossed, MonitorPlay
+  route       String?      // ej: /dashboard, /pos, /comandera, /kds
+  sortOrder   Int          @default(0)
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  permissions Permission[]
+
+  @@map("modules")
+}
+
+// Permisos asociados a cada módulo mediante constantes en código
+model Permission {
+  id           String           @id @default(uuid())
+  moduleId     String
+  code         String           @unique // Constante en código: ej. acceso_dashboard, acceso_pos, autorizar_descuentos
+  name         String
+  description  String?
+  isAccessFlag Boolean          @default(false) // Indica si es el permiso principal de acceso al módulo
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  module          Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+
+  @@index([moduleId])
+  @@map("permissions")
+}
+
+// Relación de permisos asignados a cada Puesto (Role)
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
 }
 
 // ==========================================

@@ -34,9 +34,11 @@ import {
   Trash2,
   RotateCcw,
   AlertOctagon,
+  Code2,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { ModalPortal } from '@/components/modal-portal'
+import AdminModulesManagement from './admin-modules-management'
 
 export interface SerializedBusiness {
   id: string
@@ -125,6 +127,9 @@ export default function AdminPanelClient({
     }
     return pass
   }
+
+  // Secciones principales del panel
+  const [mainSection, setMainSection] = useState<'businesses' | 'modules_permissions'>('businesses')
 
   // Modales
   const [selectedBusiness, setSelectedBusiness] = useState<SerializedBusiness | null>(null)
@@ -270,6 +275,7 @@ export default function AdminPanelClient({
       if (branchesStaff.length > 0) {
         payload.branchesStaffLimits = branchesStaff.map((b) => ({
           id: b.id,
+          name: b.name.trim(),
           maxStaff: Number(b.maxStaff) || 10,
         }))
       }
@@ -284,7 +290,7 @@ export default function AdminPanelClient({
 
       if (json.success) {
         setSaveSuccessMsg('¡Configuración guardada exitosamente!')
-        notify.success('Configuración guardada', 'Los cambios en el negocio se aplicaron correctamente.')
+        notify.success('Configuración guardada', 'Los cambios en el negocio y sucursales se aplicaron correctamente.')
         setEditOwnerPassword('')
 
         // Actualizar lista local reactiva
@@ -304,7 +310,9 @@ export default function AdminPanelClient({
                 branches: b.branches
                   ? b.branches.map((br) => {
                       const updated = branchesStaff.find((bs) => bs.id === br.id)
-                      return updated ? { ...br, maxStaff: Number(updated.maxStaff) || 10 } : br
+                      return updated
+                        ? { ...br, name: updated.name.trim(), maxStaff: Number(updated.maxStaff) || 10 }
+                        : br
                     })
                   : b.branches,
                 subscription: b.subscription
@@ -320,6 +328,23 @@ export default function AdminPanelClient({
             }
             return b
           })
+        )
+
+        setSelectedBusiness((prev) =>
+          prev
+            ? {
+                ...prev,
+                name: editForm.name,
+                branches: prev.branches
+                  ? prev.branches.map((br) => {
+                      const updated = branchesStaff.find((bs) => bs.id === br.id)
+                      return updated
+                        ? { ...br, name: updated.name.trim(), maxStaff: Number(updated.maxStaff) || 10 }
+                        : br
+                    })
+                  : prev.branches,
+              }
+            : null
         )
 
         // Limpiar mensaje tras 3 segundos
@@ -592,6 +617,34 @@ export default function AdminPanelClient({
           </div>
         </div>
 
+        {/* Selector de Pestaña Principal */}
+        <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-2xl border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setMainSection('businesses')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              mainSection === 'businesses'
+                ? 'bg-violet-600 text-white shadow-md shadow-violet-600/20'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Store className="w-3.5 h-3.5" />
+            <span>Negocios</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainSection('modules_permissions')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              mainSection === 'modules_permissions'
+                ? 'bg-violet-600 text-white shadow-md shadow-violet-600/20'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Code2 className="w-3.5 h-3.5" />
+            <span>Módulos & Constantes</span>
+          </button>
+        </div>
+
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -623,8 +676,12 @@ export default function AdminPanelClient({
 
       {/* Main Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 sm:p-8 space-y-6">
-        {/* KPI Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {mainSection === 'modules_permissions' ? (
+          <AdminModulesManagement />
+        ) : (
+          <>
+            {/* KPI Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-5 rounded-3xl bg-slate-900/60 border border-slate-800/80 shadow-md">
             <div className="flex items-center justify-between text-slate-400 mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider">Negocios Registrados</span>
@@ -916,6 +973,8 @@ export default function AdminPanelClient({
             </table>
           </div>
         </div>
+          </>
+        )}
       </main>
 
       {/* ========================================================= */}
@@ -1136,15 +1195,15 @@ export default function AdminPanelClient({
                     </div>
                   </div>
 
-                  {/* Límite de Personal por Sucursal */}
+                  {/* Sucursales del Negocio: Nombre y Límite de Personal */}
                   <div className="pt-2 border-t border-slate-800/80 space-y-3">
                     <div>
                       <strong className="text-white text-xs flex items-center gap-1.5">
-                        <Users className="w-4 h-4 text-violet-400" />
-                        Límite de Personal por Sucursal (Cupo de Empleados)
+                        <Building2 className="w-4 h-4 text-violet-400" />
+                        Sucursales del Negocio (Edición de Nombre y Cupo)
                       </strong>
                       <span className="text-[11px] text-slate-400">
-                        Define el número máximo de colaboradores activos autorizados para cada sucursal de este negocio.
+                        Modifica el nombre de cada sucursal o ajusta el número máximo de colaboradores autorizados.
                       </span>
                     </div>
 
@@ -1153,44 +1212,70 @@ export default function AdminPanelClient({
                         Este negocio no tiene sucursales registradas aún.
                       </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {branchesStaff.map((branch, idx) => (
                           <div
                             key={branch.id}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl bg-slate-950 border border-slate-800 gap-3"
+                            className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/90 space-y-3 hover:border-slate-700 transition-colors"
                           >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <Building2 className="w-4 h-4 text-violet-400 shrink-0" />
-                              <div className="min-w-0">
-                                <span className="text-xs font-semibold text-white block truncate">
-                                  {branch.name}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-mono">
-                                  Código: {branch.code}
-                                </span>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <label className="text-[11px] font-semibold text-slate-300 block mb-1 flex items-center gap-1">
+                                  <Store className="w-3.5 h-3.5 text-violet-400" />
+                                  Nombre de la Sucursal:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={branch.name}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    setBranchesStaff((prev) =>
+                                      prev.map((b, i) => (i === idx ? { ...b, name: val } : b))
+                                    )
+                                  }}
+                                  placeholder="Ej: Sucursal Centro, Norte, etc."
+                                  className="w-full sm:max-w-xs px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:ring-1 focus:ring-violet-500 font-medium"
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-3 shrink-0 self-start sm:self-end">
+                                <div>
+                                  <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+                                    Código:
+                                  </label>
+                                  <span className="inline-block px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 font-mono text-xs">
+                                    {branch.code}
+                                  </span>
+                                </div>
+
+                                <div>
+                                  <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+                                    Máx. Personal:
+                                  </label>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={500}
+                                      value={branch.maxStaff}
+                                      onChange={(e) => {
+                                        const val = Math.max(1, parseInt(e.target.value) || 1)
+                                        setBranchesStaff((prev) =>
+                                          prev.map((b, i) => (i === idx ? { ...b, maxStaff: val } : b))
+                                        )
+                                      }}
+                                      className="w-16 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                    />
+                                    <span className="text-[10px] text-slate-500">colab.</span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-end sm:self-center">
-                              <div className="flex items-center gap-1.5">
-                                <label className="text-[11px] text-slate-400 whitespace-nowrap">
-                                  Máx. Personal:
-                                </label>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={500}
-                                  value={branch.maxStaff}
-                                  onChange={(e) => {
-                                    const val = Math.max(1, parseInt(e.target.value) || 1)
-                                    setBranchesStaff((prev) =>
-                                      prev.map((b, i) => (i === idx ? { ...b, maxStaff: val } : b))
-                                    )
-                                  }}
-                                  className="w-16 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs text-center focus:outline-none focus:ring-1 focus:ring-violet-500"
-                                />
-                                <span className="text-[10px] text-slate-500">colab.</span>
-                              </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-900">
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                ID: {branch.id.slice(0, 8)}...
+                              </span>
 
                               <button
                                 type="button"
@@ -1204,10 +1289,10 @@ export default function AdminPanelClient({
                                   setResetConfirmText('')
                                   setResetError(null)
                                 }}
-                                className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/30 flex items-center gap-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/30 flex items-center gap-1.5 text-[11px] font-semibold transition-all cursor-pointer shadow-xs"
                                 title={`Reiniciar ventas, cajas y stock a 0 para ${branch.name}`}
                               >
-                                <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <RotateCcw className="w-3 h-3 text-amber-400 shrink-0" />
                                 <span>Reiniciar Operación</span>
                               </button>
                             </div>

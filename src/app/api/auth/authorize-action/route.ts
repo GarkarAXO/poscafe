@@ -83,9 +83,14 @@ export async function POST(request: Request) {
         )
       }
     } else if (requiredPermission) {
-      // Verificar si el autorizador cuenta con el permiso requerido
+      // Verificar si el autorizador cuenta con el permiso requerido (por constante o por flag legacy)
+      const { getUserPermissionCodes } = await import('@/lib/permissions-service')
+      const userPermCodes = await getUserPermissionCodes(authorizer.id)
       const merged = mergePermissions(authorizer.roles)
-      const hasPerm = Boolean(merged[requiredPermission as keyof UserPermissions])
+
+      const hasPerm =
+        userPermCodes.includes(requiredPermission) ||
+        Boolean(merged[requiredPermission as keyof UserPermissions])
 
       if (!hasPerm) {
         return NextResponse.json(

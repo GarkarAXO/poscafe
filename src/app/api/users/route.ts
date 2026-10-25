@@ -87,6 +87,7 @@ export async function GET() {
         email: u.email,
         username: u.username,
         gender: u.gender || 'MALE',
+        age: u.age ?? null,
         active: u.active,
         hasPin: Boolean(u.pinHash),
         lastLoginAt: u.lastLoginAt,
@@ -100,6 +101,7 @@ export async function GET() {
           canAuthorizeDiscounts: ur.role.canAuthorizeDiscounts,
           canAuthorizeCourtesies: ur.role.canAuthorizeCourtesies,
           canAuthorizeCancellations: ur.role.canAuthorizeCancellations,
+          canTransferTables: ur.role.canTransferTables,
           canAccessKDS: ur.role.canAccessKDS,
           canManageKitchen: ur.role.canManageKitchen,
         })),
@@ -186,7 +188,9 @@ export async function POST(request: Request) {
       password,
       pin,
       gender = 'MALE',
+      age,
       roleId,
+      operationalPermissions,
       branchIds = [],
       kitchenStationIds = [],
       defaultBranchId,
@@ -199,14 +203,14 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!email?.trim() && !username?.trim()) {
+    if (!password?.trim() && !pin?.trim()) {
       return NextResponse.json(
-        { success: false, error: { code: 'INVALID_INPUT', message: 'Debes proporcionar al menos un correo o un usuario' } },
+        { success: false, error: { code: 'INVALID_INPUT', message: 'Debes asignar un PIN de 4 dígitos para el acceso del colaborador' } },
         { status: 400 }
       )
     }
 
-    if (!password || password.length < 6) {
+    if (password && password.trim().length < 6) {
       return NextResponse.json(
         { success: false, error: { code: 'INVALID_INPUT', message: 'La contraseña debe tener al menos 6 caracteres' } },
         { status: 400 }
@@ -215,7 +219,7 @@ export async function POST(request: Request) {
 
     if (!roleId) {
       return NextResponse.json(
-        { success: false, error: { code: 'INVALID_INPUT', message: 'Debes asignar un rol al empleado' } },
+        { success: false, error: { code: 'INVALID_INPUT', message: 'Debes asignar un puesto de trabajo al colaborador' } },
         { status: 400 }
       )
     }
@@ -292,7 +296,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const passwordHash = await bcrypt.hash(password, 10)
+    const effectivePassword = password?.trim() || crypto.randomUUID()
+    const passwordHash = await bcrypt.hash(effectivePassword, 10)
 
     // Crear usuario en transacción
     const newUser = await prisma.$transaction(async (tx: any) => {
@@ -305,15 +310,99 @@ export async function POST(request: Request) {
           passwordHash,
           pinHash,
           gender: gender === 'FEMALE' ? 'FEMALE' : 'MALE',
+          age: typeof age === 'number' && age > 0 ? Math.floor(age) : null,
           active: true,
         },
       })
 
-      // Asignar rol
+      // Asignar rol (creando rol personalizado individual si se modificaron permisos operativos)
+      let finalRoleId = role.id
+      const hasCustomOps =
+        operationalPermissions &&
+        (
+          (operationalPermissions.canAccessPOS !== undefined && operationalPermissions.canAccessPOS !== role.canAccessPOS) ||
+          (operationalPermissions.canAuthorizeDiscounts !== undefined && operationalPermissions.canAuthorizeDiscounts !== role.canAuthorizeDiscounts) ||
+          (operationalPermissions.canAuthorizeCourtesies !== undefined && operationalPermissions.canAuthorizeCourtesies !== role.canAuthorizeCourtesies) ||
+          (operationalPermissions.canAuthorizeCancellations !== undefined && operationalPermissions.canAuthorizeCancellations !== role.canAuthorizeCancellations) ||
+          (operationalPermissions.canTransferTables !== undefined && operationalPermissions.canTransferTables !== role.canTransferTables)
+        )
+
+      if (hasCustomOps) {
+        const staffCode = `STAFF_${user.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 20)}`
+        const customRole = await tx.role.create({
+          data: {
+            businessId: session.businessId,
+            name: role.name,
+            code: staffCode,
+            description: `Puesto ${role.name} con permisos operativos personalizados`,
+            isSystem: false,
+            canAccessPOS: operationalPermissions.canAccessPOS ?? role.canAccessPOS,
+            canManageCatalog: role.canManageCatalog,
+            canManageInventory: role.canManageInventory,
+            canManagePurchases: role.canManagePurchases,
+            canManageExpenses: role.canManageExpenses,
+            canManageCashRegisters: role.canManageCashRegisters,
+            canViewReports: role.canViewReports,
+            canManageUsers: role.canManageUsers,
+            canManageSettings: role.canManageSettings,
+            canAuthorizeDiscounts: operationalPermissions.canAuthorizeDiscounts ?? role.canAuthorizeDiscounts,
+            canAuthorizeCourtesies: operationalPermissions.canAuthorizeCourtesies ?? role.canAuthorizeCourtesies,
+            canAuthorizeCancellations: operationalPermissions.canAuthorizeCancellations ?? role.canAuthorizeCancellations,
+            canTransferTables: operationalPermissions.canTransferTables ?? role.canTransferTables,
+            canAccessKDS: role.canAccessKDS,
+            canManageKitchen: role.canManageKitchen,
+          },
+        })
+
+        // Copiar y ajustar permisos en role_permissions
+        const baseRolePerms = await tx.rolePermission.findMany({
+          where: { roleId: role.id },
+          include: { permission: true },
+        })
+        const permCodes = new Set<string>(baseRolePerms.map((rp: any) => rp.permission.code))
+
+        // Ajustar según permisos operativos
+        if (customRole.canAccessPOS) {
+          permCodes.add('acceso_pos')
+          permCodes.add('acceso_comandera')
+        } else {
+          permCodes.delete('acceso_pos')
+          permCodes.delete('acceso_comandera')
+        }
+        if (customRole.canAuthorizeDiscounts) permCodes.add('autorizar_descuentos')
+        else permCodes.delete('autorizar_descuentos')
+
+        if (customRole.canAuthorizeCourtesies) permCodes.add('autorizar_cortesias')
+        else permCodes.delete('autorizar_cortesias')
+
+        if (customRole.canAuthorizeCancellations) permCodes.add('autorizar_cancelaciones')
+        else permCodes.delete('autorizar_cancelaciones')
+
+        if (customRole.canTransferTables) permCodes.add('traspaso_mesas')
+        else permCodes.delete('traspaso_mesas')
+
+        const permsToLink = await tx.permission.findMany({
+          where: { code: { in: Array.from(permCodes) } },
+          select: { id: true },
+        })
+
+        if (permsToLink.length > 0) {
+          await tx.rolePermission.createMany({
+            data: permsToLink.map((p: any) => ({
+              roleId: customRole.id,
+              permissionId: p.id,
+            })),
+            skipDuplicates: true,
+          })
+        }
+
+        finalRoleId = customRole.id
+      }
+
       await tx.userRole.create({
         data: {
           userId: user.id,
-          roleId: role.id,
+          roleId: finalRoleId,
         },
       })
 

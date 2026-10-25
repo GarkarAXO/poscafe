@@ -5,6 +5,7 @@ import DashboardSidebar from './dashboard-sidebar'
 
 import { isLightColor } from '@/lib/theme-utils'
 import { DashboardThemeProvider } from '@/context/dashboard-theme-context'
+import DynamicFavicon from './dynamic-favicon'
 
 interface DashboardLayoutClientProps {
   business: any
@@ -101,6 +102,10 @@ export default function DashboardLayoutClient({
       initialButtonColor={buttonColor}
       activeBranchId={activeBranch?.id}
     >
+      <DynamicFavicon
+        branchId={activeBranch?.id}
+        iconUrl={mergedBusiness?.faviconUrl || mergedBusiness?.isotypeUrl}
+      />
       <div
         className={`min-h-screen flex flex-col transition-colors duration-500 relative selection:bg-[#C08552] selection:text-white ${
           isLight ? 'text-[#2B1712]' : 'text-slate-100'

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { InstagramIcon, FacebookIcon, TikTokIcon, WhatsAppIcon } from '@/components/brand-icons'
 import { isLightColor } from '@/lib/theme-utils'
+import DynamicFavicon from '@/components/dynamic-favicon'
 
 function hexToRgba(hex?: string | null, alpha = 1): string {
   if (!hex) return `rgba(0, 0, 0, ${alpha})`
@@ -104,10 +105,12 @@ export interface TableData {
 
 export interface BusinessData {
   id?: string
+  branchId?: string | null
   name: string
   legalName?: string | null
   logoUrl?: string | null
   isotypeUrl?: string | null
+  faviconUrl?: string | null
   currency: string
   timezone?: string
   heroWallpaperUrl?: string | null
@@ -241,10 +244,15 @@ export default function ElegantMenu({
     customColors?.menuCoverTitle ||
     business.theme?.menuCoverTitle ||
     'Cafetería & Barra de Especialidad'
-  const coverSubtitle =
+  const rawCoverSubtitle =
     customColors?.menuCoverSubtitle ||
     business.theme?.menuCoverSubtitle ||
-    '“Where coffee & moments meet.”'
+    ''
+  const isGenericEnglishSubtitle = /where\s*coffee|moments\s*meet|brew/i.test(rawCoverSubtitle)
+  const coverSubtitle =
+    !isGenericEnglishSubtitle && rawCoverSubtitle.trim()
+      ? rawCoverSubtitle.trim()
+      : 'Café de especialidad y gastronomía artesanal'
   // Datos del establecimiento
   const businessHours =
     customColors?.businessHours ||
@@ -390,6 +398,104 @@ export default function ElegantMenu({
       window.removeEventListener('resize', onScroll)
     }
   }, [isPreview, categories])
+
+  // Desplazamiento suave y controlado (Smooth Momentum Scroll) con inercia elegante estilo editorial
+  useEffect(() => {
+    if (isPreview) return
+    if (typeof window === 'undefined') return
+
+    let currentY = window.scrollY
+    let targetY = window.scrollY
+    let isAnimating = false
+    let isTouching = false
+
+    // Factor de amortiguación sedosa (0.082 proporciona un movimiento controlado, fluido y pesado)
+    const ease = 0.082
+
+    const onWheel = (e: WheelEvent) => {
+      // Ignorar si el usuario interactúa dentro de un contenedor interno con scroll propio (modales, drawers, listas)
+      let targetEl = e.target as HTMLElement | null
+      while (targetEl && targetEl !== document.body && targetEl !== document.documentElement) {
+        const style = window.getComputedStyle(targetEl)
+        const isScrollable =
+          (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+          targetEl.scrollHeight > targetEl.clientHeight
+        if (isScrollable) {
+          // Dejar que el contenedor interno haga su scroll natural
+          return
+        }
+        targetEl = targetEl.parentElement
+      }
+
+      // Si hay un modal abierto o el body tiene overflow hidden, no interferir
+      if (document.body.style.overflow === 'hidden') return
+
+      e.preventDefault()
+
+      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+      // Escalar delta de rueda para cadencia controlada y elegante
+      const delta = e.deltaY * 0.9
+      targetY = Math.min(maxScroll, Math.max(0, targetY + delta))
+
+      if (!isAnimating) {
+        isAnimating = true
+        requestAnimationFrame(step)
+      }
+    }
+
+    const step = () => {
+      if (isTouching) {
+        isAnimating = false
+        return
+      }
+
+      currentY += (targetY - currentY) * ease
+
+      if (Math.abs(targetY - currentY) < 0.4) {
+        currentY = targetY
+        window.scrollTo(0, currentY)
+        isAnimating = false
+        return
+      }
+
+      window.scrollTo(0, currentY)
+      requestAnimationFrame(step)
+    }
+
+    const onTouchStart = () => {
+      isTouching = true
+      isAnimating = false
+      targetY = window.scrollY
+      currentY = window.scrollY
+    }
+
+    const onTouchEnd = () => {
+      isTouching = false
+      targetY = window.scrollY
+      currentY = window.scrollY
+    }
+
+    const onSyncScroll = () => {
+      if (!isAnimating) {
+        targetY = window.scrollY
+        currentY = window.scrollY
+      }
+    }
+
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('touchend', onTouchEnd, { passive: true })
+    window.addEventListener('scroll', onSyncScroll, { passive: true })
+    window.addEventListener('keydown', onSyncScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('scroll', onSyncScroll)
+      window.removeEventListener('keydown', onSyncScroll)
+    }
+  }, [isPreview])
 
   // Estados interactivos
   const [searchQuery, setSearchQuery] = useState('')
@@ -760,6 +866,11 @@ export default function ElegantMenu({
         color: palette.text,
       }}
     >
+      {/* Favicon dinámico específico de la sucursal */}
+      <DynamicFavicon
+        branchId={business.branchId || business.id}
+        iconUrl={business.faviconUrl || business.isotypeUrl}
+      />
       {/* ======================================================== */}
       {/* 1. HERO EDITORIAL: IDENTIDAD Y VENTANA CINEMÁTICA        */}
       {/* ======================================================== */}
@@ -770,7 +881,7 @@ export default function ElegantMenu({
           isPreview
             ? 'min-h-[100svh]'
             : hasHeroImages
-            ? 'min-h-[100svh] lg:h-[185vh]'
+            ? 'h-[185vh] sm:h-[190vh] lg:h-[185vh]'
             : 'min-h-[100svh]'
         }`}
         style={{
@@ -778,7 +889,7 @@ export default function ElegantMenu({
           color: palette.coverText,
         }}
       >
-        <div className="relative lg:sticky lg:top-0 min-h-[100svh] lg:h-screen w-full overflow-hidden flex flex-col justify-center items-center py-5 sm:py-8 lg:py-0">
+        <div className="sticky top-0 h-[100svh] w-full overflow-hidden flex flex-col justify-center items-center py-3 sm:py-6 lg:py-0">
           {/* Fondo cinematográfico temático del Hero (Wallpaper con overlay protector) */}
           {heroWallpaperUrl && (
             <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
@@ -821,111 +932,170 @@ export default function ElegantMenu({
           />
 
           {/* Contenedor principal */}
-          <div className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-10 lg:px-14 py-2 sm:py-6 lg:py-8">
+          <div className="relative z-10 max-w-7xl mx-auto w-full h-full flex flex-col justify-center px-4 sm:px-10 lg:px-14 py-2 sm:py-6 lg:py-8">
             {hasHeroImages ? (
-              /* Caso con imágenes: En móvil layout vertical proporcionado sin recortes; en desktop 2 columnas lado a lado */
-              <div className="flex flex-col lg:grid lg:grid-cols-12 gap-4 sm:gap-6 lg:gap-14 items-center">
-                {/* ---------------------------------------------------- */}
-                {/* COLUMNA IZQUIERDA: LOGO, TÍTULO, FRASE Y VER MENÚ   */}
-                {/* ---------------------------------------------------- */}
-                <div className="w-full lg:col-span-6 flex flex-col items-center text-center space-y-3 sm:space-y-5 lg:space-y-6">
-                  {/* Logo o Marca */}
-                  {business.logoUrl || business.isotypeUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={business.logoUrl || business.isotypeUrl || ''}
-                      alt={business.name}
-                      className="w-auto h-14 sm:h-20 lg:h-32 max-w-[min(78vw,340px)] object-contain drop-shadow-2xl transition-transform hover:scale-102"
-                    />
-                  ) : (
-                    <h1
-                      className="text-3xl sm:text-5xl lg:text-6xl font-bodoni italic tracking-tight drop-shadow-xl"
+              <div className="w-full h-full flex flex-col justify-center">
+                {/* ========================================================= */}
+                {/* 1. VISTA MÓVIL Y TABLET (lg:hidden): EXPERIENCIA CENTRADA */}
+                {/*    La imagen está al centro; al hacer scroll se anima y   */}
+                {/*    posteriormente emerge el logo y la marca con suavidad. */}
+                {/* ========================================================= */}
+                <div className="flex lg:hidden flex-col items-center justify-between h-full w-full max-h-[100svh] py-3 sm:py-5">
+                  {/* SECCIÓN SUPERIOR: Logo y Marca (Emerge al scrollear tras la animación) */}
+                  <div
+                    className="w-full flex flex-col items-center text-center space-y-1.5 sm:space-y-2 transition-all duration-300 will-change-transform pt-1"
+                    style={{
+                      opacity: Math.min(1, Math.max(0, (heroProgress - 0.14) / 0.36)),
+                      transform: `translateY(${(1 - Math.min(1, Math.max(0, (heroProgress - 0.14) / 0.36))) * -18}px)`,
+                      pointerEvents: heroProgress > 0.32 ? 'auto' : 'none',
+                      minHeight: '76px',
+                    }}
+                  >
+                    {/* Logo o Marca */}
+                    {business.logoUrl || business.isotypeUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={business.logoUrl || business.isotypeUrl || ''}
+                        alt={business.name}
+                        className="w-auto h-12 sm:h-16 max-w-[min(70vw,260px)] object-contain drop-shadow-xl"
+                      />
+                    ) : (
+                      <h1
+                        className="text-2xl sm:text-4xl font-bodoni italic tracking-tight drop-shadow-xl"
+                        style={{ color: palette.coverText }}
+                      >
+                        {business.name}
+                      </h1>
+                    )}
+
+                    {/* Título de cafetería / rubro */}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-4 h-[1px]"
+                        style={{ backgroundColor: palette.coverAccent }}
+                      />
+                      <p
+                        className="font-marcellus text-[10px] sm:text-xs tracking-[0.24em] uppercase font-medium"
+                        style={{ color: palette.coverAccent }}
+                      >
+                        {coverTitle}
+                      </p>
+                      <span
+                        className="w-4 h-[1px]"
+                        style={{ backgroundColor: palette.coverAccent }}
+                      />
+                    </div>
+
+                    {/* Frase / Slogan gastronómico */}
+                    <p
+                      className="font-dancing text-lg sm:text-2xl leading-tight font-medium max-w-xs drop-shadow-sm px-2 line-clamp-1"
                       style={{ color: palette.coverText }}
                     >
-                      {business.name}
-                    </h1>
-                  )}
-
-                  {/* Título de la cafetería / rubro */}
-                  <div className="flex items-center gap-2.5 sm:gap-3">
-                    <span
-                      className="w-5 sm:w-7 h-[1.5px]"
-                      style={{ backgroundColor: palette.coverAccent }}
-                    />
-                    <p
-                      className="font-marcellus text-[11px] sm:text-xs lg:text-sm tracking-[0.24em] sm:tracking-[0.28em] uppercase font-medium"
-                      style={{ color: palette.coverAccent }}
-                    >
-                      {coverTitle}
+                      {coverSubtitle}
                     </p>
-                    <span
-                      className="w-5 sm:w-7 h-[1.5px]"
-                      style={{ backgroundColor: palette.coverAccent }}
-                    />
-                  </div>
 
-                  {/* Frase / Slogan en tipografía Dancing Script */}
-                  <p
-                    className="font-dancing text-2xl sm:text-3xl lg:text-5xl leading-tight font-medium max-w-lg drop-shadow-sm px-2"
-                    style={{ color: palette.coverText }}
-                  >
-                    {coverSubtitle}
-                  </p>
-
-                  {/* Si está en mesa: Chip identificador de mesa */}
-                  {liveTable && (
-                    <div className="pt-0.5 sm:pt-1">
-                      <div
-                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-marcellus uppercase tracking-widest border shadow-xl backdrop-blur-md"
-                        style={{
-                          backgroundColor: liveTable.isInitiated
-                            ? 'rgba(16, 185, 129, 0.22)'
-                            : hexToRgba(palette.coverAccent, 0.18),
-                          borderColor: liveTable.isInitiated ? '#10B981' : palette.coverAccent,
-                          color: liveTable.isInitiated ? '#A7F3D0' : palette.coverText,
-                        }}
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full animate-ping"
+                    {/* Chip de mesa si aplica */}
+                    {liveTable && (
+                      <div className="pt-0.5">
+                        <div
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-marcellus uppercase tracking-wider border shadow-md backdrop-blur-md"
                           style={{
                             backgroundColor: liveTable.isInitiated
-                              ? '#10B981'
-                              : palette.coverAccent,
+                              ? 'rgba(16, 185, 129, 0.22)'
+                              : hexToRgba(palette.coverAccent, 0.18),
+                            borderColor: liveTable.isInitiated ? '#10B981' : palette.coverAccent,
+                            color: liveTable.isInitiated ? '#A7F3D0' : palette.coverText,
                           }}
-                        />
-                        <span className="font-semibold text-[11px] sm:text-xs">Mesa {liveTable.name}</span>
-                        {liveTable.area && (
-                          <span className="opacity-75 text-[10px] sm:text-xs">({liveTable.area})</span>
-                        )}
-                        <span className="text-[9px] sm:text-[10px] opacity-80 pl-1 border-l border-white/20">
-                          {liveTable.isInitiated ? 'Abierta' : 'En espera'}
-                        </span>
+                        >
+                          <span
+                            className="w-1.5 h-1.5 rounded-full animate-ping"
+                            style={{
+                              backgroundColor: liveTable.isInitiated ? '#10B981' : palette.coverAccent,
+                            }}
+                          />
+                          <span className="font-semibold">Mesa {liveTable.name}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
-                  {/* Botón Ver menú y redes para DESKTOP (en móvil va debajo del cuadro de especiales) */}
-                  <div className="hidden lg:flex w-full flex-col items-center justify-center pt-3 sm:pt-5 space-y-3">
+                  {/* SECCIÓN CENTRAL: Imagen de Especiales Protagonista al Centro */}
+                  <div className="flex-1 w-full flex items-center justify-center my-auto py-2">
+                    <div
+                      className="relative w-full max-w-[280px] sm:max-w-[340px] aspect-[4/4.8] max-h-[46vh] sm:max-h-[50vh] overflow-hidden shadow-2xl border cursor-pointer will-change-transform"
+                      style={{
+                        borderRadius: `${20 + heroProgress * 150}px ${20 + heroProgress * 150}px 20px 20px`,
+                        transform: `scale(${Math.max(0.88, 1 - heroProgress * 0.1)})`,
+                        borderColor: hexToRgba(palette.coverAccent, 0.35),
+                        backgroundColor: hexToRgba(palette.cover, 0.5),
+                        transition: 'border-radius 0.05s ease-out, transform 0.05s ease-out',
+                      }}
+                      onClick={() => {
+                        if (specialProducts[activeSpecialIndex]) {
+                          handleOpenProduct(specialProducts[activeSpecialIndex])
+                        }
+                      }}
+                      title={
+                        specialProducts[activeSpecialIndex]
+                          ? `Ver ${specialProducts[activeSpecialIndex].name}`
+                          : undefined
+                      }
+                    >
+                      {/* Carrusel crossfade de imágenes de los especiales */}
+                      {specialProducts.map((special, sIdx) => {
+                        const isCurrent = sIdx === activeSpecialIndex
+                        if (!special.imageUrl) return null
+                        return (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={special.id}
+                            src={special.imageUrl}
+                            alt={special.name}
+                            className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out ${
+                              isCurrent
+                                ? 'opacity-100 scale-100'
+                                : 'opacity-0 scale-105 pointer-events-none'
+                            }`}
+                          />
+                        )
+                      })}
+
+                      {/* Halo y borde interior de luz (estilo ventana Alevan) */}
+                      <div
+                        className="absolute inset-0 pointer-events-none rounded-[inherit]"
+                        style={{
+                          boxShadow:
+                            'inset 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 0 35px rgba(0, 0, 0, 0.35)',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN INFERIOR: Botón Ver menú centrado y guía luminosa */}
+                  <div className="w-full flex flex-col items-center justify-center pt-1 pb-1 space-y-2">
                     <button
                       type="button"
                       onClick={scrollToBar}
-                      className="group flex flex-col items-center gap-2.5 cursor-pointer text-xs font-marcellus uppercase tracking-[0.3em] transition-opacity hover:opacity-100"
+                      className="group flex flex-col items-center gap-1.5 cursor-pointer text-xs font-marcellus uppercase tracking-[0.28em] transition-opacity hover:opacity-100 active:scale-95"
                       style={{
                         color: palette.coverText,
                       }}
                     >
-                      <span className="opacity-85 group-hover:opacity-100 transition-opacity">Ver menú</span>
+                      <span className="opacity-90 group-hover:opacity-100 transition-opacity text-[11px] font-medium">Ver menú</span>
                       <i
-                        className="block w-[1.5px] h-10 animate-drip"
+                        className="block w-[1.5px] h-7 animate-drip"
                         style={{
                           background: `linear-gradient(to bottom, ${palette.coverText}, transparent)`,
                         }}
                       />
                     </button>
 
-                    {/* Redes sociales sutiles en Hero Desktop */}
+                    {/* Redes sociales en móvil si están configuradas */}
                     {hasAnySocial && (
-                      <div className="flex items-center justify-center gap-2 pt-1">
+                      <div
+                        className="flex items-center justify-center gap-2 pt-0.5 transition-opacity duration-300"
+                        style={{ opacity: Math.max(0.7, heroProgress) }}
+                      >
                         {instagramLink && (
                           <a
                             href={instagramLink}
@@ -933,14 +1103,14 @@ export default function ElegantMenu({
                             rel="noopener noreferrer"
                             aria-label="Instagram"
                             title="Instagram"
-                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
                             style={{
                               borderColor: hexToRgba(palette.coverAccent, 0.45),
                               backgroundColor: hexToRgba(palette.cover, 0.55),
                               color: palette.coverText,
                             }}
                           >
-                            <InstagramIcon className="w-3.5 h-3.5" />
+                            <InstagramIcon className="w-3 h-3" />
                           </a>
                         )}
                         {facebookLink && (
@@ -950,14 +1120,14 @@ export default function ElegantMenu({
                             rel="noopener noreferrer"
                             aria-label="Facebook"
                             title="Facebook"
-                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
                             style={{
                               borderColor: hexToRgba(palette.coverAccent, 0.45),
                               backgroundColor: hexToRgba(palette.cover, 0.55),
                               color: palette.coverText,
                             }}
                           >
-                            <FacebookIcon className="w-3.5 h-3.5" />
+                            <FacebookIcon className="w-3 h-3" />
                           </a>
                         )}
                         {tiktokLink && (
@@ -967,14 +1137,14 @@ export default function ElegantMenu({
                             rel="noopener noreferrer"
                             aria-label="TikTok"
                             title="TikTok"
-                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
                             style={{
                               borderColor: hexToRgba(palette.coverAccent, 0.45),
                               backgroundColor: hexToRgba(palette.cover, 0.55),
                               color: palette.coverText,
                             }}
                           >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
                             </svg>
                           </a>
@@ -986,14 +1156,14 @@ export default function ElegantMenu({
                             rel="noopener noreferrer"
                             aria-label="WhatsApp"
                             title="WhatsApp"
-                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
                             style={{
                               borderColor: hexToRgba(palette.coverAccent, 0.45),
                               backgroundColor: hexToRgba(palette.cover, 0.55),
                               color: palette.coverText,
                             }}
                           >
-                            <MessageCircle className="w-3.5 h-3.5" />
+                            <MessageCircle className="w-3 h-3" />
                           </a>
                         )}
                         {mapsLink && (
@@ -1003,14 +1173,14 @@ export default function ElegantMenu({
                             rel="noopener noreferrer"
                             aria-label="Ubicación"
                             title="Ubicación"
-                            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                            className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
                             style={{
                               borderColor: hexToRgba(palette.coverAccent, 0.45),
                               backgroundColor: hexToRgba(palette.cover, 0.55),
                               color: palette.coverText,
                             }}
                           >
-                            <MapPin className="w-3.5 h-3.5" />
+                            <MapPin className="w-3 h-3" />
                           </a>
                         )}
                       </div>
@@ -1018,171 +1188,250 @@ export default function ElegantMenu({
                   </div>
                 </div>
 
-                {/* ---------------------------------------------------- */}
-                {/* COLUMNA DERECHA: CUADRO VENTANA DE ESPECIALES        */}
-                {/* ---------------------------------------------------- */}
-                <div className="w-full lg:col-span-6 flex justify-center lg:justify-end">
-                  <div
-                    className="relative w-full max-w-[240px] sm:max-w-[300px] lg:max-w-[420px] aspect-[4/4.8] lg:aspect-[3/4.2] max-h-[35vh] sm:max-h-[42vh] lg:max-h-none overflow-hidden shadow-2xl border cursor-pointer will-change-transform rounded-[28px] lg:rounded-none"
-                    style={{
-                      borderRadius: `${28 + heroProgress * 164}px ${28 + heroProgress * 164}px 24px 24px`,
-                      transform: `scale(${Math.max(0.88, 1 - heroProgress * 0.1)})`,
-                      borderColor: hexToRgba(palette.coverAccent, 0.32),
-                      backgroundColor: hexToRgba(palette.cover, 0.45),
-                      transition: 'border-radius 0.05s ease-out, transform 0.05s ease-out',
-                    }}
-                    onClick={() => {
-                      if (specialProducts[activeSpecialIndex]) {
-                        handleOpenProduct(specialProducts[activeSpecialIndex])
-                      }
-                    }}
-                    title={
-                      specialProducts[activeSpecialIndex]
-                        ? `Ver ${specialProducts[activeSpecialIndex].name}`
-                        : undefined
-                    }
-                  >
-                    {/* Carrusel crossfade de imágenes de los especiales */}
-                    {specialProducts.map((special, sIdx) => {
-                      const isCurrent = sIdx === activeSpecialIndex
-                      if (!special.imageUrl) return null
-                      return (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          key={special.id}
-                          src={special.imageUrl}
-                          alt={special.name}
-                          className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out ${
-                            isCurrent
-                              ? 'opacity-100 scale-100'
-                              : 'opacity-0 scale-105 pointer-events-none'
-                          }`}
+                {/* ========================================================= */}
+                {/* 2. VISTA DESKTOP (hidden lg:grid): 2 COLUMNAS ARMONIOSAS  */}
+                {/* ========================================================= */}
+                <div className="hidden lg:grid lg:grid-cols-12 gap-14 items-center w-full">
+                  {/* COLUMNA IZQUIERDA: LOGO, TÍTULO, FRASE Y VER MENÚ */}
+                  <div className="w-full lg:col-span-6 flex flex-col items-center text-center space-y-6">
+                    {/* Logo o Marca */}
+                    {business.logoUrl || business.isotypeUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={business.logoUrl || business.isotypeUrl || ''}
+                        alt={business.name}
+                        className="w-auto h-28 lg:h-32 max-w-[min(78vw,340px)] object-contain drop-shadow-2xl transition-transform hover:scale-102"
+                      />
+                    ) : (
+                      <h1
+                        className="text-5xl lg:text-6xl font-bodoni italic tracking-tight drop-shadow-xl"
+                        style={{ color: palette.coverText }}
+                      >
+                        {business.name}
+                      </h1>
+                    )}
+
+                    {/* Título de la cafetería / rubro */}
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="w-7 h-[1.5px]"
+                        style={{ backgroundColor: palette.coverAccent }}
+                      />
+                      <p
+                        className="font-marcellus text-sm tracking-[0.28em] uppercase font-medium"
+                        style={{ color: palette.coverAccent }}
+                      >
+                        {coverTitle}
+                      </p>
+                      <span
+                        className="w-7 h-[1.5px]"
+                        style={{ backgroundColor: palette.coverAccent }}
+                      />
+                    </div>
+
+                    {/* Frase / Slogan gastronómico */}
+                    <p
+                      className="font-dancing text-3xl lg:text-5xl leading-tight font-medium max-w-lg drop-shadow-sm px-2"
+                      style={{ color: palette.coverText }}
+                    >
+                      {coverSubtitle}
+                    </p>
+
+                    {/* Chip de mesa si aplica */}
+                    {liveTable && (
+                      <div className="pt-1">
+                        <div
+                          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-marcellus uppercase tracking-widest border shadow-xl backdrop-blur-md"
+                          style={{
+                            backgroundColor: liveTable.isInitiated
+                              ? 'rgba(16, 185, 129, 0.22)'
+                              : hexToRgba(palette.coverAccent, 0.18),
+                            borderColor: liveTable.isInitiated ? '#10B981' : palette.coverAccent,
+                            color: liveTable.isInitiated ? '#A7F3D0' : palette.coverText,
+                          }}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full animate-ping"
+                            style={{
+                              backgroundColor: liveTable.isInitiated ? '#10B981' : palette.coverAccent,
+                            }}
+                          />
+                          <span className="font-semibold text-xs">Mesa {liveTable.name}</span>
+                          {liveTable.area && (
+                            <span className="opacity-75 text-xs">({liveTable.area})</span>
+                          )}
+                          <span className="text-[10px] opacity-80 pl-1 border-l border-white/20">
+                            {liveTable.isInitiated ? 'Abierta' : 'En espera'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botón Ver menú y redes en Desktop */}
+                    <div className="w-full flex flex-col items-center justify-center pt-4 space-y-3">
+                      <button
+                        type="button"
+                        onClick={scrollToBar}
+                        className="group flex flex-col items-center gap-2.5 cursor-pointer text-xs font-marcellus uppercase tracking-[0.3em] transition-opacity hover:opacity-100"
+                        style={{
+                          color: palette.coverText,
+                        }}
+                      >
+                        <span className="opacity-85 group-hover:opacity-100 transition-opacity">Ver menú</span>
+                        <i
+                          className="block w-[1.5px] h-10 animate-drip"
+                          style={{
+                            background: `linear-gradient(to bottom, ${palette.coverText}, transparent)`,
+                          }}
                         />
-                      )
-                    })}
+                      </button>
 
-                    {/* Sutil halo y borde interior de luz (estilo ventana Alevan) */}
-                    <div
-                      className="absolute inset-0 pointer-events-none rounded-[inherit]"
-                      style={{
-                        boxShadow:
-                          'inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 0 35px rgba(0, 0, 0, 0.3)',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* BOTÓN VER MENÚ Y REDES PARA MÓVIL (debajo del cuadro interactivo) */}
-                <div className="w-full flex lg:hidden flex-col items-center justify-center pt-2 space-y-2">
-                  <button
-                    type="button"
-                    onClick={scrollToBar}
-                    className="group flex flex-col items-center gap-1.5 cursor-pointer text-xs font-marcellus uppercase tracking-[0.25em] transition-opacity hover:opacity-100 active:scale-95"
-                    style={{
-                      color: palette.coverText,
-                    }}
-                  >
-                    <span className="opacity-90 group-hover:opacity-100 transition-opacity text-[11px]">Ver menú</span>
-                    <i
-                      className="block w-[1.5px] h-7 animate-drip"
-                      style={{
-                        background: `linear-gradient(to bottom, ${palette.coverText}, transparent)`,
-                      }}
-                    />
-                  </button>
-
-                  {/* Redes sociales en móvil */}
-                  {hasAnySocial && (
-                    <div className="flex items-center justify-center gap-2 pt-0.5">
-                      {instagramLink && (
-                        <a
-                          href={instagramLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Instagram"
-                          title="Instagram"
-                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
-                          style={{
-                            borderColor: hexToRgba(palette.coverAccent, 0.45),
-                            backgroundColor: hexToRgba(palette.cover, 0.55),
-                            color: palette.coverText,
-                          }}
-                        >
-                          <InstagramIcon className="w-3 h-3" />
-                        </a>
-                      )}
-                      {facebookLink && (
-                        <a
-                          href={facebookLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Facebook"
-                          title="Facebook"
-                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
-                          style={{
-                            borderColor: hexToRgba(palette.coverAccent, 0.45),
-                            backgroundColor: hexToRgba(palette.cover, 0.55),
-                            color: palette.coverText,
-                          }}
-                        >
-                          <FacebookIcon className="w-3 h-3" />
-                        </a>
-                      )}
-                      {tiktokLink && (
-                        <a
-                          href={tiktokLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="TikTok"
-                          title="TikTok"
-                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
-                          style={{
-                            borderColor: hexToRgba(palette.coverAccent, 0.45),
-                            backgroundColor: hexToRgba(palette.cover, 0.55),
-                            color: palette.coverText,
-                          }}
-                        >
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
-                          </svg>
-                        </a>
-                      )}
-                      {whatsappLink && (
-                        <a
-                          href={whatsappLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="WhatsApp"
-                          title="WhatsApp"
-                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
-                          style={{
-                            borderColor: hexToRgba(palette.coverAccent, 0.45),
-                            backgroundColor: hexToRgba(palette.cover, 0.55),
-                            color: palette.coverText,
-                          }}
-                        >
-                          <MessageCircle className="w-3 h-3" />
-                        </a>
-                      )}
-                      {mapsLink && (
-                        <a
-                          href={mapsLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Ubicación"
-                          title="Ubicación"
-                          className="w-7 h-7 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 active:scale-90 cursor-pointer shadow-xs"
-                          style={{
-                            borderColor: hexToRgba(palette.coverAccent, 0.45),
-                            backgroundColor: hexToRgba(palette.cover, 0.55),
-                            color: palette.coverText,
-                          }}
-                        >
-                          <MapPin className="w-3 h-3" />
-                        </a>
+                      {/* Redes sociales en Desktop */}
+                      {hasAnySocial && (
+                        <div className="flex items-center justify-center gap-2 pt-1">
+                          {instagramLink && (
+                            <a
+                              href={instagramLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Instagram"
+                              title="Instagram"
+                              className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                              style={{
+                                borderColor: hexToRgba(palette.coverAccent, 0.45),
+                                backgroundColor: hexToRgba(palette.cover, 0.55),
+                                color: palette.coverText,
+                              }}
+                            >
+                              <InstagramIcon className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          {facebookLink && (
+                            <a
+                              href={facebookLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Facebook"
+                              title="Facebook"
+                              className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                              style={{
+                                borderColor: hexToRgba(palette.coverAccent, 0.45),
+                                backgroundColor: hexToRgba(palette.cover, 0.55),
+                                color: palette.coverText,
+                              }}
+                            >
+                              <FacebookIcon className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          {tiktokLink && (
+                            <a
+                              href={tiktokLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="TikTok"
+                              title="TikTok"
+                              className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                              style={{
+                                borderColor: hexToRgba(palette.coverAccent, 0.45),
+                                backgroundColor: hexToRgba(palette.cover, 0.55),
+                                color: palette.coverText,
+                              }}
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-.88-.06A6.34 6.34 0 0 0 3 15.68a6.34 6.34 0 0 0 10.74 4.54 6.26 6.26 0 0 0 1.95-4.55V8.1a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-.87-.47v.94z" />
+                              </svg>
+                            </a>
+                          )}
+                          {whatsappLink && (
+                            <a
+                              href={whatsappLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="WhatsApp"
+                              title="WhatsApp"
+                              className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                              style={{
+                                borderColor: hexToRgba(palette.coverAccent, 0.45),
+                                backgroundColor: hexToRgba(palette.cover, 0.55),
+                                color: palette.coverText,
+                              }}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          {mapsLink && (
+                            <a
+                              href={mapsLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Ubicación"
+                              title="Ubicación"
+                              className="w-8 h-8 rounded-full border flex items-center justify-center transition-all opacity-80 hover:opacity-100 hover:scale-110 active:scale-95 cursor-pointer shadow-xs"
+                              style={{
+                                borderColor: hexToRgba(palette.coverAccent, 0.45),
+                                backgroundColor: hexToRgba(palette.cover, 0.55),
+                                color: palette.coverText,
+                              }}
+                            >
+                              <MapPin className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
+                  </div>
+
+                  {/* COLUMNA DERECHA: CUADRO VENTANA DE ESPECIALES EN DESKTOP */}
+                  <div className="w-full lg:col-span-6 flex justify-end">
+                    <div
+                      className="relative w-full max-w-[420px] aspect-[3/4.2] overflow-hidden shadow-2xl border cursor-pointer will-change-transform"
+                      style={{
+                        borderRadius: `${28 + heroProgress * 164}px ${28 + heroProgress * 164}px 24px 24px`,
+                        transform: `scale(${Math.max(0.88, 1 - heroProgress * 0.1)})`,
+                        borderColor: hexToRgba(palette.coverAccent, 0.32),
+                        backgroundColor: hexToRgba(palette.cover, 0.45),
+                        transition: 'border-radius 0.05s ease-out, transform 0.05s ease-out',
+                      }}
+                      onClick={() => {
+                        if (specialProducts[activeSpecialIndex]) {
+                          handleOpenProduct(specialProducts[activeSpecialIndex])
+                        }
+                      }}
+                      title={
+                        specialProducts[activeSpecialIndex]
+                          ? `Ver ${specialProducts[activeSpecialIndex].name}`
+                          : undefined
+                      }
+                    >
+                      {/* Carrusel crossfade de imágenes de los especiales */}
+                      {specialProducts.map((special, sIdx) => {
+                        const isCurrent = sIdx === activeSpecialIndex
+                        if (!special.imageUrl) return null
+                        return (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={special.id}
+                            src={special.imageUrl}
+                            alt={special.name}
+                            className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out ${
+                              isCurrent
+                                ? 'opacity-100 scale-100'
+                                : 'opacity-0 scale-105 pointer-events-none'
+                            }`}
+                          />
+                        )
+                      })}
+
+                      {/* Halo y borde interior de luz (estilo ventana Alevan) */}
+                      <div
+                        className="absolute inset-0 pointer-events-none rounded-[inherit]"
+                        style={{
+                          boxShadow:
+                            'inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 0 35px rgba(0, 0, 0, 0.3)',
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1645,7 +1894,7 @@ export default function ElegantMenu({
               className="font-script text-3xl sm:text-4xl m-0"
               style={{ color: palette.accent }}
             >
-              Where coffee &amp; moments meet
+              Pasión por el detalle
             </p>
             <h2
               className="font-bodoni italic text-4xl sm:text-6xl lg:text-7xl leading-[1.02] tracking-tight m-0"
@@ -1772,14 +2021,14 @@ export default function ElegantMenu({
           filteredCategories.map((category, catIndex) => {
             const lower = category.name.toLowerCase()
 
-            // Kicker temático barista por categoría (estilo Alevan)
+            // Kicker temático barista por categoría (estilo editorial)
             const kicker = (() => {
-              if (lower.includes('caliente') || lower.includes('café') || lower.includes('cafe') || lower.includes('espresso') || lower.includes('latte')) return 'Brew'
-              if (lower.includes('fría') || lower.includes('fria') || lower.includes('frapp') || lower.includes('cold') || lower.includes('ice')) return 'Frío'
-              if (lower.includes('smoothie') || lower.includes('bowl') || lower.includes('tisana') || lower.includes('té') || lower.includes('te')) return 'Fresh'
-              if (lower.includes('salado') || lower.includes('comida') || lower.includes('bagel') || lower.includes('panini')) return 'Antojo'
+              if (lower.includes('caliente') || lower.includes('café') || lower.includes('cafe') || lower.includes('espresso') || lower.includes('latte')) return 'Barra de Especialidad'
+              if (lower.includes('fría') || lower.includes('fria') || lower.includes('frapp') || lower.includes('cold') || lower.includes('ice')) return 'Bebidas Frías'
+              if (lower.includes('smoothie') || lower.includes('bowl') || lower.includes('tisana') || lower.includes('té') || lower.includes('te')) return 'Frescos & Tisanas'
+              if (lower.includes('salado') || lower.includes('comida') || lower.includes('bagel') || lower.includes('panini')) return 'Cocina & Salado'
               if (lower.includes('postre') || lower.includes('pan') || lower.includes('crepa') || lower.includes('reposter')) return 'Horno & Dulce'
-              return 'Especialidad'
+              return 'Selección de la Casa'
             })()
 
             // Nota contextual
@@ -1885,9 +2134,10 @@ export default function ElegantMenu({
                               <span className="text-[11px] font-marcellus text-white font-medium uppercase tracking-wider truncate">
                                 {item.name}
                               </span>
-                              <span className="text-xs font-bodoni text-white/90">
-                                ${item.minPrice.toFixed(0)}
-                              </span>
+                              <div className="inline-flex items-baseline font-bodoni text-[14px] font-semibold text-amber-200 drop-shadow-sm tracking-tight">
+                                <span className="text-[10px] font-marcellus mr-0.5 opacity-85 select-none font-normal">$</span>
+                                <span className="tabular-nums">{item.minPrice.toFixed(0)}</span>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1976,18 +2226,27 @@ export default function ElegantMenu({
                                 style={{ borderColor: palette.text }}
                               />
 
-                              {/* Precio en Bodoni Moda Tabular (.price de Alevan) */}
-                              <div
-                                className="shrink-0 text-right font-bodoni text-xl sm:text-2xl font-normal"
-                                style={{ color: palette.accent }}
-                              >
-                                <small className="text-xs mr-0.5 opacity-75">$</small>
-                                <span>{product.minPrice.toFixed(0)}</span>
+                              {/* Precio con presencia tipográfica destacada de alta gama */}
+                              <div className="shrink-0 text-right flex items-baseline justify-end gap-1.5 pl-2">
                                 {hasMulti && (
-                                  <span className="text-[10px] font-marcellus uppercase tracking-widest ml-1 opacity-60">
+                                  <span
+                                    className="text-[9px] sm:text-[10px] font-marcellus uppercase tracking-[0.2em] font-medium opacity-65"
+                                    style={{ color: palette.muted }}
+                                  >
                                     desde
                                   </span>
                                 )}
+                                <div
+                                  className="inline-flex items-baseline font-bodoni text-[22px] sm:text-[28px] font-semibold tracking-tight transition-transform group-hover:scale-105"
+                                  style={{ color: palette.accent }}
+                                >
+                                  <span className="text-xs sm:text-sm font-marcellus mr-0.5 opacity-80 font-normal select-none">
+                                    $
+                                  </span>
+                                  <span className="tabular-nums drop-shadow-xs">
+                                    {product.minPrice.toFixed(0)}
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
@@ -2031,10 +2290,11 @@ export default function ElegantMenu({
                                       style={{ borderColor: palette.text }}
                                     />
                                     <span
-                                      className="font-bodoni font-normal"
+                                      className="inline-flex items-baseline font-bodoni text-sm sm:text-base font-semibold"
                                       style={{ color: palette.accent }}
                                     >
-                                      ${v.price.toFixed(0)}
+                                      <span className="font-marcellus text-[10px] mr-0.5 opacity-80">$</span>
+                                      <span className="tabular-nums">{v.price.toFixed(0)}</span>
                                     </span>
                                   </div>
                                 ))}
@@ -2462,10 +2722,14 @@ export default function ElegantMenu({
                     Total
                   </span>
                   <strong
-                    className="text-2xl font-bodoni font-normal"
-                    style={{ color: palette.text }}
+                    className="inline-flex items-baseline text-2xl sm:text-3xl font-bodoni font-semibold tracking-tight"
+                    style={{ color: palette.accent }}
                   >
-                    ${currentTotalPrice.toFixed(0)} {business.currency}
+                    <span className="text-sm font-marcellus mr-0.5 opacity-80 select-none font-normal">$</span>
+                    <span className="tabular-nums">{currentTotalPrice.toFixed(0)}</span>
+                    <span className="text-xs font-marcellus font-normal tracking-wider ml-1.5 opacity-75" style={{ color: palette.muted }}>
+                      {business.currency}
+                    </span>
                   </strong>
                 </div>
 

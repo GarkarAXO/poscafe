@@ -31,10 +31,12 @@ export interface AuthSession {
   email?: string | null
   username?: string | null
   gender?: string | null
+  age?: number | null
   isPlatformAdmin: boolean
   businessId?: string
   activeBranchId?: string
   roleCodes: string[]
+  permissionCodes?: string[]
   permissions: UserPermissions
 }
 

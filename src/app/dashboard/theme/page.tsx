@@ -66,6 +66,7 @@ interface Branch {
   code: string
   logoUrl: string | null
   isotypeUrl: string | null
+  faviconUrl?: string | null
   sidebarTheme: string | null
   bgColor: string | null
   primaryColor: string | null
@@ -427,6 +428,7 @@ export default function ThemeCustomizerPage() {
     buttonColor: '#C08552',
     logoUrl: '',
     isotypeUrl: '',
+    faviconUrl: '',
     sidebarTheme: 'DARK',
     // Personalización Carta Menú Digital (Estilo Libro Flipbook)
     businessHours: 'Lunes a Domingo: 8:00 AM - 10:00 PM',
@@ -513,6 +515,7 @@ export default function ThemeCustomizerPage() {
           buttonColor: initialBranch.buttonColor || '#C08552',
           logoUrl: initialBranch.logoUrl || '',
           isotypeUrl: initialBranch.isotypeUrl || '',
+          faviconUrl: initialBranch.faviconUrl || '',
           sidebarTheme: (initialBranch.sidebarTheme as any) || 'DARK',
           businessHours: initialBranch.businessHours || 'Lunes a Domingo: 8:00 AM - 10:00 PM',
           menuCoverColor: initialBranch.menuCoverColor || '#18120F',
@@ -720,6 +723,7 @@ export default function ThemeCustomizerPage() {
         buttonColor: branch.buttonColor || '#C08552',
         logoUrl: branch.logoUrl || '',
         isotypeUrl: branch.isotypeUrl || '',
+        faviconUrl: branch.faviconUrl || '',
         sidebarTheme: (branch.sidebarTheme as any) || 'DARK',
         businessHours: branch.businessHours || 'Lunes a Domingo: 8:00 AM - 10:00 PM',
         menuCoverColor: branch.menuCoverColor || '#18120F',
@@ -792,6 +796,7 @@ export default function ThemeCustomizerPage() {
           buttonColor: themeData.buttonColor,
           logoUrl: themeData.logoUrl || null,
           isotypeUrl: themeData.isotypeUrl || null,
+          faviconUrl: themeData.faviconUrl || null,
           sidebarTheme: themeData.sidebarTheme,
           businessHours: themeData.businessHours,
           menuCoverColor: themeData.menuCoverColor,
@@ -884,6 +889,46 @@ export default function ThemeCustomizerPage() {
       notify.error('Error de conexión', 'No fue posible comunicar con el servidor')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const [generatingFavicon, setGeneratingFavicon] = useState(false)
+
+  const handleGenerateFavicon = async (source: 'logo' | 'isotype') => {
+    if (!selectedBranchId) return
+    const sourceUrl = source === 'isotype' ? themeData.isotypeUrl : themeData.logoUrl
+    if (!sourceUrl) {
+      notify.warning(
+        'Imagen requerida',
+        `Para generar el favicon .ico, primero ingresa la URL del ${source === 'isotype' ? 'isotipo' : 'logotipo'}.`
+      )
+      return
+    }
+
+    try {
+      setGeneratingFavicon(true)
+      const res = await fetch(`/api/branches/${selectedBranchId}/generate-favicon`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceUrl, source }),
+      })
+      const json = await res.json()
+      if (json.success && json.data?.faviconUrl) {
+        setThemeData((prev) => ({ ...prev, faviconUrl: json.data.faviconUrl }))
+        notify.success(
+          'Favicon .ico generado',
+          'El icono .ico fue generado y vinculado exitosamente a esta sucursal.'
+        )
+        setBranches((prev) =>
+          prev.map((b) => (b.id === selectedBranchId ? { ...b, faviconUrl: json.data.faviconUrl } : b))
+        )
+      } else {
+        notify.error('Error al generar', json.error?.message || 'No se pudo generar el favicon .ico')
+      }
+    } catch {
+      notify.error('Error de conexión', 'Ocurrió un error al contactar al generador de favicons')
+    } finally {
+      setGeneratingFavicon(false)
     }
   }
 
@@ -1400,6 +1445,149 @@ export default function ThemeCustomizerPage() {
                   />
                 </div>
               )}
+            </div>
+
+            {/* URL y Generador de Favicon (.ico) para la Pestaña del Navegador */}
+            <div className={`p-3.5 rounded-2xl border space-y-2.5 ${classes.subCard}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">🌐</span>
+                  <label className={`block text-xs font-bold ${classes.textMain}`}>
+                    Favicon de la Pestaña del Navegador (.ico)
+                  </label>
+                </div>
+                {themeData.faviconUrl ? (
+                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    Favicon activo
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-amber-600 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    Usa logo por defecto
+                  </span>
+                )}
+              </div>
+              <p className={`text-[10px] leading-relaxed ${classes.textMuted}`}>
+                Cada sucursal puede tener su propio favicon .ico exclusivo. Se muestra en la pestaña de Chrome, Safari y Edge cuando abren el Menú Digital, el POS o la Comandera de esta sucursal.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={themeData.faviconUrl}
+                  onChange={(e) => setThemeData({ ...themeData, faviconUrl: e.target.value })}
+                  placeholder="https://ejemplo.com/favicon.ico o genera uno abajo"
+                  className={`flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                />
+                {themeData.faviconUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setThemeData({ ...themeData, faviconUrl: '' })}
+                    className="px-3 py-1.5 rounded-xl text-[10px] font-semibold border cursor-pointer hover:bg-rose-500/10 hover:border-rose-500/30 text-rose-500 transition-colors"
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+
+              {/* Botones de Generación Automática desde Logo o Isotipo */}
+              {(themeData.logoUrl || themeData.isotypeUrl) && (
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  <span className={`text-[10px] font-semibold ${classes.textSub}`}>Generación rápida:</span>
+                  {themeData.isotypeUrl && (
+                    <button
+                      type="button"
+                      disabled={generatingFavicon}
+                      onClick={() => handleGenerateFavicon('isotype')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer active:scale-95 shadow-xs ${
+                        isLight
+                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                          : 'bg-[#C08552]/15 hover:bg-[#C08552]/25 border-[#C08552]/40 text-[#DECEBD]'
+                      }`}
+                    >
+                      {generatingFavicon ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3 text-amber-500" />
+                      )}
+                      <span>Generar .ico desde Isotipo</span>
+                    </button>
+                  )}
+                  {themeData.logoUrl && (
+                    <button
+                      type="button"
+                      disabled={generatingFavicon}
+                      onClick={() => handleGenerateFavicon('logo')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer active:scale-95 shadow-xs ${
+                        isLight
+                          ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                          : 'bg-[#C08552]/15 hover:bg-[#C08552]/25 border-[#C08552]/40 text-[#DECEBD]'
+                      }`}
+                    >
+                      {generatingFavicon ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3 text-amber-500" />
+                      )}
+                      <span>Generar .ico desde Logo</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Simulador Fotorrealista de Pestaña de Navegador Web */}
+              <div className="pt-2">
+                <span className={`text-[9px] font-bold uppercase tracking-wider block mb-1.5 ${classes.textSub}`}>
+                  Simulador de Pestaña del Navegador (Vista previa en vivo)
+                </span>
+                <div className="bg-[#1e1e24] p-2.5 rounded-2xl border border-white/10 shadow-inner flex flex-col gap-2">
+                  {/* Barra de pestañas simulada */}
+                  <div className="flex items-center gap-2">
+                    {/* Botones de control ventana */}
+                    <div className="flex items-center gap-1.5 pr-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+                    </div>
+
+                    {/* Pestaña activa */}
+                    <div className="flex-1 max-w-[260px] bg-[#2a2a32] text-white px-3 py-1.5 rounded-t-xl border-t border-x border-white/15 flex items-center justify-between gap-2 shadow-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* Icono Favicon */}
+                        {themeData.faviconUrl || themeData.isotypeUrl || themeData.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={themeData.faviconUrl || themeData.isotypeUrl || themeData.logoUrl}
+                            alt="Favicon"
+                            className="w-4 h-4 object-contain rounded-xs shrink-0 select-none"
+                            onError={(e) => {
+                              ;(e.target as any).src = '/api/favicon'
+                            }}
+                          />
+                        ) : (
+                          <span className="w-4 h-4 rounded-xs bg-[#C08552] text-[10px] font-bold text-white flex items-center justify-center shrink-0">
+                            {(selectedBranch?.name || 'K').charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="text-[11px] font-medium truncate">
+                          {selectedBranch?.name || 'Sucursal'} | POS & Menú
+                        </span>
+                      </div>
+                      <span className="text-[10px] opacity-40 hover:opacity-100 cursor-pointer">✕</span>
+                    </div>
+
+                    {/* Botón nueva pestaña '+' */}
+                    <span className="text-white/40 text-xs px-1 select-none">+</span>
+                  </div>
+
+                  {/* Barra de dirección URL */}
+                  <div className="bg-[#121216] px-3 py-1 rounded-lg text-[10px] text-white/60 flex items-center gap-2">
+                    <span className="text-emerald-400 text-[9px]">🔒</span>
+                    <span className="truncate">
+                      https://tucafeteria.com/menu?branchId={selectedBranchId || 'principal'}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* SECCIÓN DEDICADA: PERSONALIZACIÓN DE LA CARTA MENÚ DIGITAL (ESTILO LIBRO FLIPBOOK) */}

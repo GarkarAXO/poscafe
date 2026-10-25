@@ -128,6 +128,7 @@ export async function GET() {
             })),
           roleCodes: session.roleCodes,
           permissions: session.permissions,
+          permissionCodes: session.permissionCodes || [],
           kitchenStations: user.kitchenStations?.map((ks) => ({
             id: ks.station.id,
             name: ks.station.name,

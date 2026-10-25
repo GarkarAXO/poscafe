@@ -83,6 +83,7 @@ export async function PUT(
       active,
       logoUrl,
       isotypeUrl,
+      faviconUrl,
       sidebarTheme,
       primaryColor,
       secondaryColor,
@@ -116,6 +117,7 @@ export async function PUT(
       bgColor !== undefined ||
       logoUrl !== undefined ||
       isotypeUrl !== undefined ||
+      faviconUrl !== undefined ||
       sidebarTheme !== undefined
 
     if (hasColorChanges) {
@@ -152,6 +154,7 @@ export async function PUT(
         ...(active !== undefined && { active: Boolean(active) }),
         ...(logoUrl !== undefined && { logoUrl: logoUrl?.trim() || null }),
         ...(isotypeUrl !== undefined && { isotypeUrl: isotypeUrl?.trim() || null }),
+        ...(faviconUrl !== undefined && { faviconUrl: faviconUrl?.trim() || null }),
         ...(sidebarTheme !== undefined && { sidebarTheme: sidebarTheme?.trim() || 'DARK' }),
         ...(primaryColor !== undefined && { primaryColor: primaryColor?.trim() || null }),
         ...(secondaryColor !== undefined && { secondaryColor: secondaryColor?.trim() || null }),

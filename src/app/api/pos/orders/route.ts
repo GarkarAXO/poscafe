@@ -32,7 +32,8 @@ export async function POST(request: Request) {
       idempotencyKey,
       discount, // { amount: number, reason: string, approvedBy?: string }
       courtesy, // { amount: number, reason: string, beneficiary?: string, approvedBy?: string }
-      takeawayPackaging, // { bags?: number, cupTrays?: number, cutlerySets?: number }
+      takeawayPackaging, // { bags?: number, cupTrays?: number, cutlerySets?: number, sleeves?: number }
+      activeOrderId,
     } = body
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -473,6 +474,42 @@ export async function POST(request: Request) {
         if (settings?.takeawayStrawItemId && strawQty > 0) {
           await deductPackaging(settings.takeawayStrawItemId, strawQty, 'Popotes')
         }
+
+        // 6. Fajas térmicas para vaso (Mangas protectoras)
+        const sleeveQty = takeawayPackaging?.sleeves !== undefined
+          ? Number(takeawayPackaging.sleeves)
+          : takeawayPackaging?.includeSleeve !== undefined
+          ? (takeawayPackaging.includeSleeve ? (takeawayPackaging?.sleeveCount || totalItemsCount || 1) : 0)
+          : 0
+
+        if (sleeveQty > 0) {
+          // Intentar obtener insumo configurado en CupSize o buscar por nombre
+          const cupWithSize = await tx.cupSize.findFirst({
+            where: { businessId: session.businessId!, sleeveItemId: { not: null } },
+          })
+          let sleeveItemId = cupWithSize?.sleeveItemId
+
+          if (!sleeveItemId) {
+            const sleeveItem = await tx.inventoryItem.findFirst({
+              where: {
+                businessId: session.businessId!,
+                active: true,
+                OR: [
+                  { name: { contains: 'faja', mode: 'insensitive' } },
+                  { name: { contains: 'manga', mode: 'insensitive' } },
+                  { name: { contains: 'sleeve', mode: 'insensitive' } },
+                ],
+              },
+            })
+            if (sleeveItem) {
+              sleeveItemId = sleeveItem.id
+            }
+          }
+
+          if (sleeveItemId) {
+            await deductPackaging(sleeveItemId, sleeveQty, 'Faja para vaso')
+          }
+        }
       }
 
       // C. Registrar el Pago
@@ -510,6 +547,19 @@ export async function POST(request: Request) {
             tableId,
             branchId,
             id: { not: order.id },
+            status: { in: [OrderStatus.DRAFT, OrderStatus.SENT, OrderStatus.PREPARING, OrderStatus.SERVED] },
+          },
+          data: {
+            status: OrderStatus.PAID,
+            closedAt: new Date(),
+          },
+        })
+      } else if (activeOrderId) {
+        // Cerrar comanda para llevar previa si ya había sido marchada a cocina
+        await tx.order.updateMany({
+          where: {
+            id: activeOrderId,
+            branchId,
             status: { in: [OrderStatus.DRAFT, OrderStatus.SENT, OrderStatus.PREPARING, OrderStatus.SERVED] },
           },
           data: {

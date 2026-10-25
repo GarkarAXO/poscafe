@@ -39,6 +39,8 @@ interface Branch {
   countryCode: string
   active: boolean
   logoUrl?: string | null
+  isotypeUrl?: string | null
+  faviconUrl?: string | null
   primaryColor?: string | null
   secondaryColor?: string | null
   buttonColor?: string | null
@@ -96,6 +98,7 @@ export default function BranchesManagerPage() {
   const [brandingData, setBrandingData] = useState({
     name: '',
     logoUrl: '',
+    faviconUrl: '',
     bgColor: '#14100E',
     primaryColor: '#C08552',
     secondaryColor: '#5E3023',
@@ -109,6 +112,7 @@ export default function BranchesManagerPage() {
     setBrandingData({
       name: branch.name,
       logoUrl: branch.logoUrl || '',
+      faviconUrl: branch.faviconUrl || '',
       bgColor: branch.bgColor || '#14100E',
       primaryColor: branch.primaryColor || '#C08552',
       secondaryColor: branch.secondaryColor || '#5E3023',
@@ -859,6 +863,26 @@ export default function BranchesManagerPage() {
                     placeholder="https://ejemplo.com/logo.png"
                     className={`w-full px-3.5 py-2.5 rounded-xl border focus:outline-none ${classes.input}`}
                   />
+                </div>
+
+                {/* Favicon (.ico) de la sucursal */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`block font-bold ${classes.textMain}`}>Favicon de la Pestaña (.ico)</label>
+                    {brandingData.faviconUrl && (
+                      <span className="text-[10px] text-emerald-600 font-bold">Favicon activo</span>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={brandingData.faviconUrl}
+                    onChange={(e) => setBrandingData({ ...brandingData, faviconUrl: e.target.value })}
+                    placeholder="https://ejemplo.com/favicon.ico o data:image/x-icon;base64,..."
+                    className={`w-full px-3.5 py-2.5 rounded-xl border focus:outline-none ${classes.input}`}
+                  />
+                  <p className={`text-[10px] mt-1 ${classes.textMuted}`}>
+                    Icono .ico para la pestaña del navegador al abrir el POS o el Menú de esta sucursal.
+                  </p>
                 </div>
 
                 {/* Horario de Servicio */}

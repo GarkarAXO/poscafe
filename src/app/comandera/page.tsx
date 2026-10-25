@@ -38,6 +38,8 @@ import {
   ChevronUp,
   Scissors,
   BellRing,
+  BadgePercent,
+  KeyRound,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { getTerminalDeviceConfig, TerminalDeviceConfig } from '@/lib/terminal-device'
@@ -242,6 +244,28 @@ export default function ComanderaPage() {
   const [checkoutAmountReceived, setCheckoutAmountReceived] = useState('')
   const [checkoutPrintTicket, setCheckoutPrintTicket] = useState(true)
   const [processingCheckout, setProcessingCheckout] = useState(false)
+
+  // Estados de Descuentos en la Comandera
+  const [tableDiscount, setTableDiscount] = useState<{
+    amount: number
+    percentage?: number
+    type: 'PERCENTAGE' | 'FIXED'
+    reason: string
+    approvedBy?: string
+  } | null>(null)
+  const [showDiscountModal, setShowDiscountModal] = useState(false)
+  const [discountType, setDiscountType] = useState<'PERCENTAGE' | 'FIXED'>('PERCENTAGE')
+  const [discountVal, setDiscountVal] = useState('')
+  const [discountReason, setDiscountReason] = useState('')
+  const [discountApprovedBy, setDiscountApprovedBy] = useState<string | null>(null)
+
+  // Estados para PIN de Autorización de Supervisor (cuando el mesero no tiene permiso asignado)
+  const [showAuthPinModal, setShowAuthPinModal] = useState(false)
+  const [authPinAction, setAuthPinAction] = useState<'CHECKOUT' | 'DISCOUNT' | null>(null)
+  const [authPinInput, setAuthPinInput] = useState('')
+  const [authPinError, setAuthPinError] = useState<string | null>(null)
+  const [authorizingPin, setAuthorizingPin] = useState(false)
+  const [supervisorCashierPin, setSupervisorCashierPin] = useState<string | null>(null)
 
   // Menú de opciones secundarias de mesa (cabecera limpia)
   const [showTableOptionsMenu, setShowTableOptionsMenu] = useState(false)
@@ -589,6 +613,9 @@ export default function ComanderaPage() {
     setStagedItems([])
     setCustomerName(table.activeOrder?.customerName || '')
     setOrderNotes('')
+    setTableDiscount(null)
+    setDiscountApprovedBy(null)
+    setSupervisorCashierPin(null)
 
     const isTakeaway = (table.activeOrder?.orderType as any) === 'TAKEAWAY'
     setOrderType(isTakeaway ? 'TAKEAWAY' : 'DINE_IN')
@@ -1224,6 +1251,11 @@ export default function ComanderaPage() {
                 <span>Subtotal:</span>
                 <span>$${ticket.subtotal.toFixed(2)}</span>
               </div>
+              ${ticket.discount && ticket.discount > 0 ? `
+              <div class="flex" style="font-size:11px; color:#047857; font-weight:bold; margin-bottom:2px;">
+                <span>Descuento ${ticket.discountReason ? `(${ticket.discountReason})` : ''}:</span>
+                <span>-$${ticket.discount.toFixed(2)}</span>
+              </div>` : ''}
               <div class="flex" style="font-size:14px; font-weight:900; border-top:1.5px solid #000; padding-top:4px; margin-top:4px; color:#000;">
                 <span>TOTAL:</span>
                 <span>$${ticket.total.toFixed(2)} MXN</span>
@@ -1291,7 +1323,9 @@ export default function ComanderaPage() {
 
     setProcessingCheckout(true)
     const tableName = activeTable.name
-    const totalOrder = Number(activeTable.activeOrder.total)
+    const rawTotalOrder = Number(activeTable.activeOrder.total)
+    const discountAmount = tableDiscount ? tableDiscount.amount : 0
+    const totalOrder = Math.max(0, rawTotalOrder - discountAmount)
     const activeOrderData = activeTable.activeOrder
 
     const sessionBusinessName = currentUser?.business?.name || currentUser?.name || activeBranch?.name || 'CAFETERÍA & RESTAURANTE'
@@ -1313,7 +1347,9 @@ export default function ComanderaPage() {
         subtotal: it.subtotal,
         notes: it.notes,
       })),
-      subtotal: Number(activeOrderData.subtotal),
+      subtotal: Number(activeOrderData.subtotal || rawTotalOrder),
+      discount: discountAmount > 0 ? discountAmount : undefined,
+      discountReason: tableDiscount?.reason || undefined,
       total: totalOrder,
       paymentMethod: checkoutPaymentMethod,
       amountReceived:
@@ -1352,6 +1388,10 @@ export default function ComanderaPage() {
           checkoutPaymentMethod === 'CASH' && checkoutAmountReceived
             ? Number(checkoutAmountReceived)
             : totalOrder,
+        discountAmount: discountAmount > 0 ? discountAmount : 0,
+        discountReason: tableDiscount?.reason || null,
+        discountApprovedBy: tableDiscount?.approvedBy || null,
+        supervisorPin: supervisorCashierPin || undefined,
       }
 
       const res = await fetch(`/api/comandas/tables/${activeTable.id}/checkout`, {
@@ -1366,6 +1406,9 @@ export default function ComanderaPage() {
         setShowCheckoutModal(false)
         setShowOrderModal(false)
         setShowTableOptionsMenu(false)
+        setTableDiscount(null)
+        setDiscountApprovedBy(null)
+        setSupervisorCashierPin(null)
         notify.success(
           'Mesa cobrada exitosamente',
           `Pago de $${totalOrder.toFixed(2)} MXN registrado y ${tableName} liberada.`
@@ -1530,6 +1573,10 @@ export default function ComanderaPage() {
     const sessionBusinessName = currentUser?.business?.name || currentUser?.name || activeBranch?.name || 'CAFETERÍA & RESTAURANTE'
     const sessionLogoUrl = activeBranch?.logoUrl || currentUser?.business?.settings?.ticketLogoUrl || currentUser?.business?.settings?.logoUrl || activeBranch?.isotypeUrl || null
 
+    const rawTotal = Number(orderData.total)
+    const discountAmt = tableDiscount ? tableDiscount.amount : 0
+    const netTotal = Math.max(0, rawTotal - discountAmt)
+
     const ticket: NonNullable<typeof billReceiptData> = {
       tableName: activeTable.name,
       orderNumber: orderData.orderNumber,
@@ -1545,8 +1592,10 @@ export default function ComanderaPage() {
         subtotal: it.subtotal,
         notes: it.notes,
       })),
-      subtotal: Number(orderData.subtotal),
-      total: Number(orderData.total),
+      subtotal: Number(orderData.subtotal || rawTotal),
+      discount: discountAmt > 0 ? discountAmt : undefined,
+      discountReason: tableDiscount?.reason || undefined,
+      total: netTotal,
       isPaid: false,
       date: new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }),
     }
@@ -1578,6 +1627,219 @@ export default function ComanderaPage() {
     currentUser?.roleCodes?.includes('BRANCH_MANAGER') ||
     currentUser?.permissions?.canManageSettings ||
     currentUser?.permissions?.canManageUsers
+
+  const userPermCodes = currentUser?.permissionCodes || []
+
+  // Permiso para cobrar directamente cuentas en la mesa
+  const canCashier =
+    isOwnerOrAdmin ||
+    Boolean(currentUser?.permissions?.canAccessPOS) ||
+    Boolean(currentUser?.permissions?.canManageCashRegisters) ||
+    userPermCodes.includes('acceso_pos') ||
+    userPermCodes.includes('gestionar_cajas') ||
+    Boolean(currentUser?.roleCodes?.includes('CASHIER'))
+
+  // Permiso para aplicar descuentos a la mesa
+  const canDiscount =
+    isOwnerOrAdmin ||
+    Boolean(currentUser?.permissions?.canAuthorizeDiscounts) ||
+    userPermCodes.includes('autorizar_descuentos')
+
+  // Abrir flujo de cobro evaluando si el mesero tiene permiso o requiere PIN
+  const handleRequestCheckout = () => {
+    if (!activeTable || !activeTable.activeOrder) return
+
+    const orderSubtotal = activeTable.activeOrder.total || 0
+    const discountAmt = tableDiscount ? tableDiscount.amount : 0
+    const netTotal = Math.max(0, orderSubtotal - discountAmt)
+
+    setCheckoutPaymentMethod('CASH')
+    setCheckoutAmountReceived(netTotal > 0 ? String(netTotal) : '0')
+
+    if (canCashier || supervisorCashierPin) {
+      setShowCheckoutModal(true)
+    } else {
+      setAuthPinAction('CHECKOUT')
+      setAuthPinInput('')
+      setAuthPinError(null)
+      setShowAuthPinModal(true)
+    }
+  }
+
+  // Abrir flujo de descuento evaluando si el mesero tiene permiso o requiere PIN
+  const handleRequestDiscount = () => {
+    if (!activeTable || !activeTable.activeOrder) return
+
+    if (canDiscount || discountApprovedBy) {
+      setDiscountVal(
+        tableDiscount?.type === 'PERCENTAGE' && tableDiscount.percentage
+          ? String(tableDiscount.percentage)
+          : tableDiscount?.amount
+          ? String(tableDiscount.amount)
+          : ''
+      )
+      setDiscountReason(tableDiscount?.reason || '')
+      setDiscountType(tableDiscount?.type || 'PERCENTAGE')
+      setShowDiscountModal(true)
+    } else {
+      setAuthPinAction('DISCOUNT')
+      setAuthPinInput('')
+      setAuthPinError(null)
+      setShowAuthPinModal(true)
+    }
+  }
+
+  // Aplicar descuento a la comanda de la mesa
+  const handleApplyDiscount = () => {
+    if (!activeTable || !activeTable.activeOrder) return
+    const val = parseFloat(discountVal)
+    if (isNaN(val) || val <= 0) {
+      notify.error('Ingresa un valor de descuento válido mayor a 0')
+      return
+    }
+
+    const orderSubtotal = activeTable.activeOrder.total || 0
+    let discountAmount = 0
+    let percentage: number | undefined
+
+    if (discountType === 'PERCENTAGE') {
+      if (val > 100) {
+        notify.error('El porcentaje de descuento no puede ser mayor a 100%')
+        return
+      }
+      percentage = val
+      discountAmount = Math.round(((orderSubtotal * val) / 100) * 100) / 100
+    } else {
+      if (val > orderSubtotal) {
+        notify.error('El descuento en monto no puede exceder el total de la comanda')
+        return
+      }
+      discountAmount = val
+    }
+
+    setTableDiscount({
+      amount: discountAmount,
+      percentage,
+      type: discountType,
+      reason: discountReason.trim() || 'Descuento autorizado',
+      approvedBy: discountApprovedBy || currentUser?.name || 'Supervisor',
+    })
+
+    setShowDiscountModal(false)
+    notify.success(
+      'Descuento aplicado',
+      `Se descontaron $${discountAmount.toFixed(2)} MXN a la mesa ${activeTable.name}.`
+    )
+  }
+
+  // Quitar descuento
+  const handleRemoveDiscount = () => {
+    setTableDiscount(null)
+    setDiscountApprovedBy(null)
+    notify.info('Descuento removido', 'Se restableció el total original de la comanda.')
+  }
+
+  // Validar PIN de Supervisor para Cobro o Descuento
+  const handleVerifyAuthPin = async (pinValue?: string) => {
+    const pin = pinValue || authPinInput
+    if (!pin || pin.length < 4) {
+      setAuthPinError('Ingresa los 4 dígitos del PIN')
+      return
+    }
+
+    setAuthorizingPin(true)
+    setAuthPinError(null)
+
+    try {
+      const requiredPermission =
+        authPinAction === 'CHECKOUT' ? 'acceso_pos' : 'autorizar_descuentos'
+
+      const res = await fetch('/api/auth/authorize-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin,
+          branchId: activeBranch?.id,
+          requiredPermission,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (json.success && json.data?.authorized) {
+        setShowAuthPinModal(false)
+        const authorizerName = json.data.authorizer?.name || 'Supervisor'
+        notify.success('Acción Autorizada', `Autorizado por: ${authorizerName}`)
+
+        if (authPinAction === 'CHECKOUT') {
+          setSupervisorCashierPin(pin)
+          setShowCheckoutModal(true)
+        } else if (authPinAction === 'DISCOUNT') {
+          setDiscountApprovedBy(authorizerName)
+          setShowDiscountModal(true)
+        }
+      } else {
+        setAuthPinError(json.error?.message || 'PIN incorrecto o sin permisos suficientes')
+        setAuthPinInput('')
+      }
+    } catch {
+      setAuthPinError('Error al verificar autorización de PIN')
+    } finally {
+      setAuthorizingPin(false)
+    }
+  }
+
+  // Manejo de teclado táctil numérico para PIN de autorización
+  const handleKeypadPressAuthPin = (val: string) => {
+    if (val === 'C') {
+      setAuthPinInput('')
+      setAuthPinError(null)
+    } else if (val === 'DEL') {
+      setAuthPinInput((prev) => prev.slice(0, -1))
+      setAuthPinError(null)
+    } else {
+      if (authPinInput.length < 4) {
+        const next = authPinInput + val
+        setAuthPinInput(next)
+        setAuthPinError(null)
+        if (next.length === 4) {
+          handleVerifyAuthPin(next)
+        }
+      }
+    }
+  }
+
+  // Escucha de teclado físico para PIN de autorización
+  useEffect(() => {
+    if (!showAuthPinModal) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key >= '0' && e.key <= '9') {
+        if (authPinInput.length < 4) {
+          const next = authPinInput + e.key
+          setAuthPinInput(next)
+          setAuthPinError(null)
+          if (next.length === 4) {
+            handleVerifyAuthPin(next)
+          }
+        }
+      } else if (e.key === 'Backspace') {
+        setAuthPinInput((prev) => prev.slice(0, -1))
+        setAuthPinError(null)
+      } else if (e.key === 'Escape') {
+        setShowAuthPinModal(false)
+        setAuthPinInput('')
+        setAuthPinError(null)
+      } else if (e.key === 'Enter' && authPinInput.length === 4) {
+        handleVerifyAuthPin()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showAuthPinModal, authPinInput, activeBranch, authPinAction])
 
   // Determina si una mesa es visible para el usuario actual:
   // - Dueños / Administradores / Gerentes: ven todo el plano para supervisión general.
@@ -3518,51 +3780,123 @@ export default function ComanderaPage() {
                   <div className={`p-3.5 sm:p-4 rounded-3xl border space-y-3 shrink-0 ${
                     isLight ? 'bg-white border-[#DECEBD] shadow-md' : 'bg-[#181311] border-[#382b25]'
                   }`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <span className={`text-[11px] block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                          Total Consumido ({activeTable.name}):
-                        </span>
-                        <strong className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${
-                          isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
-                        }`}>
-                          ${(activeTable.activeOrder?.total || 0).toFixed(2)} MXN
-                        </strong>
-                      </div>
+                    {(() => {
+                      const orderSubtotal = activeTable.activeOrder?.total || 0
+                      const currentDiscount = tableDiscount ? tableDiscount.amount : 0
+                      const netOrderTotal = Math.max(0, orderSubtotal - currentDiscount)
 
-                      {/* Botones de Cobro y Ticket */}
-                      {activeTable.activeOrder && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleOpenPrintBill}
-                            className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl border font-bold text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer select-none active:scale-95 transition-all ${
-                              isLight
-                                ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023] border-[#DECEBD]'
-                                : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 border-[#382b25]'
-                            }`}
-                            title="Imprimir ticket informativo de pre-cuenta para el cliente"
-                          >
-                            <Printer className="w-4 h-4" />
-                            <span>Imprimir Ticket</span>
-                          </button>
+                      return (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            {currentDiscount > 0 ? (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className={isLight ? 'text-[#7A5A43]' : 'text-slate-400'}>Subtotal:</span>
+                                  <span className="font-mono font-semibold line-through text-slate-400">
+                                    ${orderSubtotal.toFixed(2)}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    <BadgePercent className="w-3 h-3" />
+                                    <span>-{tableDiscount?.type === 'PERCENTAGE' && tableDiscount.percentage ? `${tableDiscount.percentage}%` : `$${currentDiscount.toFixed(2)}`}</span>
+                                    <button
+                                      type="button"
+                                      onClick={handleRemoveDiscount}
+                                      className="ml-1 hover:text-red-500 font-black cursor-pointer"
+                                      title="Quitar descuento"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                </div>
+                                <div className="flex items-baseline gap-2">
+                                  <span className={`text-[11px] font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                                    Total Neto ({activeTable.name}):
+                                  </span>
+                                  <strong className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${
+                                    isLight ? 'text-emerald-700' : 'text-emerald-400'
+                                  }`}>
+                                    ${netOrderTotal.toFixed(2)} MXN
+                                  </strong>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className={`text-[11px] block font-medium ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                                  Total Consumido ({activeTable.name}):
+                                </span>
+                                <strong className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${
+                                  isLight ? 'text-[#5E3023]' : 'text-[#C08552]'
+                                }`}>
+                                  ${orderSubtotal.toFixed(2)} MXN
+                                </strong>
+                              </div>
+                            )}
+                          </div>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCheckoutPaymentMethod('CASH')
-                              setCheckoutAmountReceived(activeTable.activeOrder?.total ? String(activeTable.activeOrder.total) : '')
-                              setShowCheckoutModal(true)
-                            }}
-                            className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer select-none"
-                            title="Cobrar la cuenta y liquidar la mesa"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                            <span>Cobrar Cuenta</span>
-                          </button>
+                          {/* Botones de Descuento, Cobro y Ticket */}
+                          {activeTable.activeOrder && (
+                            <div className="flex items-center flex-wrap gap-2">
+                              {/* Botón de Descuento */}
+                              <button
+                                type="button"
+                                onClick={handleRequestDiscount}
+                                className={`px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-2xl border font-bold text-xs flex items-center gap-1.5 cursor-pointer select-none active:scale-95 transition-all ${
+                                  tableDiscount
+                                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                                    : isLight
+                                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023] border-[#DECEBD]'
+                                    : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 border-[#382b25]'
+                                }`}
+                                title={
+                                  canDiscount || discountApprovedBy
+                                    ? 'Aplicar descuento a la mesa'
+                                    : 'Requiere autorización de supervisor para descuento'
+                                }
+                              >
+                                <BadgePercent className="w-3.5 h-3.5 text-amber-500" />
+                                <span>{tableDiscount ? 'Editar Dcto' : '% Descuento'}</span>
+                                {!canDiscount && !discountApprovedBy && (
+                                  <Lock className="w-3 h-3 text-amber-500 opacity-80" />
+                                )}
+                              </button>
+
+                              {/* Botón Imprimir Ticket (Pre-cuenta) */}
+                              <button
+                                type="button"
+                                onClick={handleOpenPrintBill}
+                                className={`px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-2xl border font-bold text-xs flex items-center gap-1.5 cursor-pointer select-none active:scale-95 transition-all ${
+                                  isLight
+                                    ? 'bg-[#F3E9DC] hover:bg-[#E6D5C3] text-[#5E3023] border-[#DECEBD]'
+                                    : 'bg-[#251e1b] hover:bg-[#332924] text-slate-200 border-[#382b25]'
+                                }`}
+                                title="Imprimir ticket informativo de pre-cuenta para el cliente"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span className="hidden xs:inline">Ticket</span>
+                              </button>
+
+                              {/* Botón Cobrar Cuenta */}
+                              <button
+                                type="button"
+                                onClick={handleRequestCheckout}
+                                className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer select-none"
+                                title={
+                                  canCashier || supervisorCashierPin
+                                    ? 'Cobrar cuenta y liquidar mesa'
+                                    : 'Cobrar (requiere autorización de cajero/supervisor)'
+                                }
+                              >
+                                <CreditCard className="w-4 h-4" />
+                                <span>Cobrar Cuenta</span>
+                                {!canCashier && !supervisorCashierPin && (
+                                  <Lock className="w-3 h-3 text-emerald-200 opacity-90" />
+                                )}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      )
+                    })()}
                   </div>
                 </div>
               )}
@@ -3778,31 +4112,62 @@ export default function ComanderaPage() {
               </button>
             </div>
 
-            {/* Resumen del Consumo */}
-            <div className={`p-3.5 rounded-2xl border space-y-2 text-xs ${
-              isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
-            }`}>
-              <div className="flex items-center justify-between font-bold">
-                <span className={isLight ? 'text-[#7A5A43]' : 'text-slate-400'}>
-                  Consumo ({activeTable.activeOrder.items.length} artículos):
-                </span>
-                <span className={`font-mono text-base font-black ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
-                  ${activeTable.activeOrder.total.toFixed(2)} MXN
-                </span>
-              </div>
+            {/* Resumen del Consumo con Descuento si aplica */}
+            {(() => {
+              const orderSubtotal = activeTable.activeOrder.total || 0
+              const discountAmt = tableDiscount ? tableDiscount.amount : 0
+              const netTotal = Math.max(0, orderSubtotal - discountAmt)
 
-              {/* Lista compacta de artículos */}
-              <div className="max-h-32 overflow-y-auto space-y-1 pr-1 border-t pt-2 border-dashed border-slate-300 dark:border-slate-800">
-                {activeTable.activeOrder.items.map((it) => (
-                  <div key={it.id} className="flex justify-between items-center text-[11px]">
-                    <span className="truncate pr-2">
-                      <strong className="font-bold">{it.quantity}x</strong> {it.productName}
+              return (
+                <div className={`p-3.5 rounded-2xl border space-y-2 text-xs ${
+                  isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+                }`}>
+                  <div className="flex items-center justify-between font-bold">
+                    <span className={isLight ? 'text-[#7A5A43]' : 'text-slate-400'}>
+                      Consumo ({activeTable.activeOrder.items.length} artículos):
                     </span>
-                    <span className="font-mono shrink-0 font-medium">${it.subtotal.toFixed(2)}</span>
+                    <span className={`font-mono text-base font-black ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
+                      ${orderSubtotal.toFixed(2)} MXN
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
+
+                  {discountAmt > 0 && (
+                    <div className="flex items-center justify-between font-bold text-emerald-600 dark:text-emerald-400 border-t border-dashed border-emerald-500/30 pt-1.5">
+                      <span className="flex items-center gap-1">
+                        <BadgePercent className="w-3.5 h-3.5" />
+                        Descuento {tableDiscount?.type === 'PERCENTAGE' && tableDiscount.percentage ? `(${tableDiscount.percentage}%)` : ''}:
+                      </span>
+                      <span className="font-mono">
+                        -${discountAmt.toFixed(2)} MXN
+                      </span>
+                    </div>
+                  )}
+
+                  {discountAmt > 0 && (
+                    <div className="flex items-center justify-between font-black border-t border-slate-300 dark:border-slate-700 pt-1.5">
+                      <span className={isLight ? 'text-[#2B1712]' : 'text-white'}>
+                        Total Neto a Cobrar:
+                      </span>
+                      <span className="font-mono text-base text-emerald-600 dark:text-emerald-400">
+                        ${netTotal.toFixed(2)} MXN
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Lista compacta de artículos */}
+                  <div className="max-h-28 overflow-y-auto space-y-1 pr-1 border-t pt-2 border-dashed border-slate-300 dark:border-slate-800">
+                    {activeTable.activeOrder.items.map((it) => (
+                      <div key={it.id} className="flex justify-between items-center text-[11px]">
+                        <span className="truncate pr-2">
+                          <strong className="font-bold">{it.quantity}x</strong> {it.productName}
+                        </span>
+                        <span className="font-mono shrink-0 font-medium">${it.subtotal.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Selector de Método de Pago */}
             <div className="space-y-1.5">
@@ -3858,43 +4223,51 @@ export default function ComanderaPage() {
             </div>
 
             {/* Si es efectivo: input de monto recibido y cálculo de cambio */}
-            {checkoutPaymentMethod === 'CASH' && (
-              <div className={`p-3 rounded-2xl border space-y-2 text-xs ${
-                isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
-              }`}>
-                <div className="flex items-center justify-between gap-3">
-                  <label className={`font-semibold ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
-                    Monto Recibido:
-                  </label>
-                  <div className="relative w-36">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
-                    <input
-                      type="number"
-                      step="any"
-                      min={activeTable.activeOrder.total}
-                      placeholder={activeTable.activeOrder.total.toFixed(2)}
-                      value={checkoutAmountReceived}
-                      onChange={(e) => setCheckoutAmountReceived(e.target.value)}
-                      className={`w-full pl-6 pr-3 py-1.5 rounded-xl border font-mono font-bold text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 text-right ${
-                        isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-[#1c1715] border-[#382b25] text-white'
-                      }`}
-                    />
+            {(() => {
+              const orderSubtotal = activeTable.activeOrder.total || 0
+              const discountAmt = tableDiscount ? tableDiscount.amount : 0
+              const netTotal = Math.max(0, orderSubtotal - discountAmt)
+
+              if (checkoutPaymentMethod !== 'CASH') return null
+
+              return (
+                <div className={`p-3 rounded-2xl border space-y-2 text-xs ${
+                  isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+                }`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <label className={`font-semibold ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                      Monto Recibido:
+                    </label>
+                    <div className="relative w-36">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
+                      <input
+                        type="number"
+                        step="any"
+                        min={netTotal}
+                        placeholder={netTotal.toFixed(2)}
+                        value={checkoutAmountReceived}
+                        onChange={(e) => setCheckoutAmountReceived(e.target.value)}
+                        className={`w-full pl-6 pr-3 py-1.5 rounded-xl border font-mono font-bold text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 text-right ${
+                          isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-[#1c1715] border-[#382b25] text-white'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cambio */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
+                    <span className="font-bold">Cambio a Entregar:</span>
+                    <strong className={`font-mono text-base font-black ${
+                      Number(checkoutAmountReceived || 0) >= netTotal
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-500'
+                    }`}>
+                      ${Math.max(0, (Number(checkoutAmountReceived || netTotal) - netTotal)).toFixed(2)} MXN
+                    </strong>
                   </div>
                 </div>
-
-                {/* Cambio */}
-                <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-800">
-                  <span className="font-bold">Cambio a Entregar:</span>
-                  <strong className={`font-mono text-base font-black ${
-                    Number(checkoutAmountReceived || 0) >= activeTable.activeOrder.total
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-amber-500'
-                  }`}>
-                    ${Math.max(0, (Number(checkoutAmountReceived || activeTable.activeOrder.total) - activeTable.activeOrder.total)).toFixed(2)} MXN
-                  </strong>
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Checkbox de Imprimir Ticket */}
             <label className={`flex items-start gap-2.5 p-2.5 rounded-xl border border-dashed text-xs cursor-pointer select-none ${
@@ -3964,10 +4337,336 @@ export default function ComanderaPage() {
                     <CreditCard className="w-4 h-4" />
                   )}
                   <span>
-                    {checkoutPrintTicket ? 'Imprimir y Cobrar' : 'Cobrar y Liberar'} (${activeTable.activeOrder.total.toFixed(2)})
+                    {checkoutPrintTicket ? 'Imprimir y Cobrar' : 'Cobrar y Liberar'} (${Math.max(0, (activeTable.activeOrder.total || 0) - (tableDiscount?.amount || 0)).toFixed(2)})
                   </span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DESCUENTO EN MESA */}
+      {showDiscountModal && activeTable && activeTable.activeOrder && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div
+            className={`w-full max-w-sm rounded-3xl p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 my-auto border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-[#1a1412] border-[#382b25] text-white'
+            }`}
+          >
+            {/* Header */}
+            <div className={`flex items-center justify-between pb-3 border-b ${
+              isLight ? 'border-[#DECEBD]' : 'border-white/10'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center font-bold">
+                  <BadgePercent className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                    Descuento en Mesa
+                  </h3>
+                  <p className={`text-xs ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                    {activeTable.name} • {discountApprovedBy ? `Autorizado por: ${discountApprovedBy}` : 'Autorizado'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDiscountModal(false)}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold cursor-pointer transition-colors ${
+                  isLight
+                    ? 'bg-[#F3E9DC] hover:bg-[#DECEBD] text-[#5E3023]'
+                    : 'bg-[#251e1b] hover:bg-[#332924] text-slate-400 hover:text-white'
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Total Original */}
+            <div className={`p-3 rounded-2xl border text-xs flex items-center justify-between font-bold ${
+              isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+            }`}>
+              <span className={isLight ? 'text-[#7A5A43]' : 'text-slate-400'}>Consumo Actual:</span>
+              <span className={`font-mono text-base font-black ${isLight ? 'text-[#5E3023]' : 'text-[#C08552]'}`}>
+                ${(activeTable.activeOrder.total || 0).toFixed(2)} MXN
+              </span>
+            </div>
+
+            {/* Tipo de Descuento: Porcentaje vs Monto Fijo */}
+            <div className="space-y-1.5">
+              <label className={`text-xs font-bold block ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
+                Tipo de Descuento:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDiscountType('PERCENTAGE')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                    discountType === 'PERCENTAGE'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                      : isLight
+                      ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                      : 'bg-[#1c1715] border-[#382b25] text-slate-300 hover:bg-[#251e1b]'
+                  }`}
+                >
+                  <BadgePercent className="w-4 h-4" />
+                  <span>Porcentaje (%)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountType('FIXED')}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                    discountType === 'FIXED'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                      : isLight
+                      ? 'bg-white border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                      : 'bg-[#1c1715] border-[#382b25] text-slate-300 hover:bg-[#251e1b]'
+                  }`}
+                >
+                  <span className="font-mono font-black text-sm">$</span>
+                  <span>Monto Fijo ($)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Input de Monto / Porcentaje */}
+            <div className="space-y-1.5">
+              <label className={`text-xs font-bold block ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
+                {discountType === 'PERCENTAGE' ? 'Porcentaje de Descuento (%):' : 'Monto a Descontar ($):'}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
+                  {discountType === 'PERCENTAGE' ? '%' : '$'}
+                </span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  max={discountType === 'PERCENTAGE' ? '100' : String(activeTable.activeOrder.total)}
+                  placeholder={discountType === 'PERCENTAGE' ? 'Ej. 10' : 'Ej. 50.00'}
+                  value={discountVal}
+                  onChange={(e) => setDiscountVal(e.target.value)}
+                  className={`w-full pl-8 pr-3 py-2 rounded-xl border font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                    isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-[#1c1715] border-[#382b25] text-white'
+                  }`}
+                />
+              </div>
+
+              {/* Botones de Porcentajes Rápidos */}
+              {discountType === 'PERCENTAGE' && (
+                <div className="grid grid-cols-5 gap-1.5 pt-1">
+                  {[5, 10, 15, 20, 50].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setDiscountVal(String(pct))}
+                      className={`py-1 rounded-lg border text-[11px] font-bold cursor-pointer transition-all ${
+                        discountVal === String(pct)
+                          ? 'bg-amber-500 text-slate-950 border-amber-400'
+                          : isLight
+                          ? 'bg-[#FDFBF9] border-[#DECEBD] text-[#5E3023] hover:bg-[#F3E9DC]'
+                          : 'bg-[#14100e] border-[#382b25] text-slate-300 hover:bg-[#251e1b]'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Motivo del Descuento */}
+            <div className="space-y-1.5">
+              <label className={`text-xs font-bold block ${isLight ? 'text-[#7A5A43]' : 'text-slate-300'}`}>
+                Motivo / Razón del Descuento:
+              </label>
+              <input
+                type="text"
+                placeholder="Ej. Cortesía, Cliente Frecuente, Promoción"
+                value={discountReason}
+                onChange={(e) => setDiscountReason(e.target.value)}
+                className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 ${
+                  isLight ? 'bg-white border-[#DECEBD] text-[#2B1712]' : 'bg-[#1c1715] border-[#382b25] text-white'
+                }`}
+              />
+            </div>
+
+            {/* Simulación del Descuento */}
+            {(() => {
+              const val = parseFloat(discountVal) || 0
+              const subtotal = activeTable.activeOrder.total || 0
+              let calcDiscount = 0
+              if (discountType === 'PERCENTAGE') {
+                calcDiscount = Math.min(subtotal, Math.round(((subtotal * val) / 100) * 100) / 100)
+              } else {
+                calcDiscount = Math.min(subtotal, val)
+              }
+              const newTotal = Math.max(0, subtotal - calcDiscount)
+
+              return (
+                <div className={`p-3 rounded-2xl border space-y-1.5 text-xs ${
+                  isLight ? 'bg-[#FDFBF9] border-[#DECEBD]' : 'bg-[#14100e] border-[#382b25]'
+                }`}>
+                  <div className="flex justify-between text-slate-500">
+                    <span>Subtotal:</span>
+                    <span className="font-mono">${subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-emerald-600 dark:text-emerald-400">
+                    <span>Descuento aplicado:</span>
+                    <span className="font-mono">-${calcDiscount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-black text-sm border-t border-slate-200 dark:border-slate-800 pt-1">
+                    <span>Nuevo Total:</span>
+                    <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                      ${newTotal.toFixed(2)} MXN
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Botones de acción */}
+            <div className={`pt-2 flex justify-end gap-2 border-t ${isLight ? 'border-[#DECEBD]' : 'border-white/10'}`}>
+              <button
+                type="button"
+                onClick={() => setShowDiscountModal(false)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer border ${
+                  isLight
+                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                }`}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleApplyDiscount}
+                disabled={!discountVal || parseFloat(discountVal) <= 0}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 disabled:opacity-50 transition-all cursor-pointer select-none"
+              >
+                <BadgePercent className="w-4 h-4" />
+                <span>Aplicar Descuento</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AUTORIZACIÓN POR PIN DE SUPERVISOR */}
+      {showAuthPinModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div
+            className={`w-full max-w-sm rounded-3xl p-6 sm:p-7 space-y-4 shadow-2xl text-center relative animate-in zoom-in-95 border ${
+              isLight
+                ? 'bg-white border-[#DECEBD] text-[#2B1712]'
+                : 'bg-[#19110E] border-[#3E221A] text-[#F3E9DC]'
+            }`}
+          >
+            {/* Header Icon */}
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-md">
+              <KeyRound className="w-7 h-7" />
+            </div>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 mb-1.5">
+                <Lock className="w-3 h-3" />
+                <span>Permiso Requerido</span>
+              </div>
+              <h3 className={`text-xl font-black ${isLight ? 'text-[#2B1712]' : 'text-white'}`}>
+                {authPinAction === 'CHECKOUT' ? 'Autorizar Cobro de Mesa' : 'Autorizar Descuento'}
+              </h3>
+              <p className={`text-xs mt-1 ${isLight ? 'text-[#7A5A43]' : 'text-slate-400'}`}>
+                {authPinAction === 'CHECKOUT'
+                  ? 'Tu puesto requiere autorización de un cajero o supervisor para cobrar esta cuenta.'
+                  : 'Tu puesto requiere autorización de un supervisor para aplicar descuentos.'}
+              </p>
+            </div>
+
+            {/* Error */}
+            {authPinError && (
+              <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-500 text-xs font-medium text-center animate-in fade-in">
+                {authPinError}
+              </div>
+            )}
+
+            {/* Indicadores de PIN */}
+            <div className="flex justify-center gap-3 my-2">
+              {[0, 1, 2, 3].map((idx) => {
+                const filled = authPinInput.length > idx
+                return (
+                  <div
+                    key={idx}
+                    className="w-11 h-11 rounded-2xl border flex items-center justify-center text-xl font-bold transition-all"
+                    style={
+                      filled
+                        ? {
+                            borderColor: themePrimary,
+                            backgroundColor: `${themePrimary}25`,
+                            color: isLight ? '#5E3023' : '#FFFFFF',
+                            boxShadow: `0 0 10px ${themePrimary}35`,
+                          }
+                        : isLight
+                        ? { borderColor: '#DECEBD', backgroundColor: '#FDFBF9', color: '#A88C7D' }
+                        : { borderColor: '#3E221A', backgroundColor: '#120B09', color: '#6A564C' }
+                    }
+                  >
+                    {filled ? '•' : ''}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Teclado numérico táctil */}
+            <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'DEL'].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => handleKeypadPressAuthPin(val)}
+                  disabled={authorizingPin}
+                  className={`h-12 rounded-2xl text-base font-bold transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center select-none border ${
+                    isLight
+                      ? 'bg-[#FDFBF9] hover:bg-[#F3E9DC] active:bg-[#E6D5C3] border-[#DECEBD] text-[#5E3023]'
+                      : 'bg-[#231511] hover:bg-[#341C16] active:bg-[#43231B] border-[#3E221A] text-[#F3E9DC]'
+                  }`}
+                >
+                  {val === 'DEL' ? '⌫' : val}
+                </button>
+              ))}
+            </div>
+
+            {/* Botón de validar PIN */}
+            <button
+              type="button"
+              onClick={() => handleVerifyAuthPin()}
+              disabled={authorizingPin || authPinInput.length < 4}
+              style={{ backgroundColor: themeButton }}
+              className="w-full py-3 px-4 rounded-xl text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50 cursor-pointer active:scale-95"
+            >
+              {authorizingPin ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+              <span>Validar Autorización</span>
+            </button>
+
+            {/* Botón cancelar */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAuthPinModal(false)
+                  setAuthPinInput('')
+                  setAuthPinError(null)
+                }}
+                className={`text-xs font-semibold hover:underline cursor-pointer ${
+                  isLight ? 'text-[#7A5A43]' : 'text-slate-400'
+                }`}
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

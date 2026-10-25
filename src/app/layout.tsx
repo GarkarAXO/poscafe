@@ -30,6 +30,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        <link rel="icon" href="/api/favicon" sizes="any" />
+        <link rel="shortcut icon" href="/api/favicon" type="image/x-icon" />
+        <link rel="apple-touch-icon" href="/api/favicon" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

@@ -20,6 +20,8 @@ export interface ThermalTicketData {
     notes?: string | null
   }>
   subtotal: number
+  discount?: number
+  discountReason?: string
   total: number
   paymentMethod?: string
   amountReceived?: number
@@ -244,6 +246,12 @@ export default function ThermalTicketPrinterAnimation({
                     <span>Subtotal:</span>
                     <span>${ticket.subtotal.toFixed(2)}</span>
                   </div>
+                  {ticket.discount !== undefined && ticket.discount > 0 && (
+                    <div className="flex justify-between text-[11px] text-emerald-700 font-bold">
+                      <span>Descuento {ticket.discountReason ? `(${ticket.discountReason})` : ''}:</span>
+                      <span>-${ticket.discount.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-black text-sm border-t border-neutral-900 pt-1 text-neutral-950">
                     <span>TOTAL:</span>
                     <span>${ticket.total.toFixed(2)} MXN</span>

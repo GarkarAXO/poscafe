@@ -243,9 +243,10 @@ export default async function PublicMenuPage(props: MenuPageProps) {
   const businessData = {
     id: business.id,
     name: business.name,
-    legalName: business.legalName,
+    branchId: activeBranch?.id || null,
     logoUrl: activeBranch?.logoUrl || settings?.logoUrl || null,
     isotypeUrl: activeBranch?.isotypeUrl || settings?.isotypeUrl || null,
+    faviconUrl: activeBranch?.faviconUrl || settings?.faviconUrl || null,
     currency: business.currencyCode || 'MXN',
     timezone: business.timezone || 'America/Mexico_City',
     socialLinks: {

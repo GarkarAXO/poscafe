@@ -72,6 +72,7 @@ interface DashboardSidebarProps {
   user: {
     name: string
     roleCodes: string[]
+    permissionCodes?: string[]
     permissions?: {
       canAccessPOS?: boolean
       canManageCatalog?: boolean
@@ -546,10 +547,8 @@ export default function DashboardSidebar({
     highlight?: boolean
   }
 
-  const isOwnerOrAdmin =
-    user.roleCodes.includes('ADMIN') ||
-    user.roleCodes.includes('SUPERADMIN') ||
-    user.roleCodes.includes('BRANCH_MANAGER')
+  const isSuperAdmin = user.roleCodes.includes('SUPERADMIN')
+  const userPermCodes = new Set(user.permissionCodes || [])
 
   const perms = user.permissions || {
     canAccessPOS: false,
@@ -569,6 +568,16 @@ export default function DashboardSidebar({
     canManageKitchen: false,
   }
 
+  // Verificación de permiso granular: SuperAdmin tiene acceso total a todos los módulos.
+  // Para los demás puestos (incluyendo administradores de sucursal), cada apartado se muestra
+  // acorde a los permisos específicos asignados a su puesto en Recursos Humanos.
+  const hasPerm = (code: string, legacyFlag?: boolean): boolean => {
+    if (isSuperAdmin) return true
+    if (userPermCodes.has(code)) return true
+    if (legacyFlag === true) return true
+    return false
+  }
+
   // Items de Operación Diaria dinámicos según módulos habilitados y permisos
   const operationItems: NavItem[] = [
     {
@@ -577,12 +586,13 @@ export default function DashboardSidebar({
       icon: LayoutDashboard,
       active: pathname === '/dashboard',
       enabled:
-        isOwnerOrAdmin ||
-        perms.canViewReports ||
-        perms.canManageUsers ||
-        perms.canManageCatalog ||
-        perms.canManageSettings ||
-        perms.canManageInventory,
+        isSuperAdmin ||
+        hasPerm('acceso_dashboard') ||
+        hasPerm('ver_reportes', perms.canViewReports) ||
+        hasPerm('gestionar_personal', perms.canManageUsers) ||
+        hasPerm('gestionar_catalogo', perms.canManageCatalog) ||
+        hasPerm('gestionar_configuracion', perms.canManageSettings) ||
+        hasPerm('gestionar_inventario', perms.canManageInventory),
     },
     {
       name: 'Terminal POS (Caja)',
@@ -591,8 +601,11 @@ export default function DashboardSidebar({
       active: pathname === '/pos',
       highlight: true,
       enabled:
-        (isOwnerOrAdmin || perms.canAccessPOS || perms.canManageCashRegisters || user.roleCodes.includes('CASHIER')) &&
-        (settings.cashRegisterEnabled ?? true),
+        (settings.cashRegisterEnabled ?? true) &&
+        (isSuperAdmin ||
+          hasPerm('acceso_pos', perms.canAccessPOS) ||
+          hasPerm('gestionar_cajas', perms.canManageCashRegisters) ||
+          user.roleCodes.includes('CASHIER')),
     },
     {
       name: 'Comandera de Mesas',
@@ -601,8 +614,11 @@ export default function DashboardSidebar({
       active: pathname === '/comandera',
       highlight: user.roleCodes.includes('WAITER'),
       enabled:
-        (isOwnerOrAdmin || user.roleCodes.includes('WAITER') || perms.canAccessPOS) &&
-        (settings.tablesEnabled ?? true),
+        (settings.tablesEnabled ?? true) &&
+        (isSuperAdmin ||
+          hasPerm('acceso_comandera', perms.canAccessPOS) ||
+          hasPerm('traspaso_mesas', perms.canTransferTables) ||
+          user.roleCodes.includes('WAITER')),
     },
     {
       name: 'Monitor KDS Cocina',
@@ -610,17 +626,18 @@ export default function DashboardSidebar({
       icon: MonitorPlay,
       active: pathname === '/kds',
       enabled:
-        isOwnerOrAdmin ||
-        perms.canAccessKDS ||
-        perms.canManageKitchen ||
-        user.roleCodes.includes('CHEF') ||
-        user.roleCodes.includes('KITCHEN') ||
-        user.roleCodes.includes('BARISTA') ||
-        perms.canManageInventory,
+        (settings.kitchenEnabled ?? true) &&
+        (isSuperAdmin ||
+          hasPerm('acceso_kds', perms.canAccessKDS) ||
+          hasPerm('gestionar_cocina', perms.canManageKitchen) ||
+          user.roleCodes.includes('CHEF') ||
+          user.roleCodes.includes('KITCHEN') ||
+          user.roleCodes.includes('BARISTA')),
     },
   ].filter((item) => item.enabled)
 
-  // Items de Administración ordenados según el flujo lógico de insumos -> compras -> recetas -> operación
+  // Items de Administración ordenados según el flujo lógico:
+  // Controlados por apartado y permiso individual para dar control total sobre lo que ve el administrador de sucursal
   const adminItems: NavItem[] = [
     {
       name: 'Inventario de Insumos',
@@ -628,8 +645,8 @@ export default function DashboardSidebar({
       icon: Boxes,
       active: pathname.startsWith('/dashboard/inventory'),
       enabled:
-        (isOwnerOrAdmin || perms.canManageInventory) &&
-        (settings.inventoryEnabled ?? true),
+        (settings.inventoryEnabled ?? true) &&
+        (isSuperAdmin || hasPerm('gestionar_inventario', perms.canManageInventory)),
     },
     {
       name: 'Compras',
@@ -637,8 +654,8 @@ export default function DashboardSidebar({
       icon: Truck,
       active: pathname.startsWith('/dashboard/purchases'),
       enabled:
-        (isOwnerOrAdmin || perms.canManagePurchases || perms.canManageInventory) &&
-        (settings.purchasesEnabled ?? true),
+        (settings.purchasesEnabled ?? true) &&
+        (isSuperAdmin || hasPerm('gestionar_compras', perms.canManagePurchases)),
     },
     {
       name: 'Gastos Operativos',
@@ -646,22 +663,26 @@ export default function DashboardSidebar({
       icon: Receipt,
       active: pathname.startsWith('/dashboard/expenses'),
       enabled:
-        (isOwnerOrAdmin || perms.canManageExpenses) &&
-        (settings.expensesEnabled ?? true),
+        (settings.expensesEnabled ?? true) &&
+        (isSuperAdmin || hasPerm('gestionar_gastos', perms.canManageExpenses)),
     },
     {
       name: settings.recipesEnabled !== false ? 'Catálogo y Recetas' : 'Catálogo de Productos',
       href: '/dashboard/catalog',
       icon: Package,
       active: pathname.startsWith('/dashboard/catalog'),
-      enabled: isOwnerOrAdmin || perms.canManageCatalog,
+      enabled: isSuperAdmin || hasPerm('gestionar_catalogo', perms.canManageCatalog),
     },
     {
       name: 'Áreas de Cocina',
       href: '/dashboard/kitchen-stations',
       icon: UtensilsCrossed,
       active: pathname.startsWith('/dashboard/kitchen-stations'),
-      enabled: isOwnerOrAdmin || perms.canManageKitchen || perms.canManageCatalog,
+      enabled:
+        (settings.kitchenEnabled ?? true) &&
+        (isSuperAdmin ||
+          hasPerm('gestionar_cocina', perms.canManageKitchen) ||
+          hasPerm('gestionar_catalogo', perms.canManageCatalog)),
     },
     {
       name: 'Control de Mesas',
@@ -669,36 +690,46 @@ export default function DashboardSidebar({
       icon: LayoutGrid,
       active: pathname.startsWith('/dashboard/tables'),
       enabled:
-        (isOwnerOrAdmin || perms.canManageSettings || perms.canTransferTables || perms.canAccessPOS) &&
-        (settings.tablesEnabled ?? true),
+        (settings.tablesEnabled ?? true) &&
+        (isSuperAdmin ||
+          hasPerm('traspaso_mesas', perms.canTransferTables) ||
+          hasPerm('acceso_comandera', perms.canAccessPOS) ||
+          hasPerm('gestionar_configuracion', perms.canManageSettings)),
     },
     {
-      name: 'Personal y Roles',
+      name: 'Personal y Roles (RH)',
       href: '/dashboard/users',
       icon: Users,
       active: pathname.startsWith('/dashboard/users'),
-      enabled: isOwnerOrAdmin || perms.canManageUsers,
+      enabled: isSuperAdmin || hasPerm('gestionar_personal', perms.canManageUsers),
     },
     {
       name: settings.cashRegisterEnabled !== false ? 'Reportes y Arqueos' : 'Reportes de Ventas',
       href: '/dashboard/reports',
       icon: BarChart3,
       active: pathname.startsWith('/dashboard/reports'),
-      enabled: isOwnerOrAdmin || perms.canViewReports || perms.canManageCashRegisters,
+      enabled:
+        isSuperAdmin ||
+        hasPerm('ver_reportes', perms.canViewReports) ||
+        hasPerm('gestionar_cajas', perms.canManageCashRegisters),
     },
     {
       name: 'Gestión de Sucursales',
       href: '/dashboard/branches',
       icon: Store,
       active: pathname.startsWith('/dashboard/branches'),
-      enabled: (isOwnerOrAdmin || perms.canManageSettings) && settings.multiBranchEnabled !== false,
+      enabled:
+        settings.multiBranchEnabled !== false &&
+        (isSuperAdmin || hasPerm('gestionar_configuracion', perms.canManageSettings)),
     },
     {
       name: 'Temas y Colores',
       href: '/dashboard/theme',
       icon: Palette,
       active: pathname.startsWith('/dashboard/theme'),
-      enabled: isOwnerOrAdmin || perms.canManageSettings,
+      enabled:
+        settings.canCustomizeColors !== false &&
+        (isSuperAdmin || hasPerm('gestionar_configuracion', perms.canManageSettings)),
     },
   ].filter((item) => item.enabled)
 

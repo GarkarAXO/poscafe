@@ -189,14 +189,23 @@ export async function PUT(
         }
       }
 
-      // 5. Actualizar límite de personal por sucursal (maxStaff) si se especificó
+      // 5. Actualizar sucursales: nombre y límite de personal (maxStaff)
       if (Array.isArray(branchesStaffLimits) && branchesStaffLimits.length > 0) {
         for (const b of branchesStaffLimits) {
-          if (b.id && typeof b.maxStaff === 'number') {
-            await tx.branch.update({
-              where: { id: b.id },
-              data: { maxStaff: Math.max(1, Math.floor(b.maxStaff)) },
-            })
+          if (b.id) {
+            const dataToUpdate: any = {}
+            if (typeof b.maxStaff === 'number') {
+              dataToUpdate.maxStaff = Math.max(1, Math.floor(b.maxStaff))
+            }
+            if (typeof b.name === 'string' && b.name.trim().length > 0) {
+              dataToUpdate.name = b.name.trim()
+            }
+            if (Object.keys(dataToUpdate).length > 0) {
+              await tx.branch.update({
+                where: { id: b.id },
+                data: dataToUpdate,
+              })
+            }
           }
         }
       }

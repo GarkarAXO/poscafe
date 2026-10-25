@@ -22,10 +22,132 @@ export async function POST(
     const {
       paymentMethod = 'CASH',
       amountReceived,
+      discountAmount = 0,
+      discountReason,
+      discountApprovedBy,
+      supervisorPin,
       notes,
     } = body
 
     const branchId = session.activeBranchId
+
+    // Verificación de permiso para cobrar:
+    // El mesero o usuario debe tener permiso de cobro o ser admin/cajero.
+    // Si no lo tiene, debe suministrar supervisorPin válido de un usuario con permiso.
+    const isOwnerOrAdmin =
+      session.isPlatformAdmin ||
+      session.roleCodes.includes('ADMIN') ||
+      session.roleCodes.includes('SUPERADMIN') ||
+      session.roleCodes.includes('BRANCH_MANAGER')
+
+    const userPermCodes = session.permissionCodes || []
+    const canCashier =
+      isOwnerOrAdmin ||
+      session.permissions.canAccessPOS ||
+      session.permissions.canManageCashRegisters ||
+      userPermCodes.includes('acceso_pos') ||
+      userPermCodes.includes('gestionar_cajas') ||
+      session.roleCodes.includes('CASHIER')
+
+    let effectiveApprovedBy = discountApprovedBy || null
+
+    if (!canCashier) {
+      if (!supervisorPin) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'REQUIRES_CASHIER_PIN',
+              message: 'Tu puesto no tiene permisos para cobrar cuentas. Requiere autorización o PIN de cajero/supervisor.',
+            },
+          },
+          { status: 403 }
+        )
+      }
+
+      // Validar PIN de supervisor
+      const bcrypt = (await import('bcryptjs')).default
+      const candidateUsers = await prisma.user.findMany({
+        where: {
+          businessId: session.businessId,
+          active: true,
+          pinHash: { not: null },
+        },
+        include: {
+          roles: {
+            include: {
+              role: {
+                include: {
+                  rolePermissions: {
+                    include: { permission: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      let authorizedCashierUser = null
+      for (const u of candidateUsers) {
+        if (!u.pinHash) continue
+        const match = await bcrypt.compare(supervisorPin.trim(), u.pinHash)
+        if (match) {
+          const uPerms = u.roles.flatMap((ur) => ur.role.rolePermissions.map((rp) => rp.permission.code))
+          const uRoles = u.roles.map((ur) => ur.role.code)
+          const isUAdmin =
+            uRoles.includes('ADMIN') ||
+            uRoles.includes('SUPERADMIN') ||
+            uRoles.includes('BRANCH_MANAGER') ||
+            uRoles.includes('CASHIER')
+          const uCanCashier =
+            isUAdmin ||
+            uPerms.includes('acceso_pos') ||
+            uPerms.includes('gestionar_cajas') ||
+            u.roles.some((ur) => ur.role.canAccessPOS || ur.role.canManageCashRegisters)
+
+          if (uCanCashier) {
+            authorizedCashierUser = u
+            break
+          }
+        }
+      }
+
+      if (!authorizedCashierUser) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'INVALID_PIN',
+              message: 'El PIN ingresado no corresponde a un cajero o supervisor autorizado.',
+            },
+          },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Verificación de permiso para aplicar descuento si viene discountAmount > 0
+    const discountVal = Math.max(0, Number(discountAmount) || 0)
+    if (discountVal > 0) {
+      const canDiscount =
+        isOwnerOrAdmin ||
+        session.permissions.canAuthorizeDiscounts ||
+        userPermCodes.includes('autorizar_descuentos')
+
+      if (!canDiscount && !effectiveApprovedBy && !supervisorPin) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: 'REQUIRES_DISCOUNT_PIN',
+              message: 'Tu puesto no tiene autorización para aplicar descuentos sin PIN de supervisor.',
+            },
+          },
+          { status: 403 }
+        )
+      }
+    }
 
     // 1. Obtener la mesa y su orden activa
     const table = await prisma.table.findFirst({
@@ -114,11 +236,24 @@ export async function POST(
       }
     }
 
-    const total = Number(activeOrder.total)
+    const rawTotal = Number(activeOrder.total)
+    const effectiveTotal = Math.max(0, rawTotal - discountVal)
+    const total = effectiveTotal
     const idempotencyKey = crypto.randomUUID()
 
     // 4. Procesar cobro, deducción de inventario, pago y liberación de mesa en transacción atómica
     const result = await prisma.$transaction(async (tx) => {
+      // Registrar descuento si aplica
+      if (discountVal > 0) {
+        await tx.orderDiscount.create({
+          data: {
+            orderId: activeOrder.id,
+            amount: discountVal,
+            reason: discountReason?.trim() || 'Descuento autorizado en comanda',
+            approvedBy: effectiveApprovedBy || session.name || 'Supervisor',
+          },
+        })
+      }
       // A. Si hay platillos no servidos, marcarlos como servidos
       await tx.orderItem.updateMany({
         where: {
@@ -309,7 +444,9 @@ export async function POST(
         where: { id: activeOrder.id },
         data: {
           status: OrderStatus.PAID,
-          paidTotal: total,
+          total: effectiveTotal,
+          paidTotal: effectiveTotal,
+          discountTotal: discountVal > 0 ? discountVal : activeOrder.discountTotal,
           closedAt: new Date(),
           cashSessionId: cashSession?.id,
         },

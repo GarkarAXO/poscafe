@@ -32,7 +32,9 @@ export async function PUT(
       password,
       pin,
       gender,
+      age,
       roleId,
+      operationalPermissions,
       branchIds,
       kitchenStationIds,
       defaultBranchId,
@@ -114,6 +116,7 @@ export async function PUT(
           ...(normalizedEmail !== undefined && { email: normalizedEmail }),
           ...(normalizedUsername !== undefined && { username: normalizedUsername }),
           ...(gender !== undefined && { gender: gender === 'FEMALE' ? 'FEMALE' : 'MALE' }),
+          ...(age !== undefined && { age: typeof age === 'number' && age > 0 ? Math.floor(age) : null }),
           ...(newPasswordHash && { passwordHash: newPasswordHash }),
           ...(newPinHash !== undefined && { pinHash: newPinHash }),
           ...(active !== undefined && { active: Boolean(active) }),
@@ -130,9 +133,125 @@ export async function PUT(
         })
 
         if (role) {
+          let finalRoleId = role.id
+          const hasCustomOps =
+            operationalPermissions &&
+            (
+              (operationalPermissions.canAccessPOS !== undefined && operationalPermissions.canAccessPOS !== role.canAccessPOS) ||
+              (operationalPermissions.canAuthorizeDiscounts !== undefined && operationalPermissions.canAuthorizeDiscounts !== role.canAuthorizeDiscounts) ||
+              (operationalPermissions.canAuthorizeCourtesies !== undefined && operationalPermissions.canAuthorizeCourtesies !== role.canAuthorizeCourtesies) ||
+              (operationalPermissions.canAuthorizeCancellations !== undefined && operationalPermissions.canAuthorizeCancellations !== role.canAuthorizeCancellations) ||
+              (operationalPermissions.canTransferTables !== undefined && operationalPermissions.canTransferTables !== role.canTransferTables)
+            )
+
+          const staffCode = `STAFF_${userId.replace(/[^A-Za-z0-9]/g, '').slice(0, 20)}`
+
+          if (hasCustomOps) {
+            const customRole = await tx.role.upsert({
+              where: {
+                businessId_code: {
+                  businessId: session.businessId,
+                  code: staffCode,
+                },
+              },
+              update: {
+                name: role.name,
+                canAccessPOS: operationalPermissions.canAccessPOS ?? role.canAccessPOS,
+                canManageCatalog: role.canManageCatalog,
+                canManageInventory: role.canManageInventory,
+                canManagePurchases: role.canManagePurchases,
+                canManageExpenses: role.canManageExpenses,
+                canManageCashRegisters: role.canManageCashRegisters,
+                canViewReports: role.canViewReports,
+                canManageUsers: role.canManageUsers,
+                canManageSettings: role.canManageSettings,
+                canAuthorizeDiscounts: operationalPermissions.canAuthorizeDiscounts ?? role.canAuthorizeDiscounts,
+                canAuthorizeCourtesies: operationalPermissions.canAuthorizeCourtesies ?? role.canAuthorizeCourtesies,
+                canAuthorizeCancellations: operationalPermissions.canAuthorizeCancellations ?? role.canAuthorizeCancellations,
+                canTransferTables: operationalPermissions.canTransferTables ?? role.canTransferTables,
+                canAccessKDS: role.canAccessKDS,
+                canManageKitchen: role.canManageKitchen,
+              },
+              create: {
+                businessId: session.businessId,
+                name: role.name,
+                code: staffCode,
+                description: `Puesto ${role.name} con permisos operativos personalizados`,
+                isSystem: false,
+                canAccessPOS: operationalPermissions.canAccessPOS ?? role.canAccessPOS,
+                canManageCatalog: role.canManageCatalog,
+                canManageInventory: role.canManageInventory,
+                canManagePurchases: role.canManagePurchases,
+                canManageExpenses: role.canManageExpenses,
+                canManageCashRegisters: role.canManageCashRegisters,
+                canViewReports: role.canViewReports,
+                canManageUsers: role.canManageUsers,
+                canManageSettings: role.canManageSettings,
+                canAuthorizeDiscounts: operationalPermissions.canAuthorizeDiscounts ?? role.canAuthorizeDiscounts,
+                canAuthorizeCourtesies: operationalPermissions.canAuthorizeCourtesies ?? role.canAuthorizeCourtesies,
+                canAuthorizeCancellations: operationalPermissions.canAuthorizeCancellations ?? role.canAuthorizeCancellations,
+                canTransferTables: operationalPermissions.canTransferTables ?? role.canTransferTables,
+                canAccessKDS: role.canAccessKDS,
+                canManageKitchen: role.canManageKitchen,
+              },
+            })
+
+            // Sincronizar rolePermissions
+            await tx.rolePermission.deleteMany({ where: { roleId: customRole.id } })
+            const baseRolePerms = await tx.rolePermission.findMany({
+              where: { roleId: role.id },
+              include: { permission: true },
+            })
+            const permCodes = new Set<string>(baseRolePerms.map((rp: any) => rp.permission.code))
+
+            if (customRole.canAccessPOS) {
+              permCodes.add('acceso_pos')
+              permCodes.add('acceso_comandera')
+            } else {
+              permCodes.delete('acceso_pos')
+              permCodes.delete('acceso_comandera')
+            }
+            if (customRole.canAuthorizeDiscounts) permCodes.add('autorizar_descuentos')
+            else permCodes.delete('autorizar_descuentos')
+
+            if (customRole.canAuthorizeCourtesies) permCodes.add('autorizar_cortesias')
+            else permCodes.delete('autorizar_cortesias')
+
+            if (customRole.canAuthorizeCancellations) permCodes.add('autorizar_cancelaciones')
+            else permCodes.delete('autorizar_cancelaciones')
+
+            if (customRole.canTransferTables) permCodes.add('traspaso_mesas')
+            else permCodes.delete('traspaso_mesas')
+
+            const permsToLink = await tx.permission.findMany({
+              where: { code: { in: Array.from(permCodes) } },
+              select: { id: true },
+            })
+
+            if (permsToLink.length > 0) {
+              await tx.rolePermission.createMany({
+                data: permsToLink.map((p: any) => ({
+                  roleId: customRole.id,
+                  permissionId: p.id,
+                })),
+                skipDuplicates: true,
+              })
+            }
+
+            finalRoleId = customRole.id
+          } else {
+            // Si ya no tiene personalizaciones, eliminar rol custom si existía
+            await tx.role.deleteMany({
+              where: {
+                businessId: session.businessId,
+                code: staffCode,
+              },
+            })
+          }
+
           await tx.userRole.deleteMany({ where: { userId } })
           await tx.userRole.create({
-            data: { userId, roleId: role.id },
+            data: { userId, roleId: finalRoleId },
           })
         }
       }

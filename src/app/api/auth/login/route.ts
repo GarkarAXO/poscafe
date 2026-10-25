@@ -76,6 +76,8 @@ export async function POST(request: Request) {
 
     const permissions = mergePermissions(user.roles)
     const roleCodes = user.roles.map((r) => r.role.code)
+    const { getUserPermissionCodes } = await import('@/lib/permissions-service')
+    const permissionCodes = await getUserPermissionCodes(user.id)
 
     const sessionPayload: AuthSession = {
       userId: user.id,
@@ -83,10 +85,12 @@ export async function POST(request: Request) {
       email: user.email,
       username: user.username,
       gender: user.gender || 'MALE',
+      age: user.age,
       isPlatformAdmin: false,
       businessId: user.businessId,
       activeBranchId: activeBranch?.id,
       roleCodes,
+      permissionCodes,
       permissions,
     }
 
