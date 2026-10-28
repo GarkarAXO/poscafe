@@ -35,10 +35,26 @@ import {
   RotateCcw,
   AlertOctagon,
   Code2,
+  ChevronDown,
+  LayoutGrid,
+  Boxes,
+  Truck,
+  Receipt,
+  BarChart3,
+  Upload,
 } from 'lucide-react'
 import { notify } from '@/lib/notify'
 import { ModalPortal } from '@/components/modal-portal'
 import AdminModulesManagement from './admin-modules-management'
+import { convertImageToIco } from '@/lib/client-favicon-converter'
+
+export interface BranchStaffItem {
+  id: string
+  name: string
+  code: string
+  maxStaff: number
+  modules: Record<string, boolean>
+}
 
 export interface SerializedBusiness {
   id: string
@@ -55,6 +71,7 @@ export interface SerializedBusiness {
     name: string
     code: string
     maxStaff: number
+    modules?: Record<string, boolean>
   }>
   usersCount: number
   productsCount: number
@@ -106,6 +123,89 @@ const COLOR_PRESETS = [
   { name: 'Dorado Nocturno', primary: '#d97706', secondary: '#1e293b', accent: '#fbbf24' },
 ]
 
+export const BRANCH_CONFIGURABLE_MODULES = [
+  {
+    key: 'pos',
+    name: 'Terminal POS (Caja)',
+    desc: 'Cobro de pedidos, tickets de venta y facturación.',
+    icon: CreditCard,
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10 border-blue-500/20',
+  },
+  {
+    key: 'comandera',
+    name: 'Comandera de Mesas',
+    desc: 'Toma de comandas en mesas para meseros.',
+    icon: UtensilsCrossed,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10 border-amber-500/20',
+  },
+  {
+    key: 'kds',
+    name: 'Monitor KDS Cocina',
+    desc: 'Pantalla digital de preparación para cocina y barra.',
+    icon: MonitorPlay,
+    color: 'text-rose-400',
+    bg: 'bg-rose-500/10 border-rose-500/20',
+  },
+  {
+    key: 'theme',
+    name: 'Temas y Colores',
+    desc: 'Personalización de colores, logos e identidad.',
+    icon: Palette,
+    color: 'text-violet-400',
+    bg: 'bg-violet-500/10 border-violet-500/20',
+  },
+  {
+    key: 'tables',
+    name: 'Control de Mesas',
+    desc: 'Salones, sectores y distribución de mesas.',
+    icon: LayoutGrid,
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/10 border-cyan-500/20',
+  },
+  {
+    key: 'inventory',
+    name: 'Inventario & Stock',
+    desc: 'Existencias de insumos, stock y mermas.',
+    icon: Boxes,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10 border-emerald-500/20',
+  },
+  {
+    key: 'purchases',
+    name: 'Compras a Proveedores',
+    desc: 'Órdenes de compra y recepción de materias primas.',
+    icon: Truck,
+    color: 'text-indigo-400',
+    bg: 'bg-indigo-500/10 border-indigo-500/20',
+  },
+  {
+    key: 'expenses',
+    name: 'Gastos Operativos',
+    desc: 'Egresos, caja chica y comprobantes de gastos.',
+    icon: Receipt,
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/10 border-orange-500/20',
+  },
+  {
+    key: 'kitchenStations',
+    name: 'Áreas de Cocina',
+    desc: 'Estaciones de preparación y ruteo de órdenes.',
+    icon: Store,
+    color: 'text-pink-400',
+    bg: 'bg-pink-500/10 border-pink-500/20',
+  },
+  {
+    key: 'reports',
+    name: 'Reportes y Arqueos',
+    desc: 'Métricas de ventas, finanzas y arqueos de turno.',
+    icon: BarChart3,
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-500/10 border-yellow-500/20',
+  },
+]
+
 export default function AdminPanelClient({
   initialBusinesses,
   plans,
@@ -140,7 +240,42 @@ export default function AdminPanelClient({
   const [editOwnerPassword, setEditOwnerPassword] = useState('')
   const [showEditPassword, setShowEditPassword] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const [branchesStaff, setBranchesStaff] = useState<Array<{ id: string; name: string; code: string; maxStaff: number }>>([])
+  const [branchesStaff, setBranchesStaff] = useState<BranchStaffItem[]>([])
+  const [expandedBranchModules, setExpandedBranchModules] = useState<Record<string, boolean>>({})
+
+  const toggleBranchModule = (branchId: string, moduleKey: string) => {
+    setBranchesStaff((prev) =>
+      prev.map((b) => {
+        if (b.id !== branchId) return b
+        const currentVal = b.modules?.[moduleKey] ?? true
+        return {
+          ...b,
+          modules: {
+            ...b.modules,
+            [moduleKey]: !currentVal,
+          },
+        }
+      })
+    )
+  }
+
+  const toggleAllBranchModules = (branchId: string, enableAll: boolean) => {
+    setBranchesStaff((prev) =>
+      prev.map((b) => {
+        if (b.id !== branchId) return b
+        const updated: Record<string, boolean> = {}
+        BRANCH_CONFIGURABLE_MODULES.forEach((m) => {
+          updated[m.key] = enableAll
+        })
+        updated.dashboard = true
+        updated.users = true
+        return {
+          ...b,
+          modules: updated,
+        }
+      })
+    )
+  }
 
   // Modal de Reinicio de Sucursal (Ventas y Stock a 0)
   const [resettingBranch, setResettingBranch] = useState<{
@@ -230,8 +365,30 @@ export default function AdminPanelClient({
     setModalError(null)
     setSaveSuccessMsg(null)
     setEditOwnerPassword('')
+    setExpandedBranchModules({})
     setBranchesStaff(
-      biz.branches ? biz.branches.map((b) => ({ ...b, maxStaff: b.maxStaff ?? 10 })) : []
+      biz.branches
+        ? biz.branches.map((b) => ({
+            id: b.id,
+            name: b.name,
+            code: b.code,
+            maxStaff: b.maxStaff ?? 10,
+            modules: {
+              pos: b.modules?.pos ?? true,
+              comandera: b.modules?.comandera ?? true,
+              kds: b.modules?.kds ?? true,
+              theme: b.modules?.theme ?? true,
+              tables: b.modules?.tables ?? true,
+              inventory: b.modules?.inventory ?? true,
+              purchases: b.modules?.purchases ?? true,
+              expenses: b.modules?.expenses ?? true,
+              kitchenStations: b.modules?.kitchenStations ?? true,
+              reports: b.modules?.reports ?? true,
+              users: b.modules?.users ?? true,
+              dashboard: b.modules?.dashboard ?? true,
+            },
+          }))
+        : []
     )
 
     setEditForm({
@@ -277,6 +434,7 @@ export default function AdminPanelClient({
           id: b.id,
           name: b.name.trim(),
           maxStaff: Number(b.maxStaff) || 10,
+          modules: b.modules,
         }))
       }
 
@@ -311,7 +469,12 @@ export default function AdminPanelClient({
                   ? b.branches.map((br) => {
                       const updated = branchesStaff.find((bs) => bs.id === br.id)
                       return updated
-                        ? { ...br, name: updated.name.trim(), maxStaff: Number(updated.maxStaff) || 10 }
+                        ? {
+                            ...br,
+                            name: updated.name.trim(),
+                            maxStaff: Number(updated.maxStaff) || 10,
+                            modules: updated.modules,
+                          }
                         : br
                     })
                   : b.branches,
@@ -339,7 +502,12 @@ export default function AdminPanelClient({
                   ? prev.branches.map((br) => {
                       const updated = branchesStaff.find((bs) => bs.id === br.id)
                       return updated
-                        ? { ...br, name: updated.name.trim(), maxStaff: Number(updated.maxStaff) || 10 }
+                        ? {
+                            ...br,
+                            name: updated.name.trim(),
+                            maxStaff: Number(updated.maxStaff) || 10,
+                            modules: updated.modules,
+                          }
                         : br
                     })
                   : prev.branches,
@@ -1272,6 +1440,118 @@ export default function AdminPanelClient({
                               </div>
                             </div>
 
+                            {/* Selector de Módulos Activos por Sucursal */}
+                            <div className="pt-2 border-t border-slate-900/90 space-y-2">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedBranchModules((prev) => ({
+                                      ...prev,
+                                      [branch.id]: !prev[branch.id],
+                                    }))
+                                  }
+                                  className="flex items-center gap-2 text-[11px] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer group"
+                                >
+                                  <div className="w-5 h-5 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-400 flex items-center justify-center group-hover:bg-violet-500/25 transition-all">
+                                    <Sparkles className="w-3 h-3" />
+                                  </div>
+                                  <span>
+                                    Módulos de la Sucursal (
+                                    <strong className="text-violet-300">
+                                      {
+                                        BRANCH_CONFIGURABLE_MODULES.filter(
+                                          (m) => branch.modules?.[m.key] ?? true
+                                        ).length
+                                      }{' '}
+                                      activos
+                                    </strong>
+                                    )
+                                  </span>
+                                  <ChevronDown
+                                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                                      expandedBranchModules[branch.id] ? 'rotate-180' : ''
+                                    }`}
+                                  />
+                                </button>
+
+                                <div className="flex items-center gap-2 self-start sm:self-auto">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleAllBranchModules(branch.id, true)}
+                                    className="text-[10px] text-violet-400 hover:text-violet-300 font-semibold px-2 py-0.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 transition-all cursor-pointer"
+                                  >
+                                    Activar Todos
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleAllBranchModules(branch.id, false)}
+                                    className="text-[10px] text-slate-400 hover:text-slate-300 font-medium px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-all cursor-pointer"
+                                  >
+                                    Desactivar Todos
+                                  </button>
+                                </div>
+                              </div>
+
+                              {expandedBranchModules[branch.id] && (
+                                <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 space-y-2.5 animate-in fade-in duration-200">
+                                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                    <span>
+                                      Activa o desactiva qué apartados del sidebar y herramientas tendrá <strong className="text-slate-200">{branch.name}</strong>:
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {BRANCH_CONFIGURABLE_MODULES.map((mod) => {
+                                      const isModActive = branch.modules?.[mod.key] ?? true
+                                      const IconComponent = mod.icon
+                                      return (
+                                        <div
+                                          key={mod.key}
+                                          onClick={() => toggleBranchModule(branch.id, mod.key)}
+                                          className={`p-2.5 rounded-xl border flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none ${
+                                            isModActive
+                                              ? `${mod.bg} bg-opacity-40 shadow-xs`
+                                              : 'bg-slate-950/70 border-slate-800/70 opacity-60 hover:opacity-85'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <div
+                                              className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+                                                isModActive ? mod.color : 'text-slate-500'
+                                              }`}
+                                            >
+                                              <IconComponent className="w-3.5 h-3.5" />
+                                            </div>
+                                            <div className="min-w-0">
+                                              <span
+                                                className={`text-[11px] font-semibold block truncate ${
+                                                  isModActive ? 'text-white' : 'text-slate-400'
+                                                }`}
+                                              >
+                                                {mod.name}
+                                              </span>
+                                              <span className="text-[9px] text-slate-500 block truncate">
+                                                {mod.desc}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div
+                                            className={`w-8 h-4.5 rounded-full p-0.5 transition-colors shrink-0 flex items-center ${
+                                              isModActive ? 'bg-violet-600 justify-end' : 'bg-slate-800 justify-start'
+                                            }`}
+                                          >
+                                            <div className="w-3.5 h-3.5 rounded-full bg-white shadow-xs" />
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
                             <div className="flex items-center justify-between pt-2 border-t border-slate-900">
                               <span className="text-[10px] text-slate-500 font-mono">
                                 ID: {branch.id.slice(0, 8)}...
@@ -1393,12 +1673,12 @@ export default function AdminPanelClient({
               {/* TAB 2: BRANDING Y COLORES DEL DASHBOARD */}
               {activeTab === 'branding' && (
                 <div className="space-y-5 text-xs">
-                  {/* Logo URL */}
+                  {/* Logo URL y Subida */}
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">
-                      URL del Logotipo del Negocio (Opcional)
+                      Logotipo del Negocio (Opcional)
                     </label>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <input
                         type="url"
                         value={editForm.settings.logoUrl}
@@ -1408,14 +1688,38 @@ export default function AdminPanelClient({
                             settings: { ...editForm.settings, logoUrl: e.target.value },
                           })
                         }
-                        placeholder="https://ejemplo.com/logo.png"
-                        className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        placeholder="https://ejemplo.com/logo.png o sube una imagen"
+                        className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:ring-1 focus:ring-violet-500 text-xs"
                       />
+                      <label className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0">
+                        <Upload className="w-3.5 h-3.5 text-violet-400" />
+                        <span>Subir Imagen</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = () => {
+                                setEditForm({
+                                  ...editForm,
+                                  settings: { ...editForm.settings, logoUrl: reader.result as string },
+                                })
+                                notify.success('Logo cargado', 'Imagen de logotipo cargada exitosamente.')
+                              }
+                              reader.readAsDataURL(file)
+                            }
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
                       {editForm.settings.logoUrl && (
                         <img
                           src={editForm.settings.logoUrl}
                           alt="Logo Preview"
-                          className="w-10 h-10 rounded-xl object-contain bg-slate-950 border border-slate-800 p-1 shrink-0"
+                          className="w-10 h-10 rounded-xl object-contain bg-slate-950 border border-slate-800 p-1 shrink-0 self-center"
                         />
                       )}
                     </div>

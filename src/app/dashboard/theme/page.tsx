@@ -52,6 +52,7 @@ import {
   Calendar,
   MapPin,
   MessageCircle,
+  Upload,
 } from 'lucide-react'
 import { InstagramIcon, FacebookIcon, TikTokIcon, WhatsAppIcon } from '@/components/brand-icons'
 import ElegantMenu from '@/components/elegant-menu'
@@ -59,6 +60,7 @@ import { DISPLAY_THEMES, CustomDisplayColors, QUICK_COLOR_PALETTES } from '@/app
 import { notify } from '@/lib/notify'
 import { isLightColor, getStatusBadgeStyles } from '@/lib/theme-utils'
 import { useDashboardTheme } from '@/context/dashboard-theme-context'
+import { convertImageToIco } from '@/lib/client-favicon-converter'
 
 interface Branch {
   id: string
@@ -894,6 +896,7 @@ export default function ThemeCustomizerPage() {
 
   const [generatingFavicon, setGeneratingFavicon] = useState(false)
 
+  // Generar Favicon .ico desde la URL de Isotipo o Logo
   const handleGenerateFavicon = async (source: 'logo' | 'isotype') => {
     if (!selectedBranchId) return
     const sourceUrl = source === 'isotype' ? themeData.isotypeUrl : themeData.logoUrl
@@ -907,29 +910,69 @@ export default function ThemeCustomizerPage() {
 
     try {
       setGeneratingFavicon(true)
-      const res = await fetch(`/api/branches/${selectedBranchId}/generate-favicon`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceUrl, source }),
-      })
-      const json = await res.json()
-      if (json.success && json.data?.faviconUrl) {
-        setThemeData((prev) => ({ ...prev, faviconUrl: json.data.faviconUrl }))
-        notify.success(
-          'Favicon .ico generado',
-          'El icono .ico fue generado y vinculado exitosamente a esta sucursal.'
-        )
-        setBranches((prev) =>
-          prev.map((b) => (b.id === selectedBranchId ? { ...b, faviconUrl: json.data.faviconUrl } : b))
-        )
-      } else {
-        notify.error('Error al generar', json.error?.message || 'No se pudo generar el favicon .ico')
-      }
+      const icoDataUrl = await convertImageToIco(sourceUrl, 64)
+      setThemeData((prev) => ({ ...prev, faviconUrl: icoDataUrl }))
+      notify.success(
+        'Favicon .ico generado',
+        'El icono .ico fue generado y vinculado exitosamente a esta sucursal.'
+      )
+      setBranches((prev) =>
+        prev.map((b) => (b.id === selectedBranchId ? { ...b, faviconUrl: icoDataUrl } : b))
+      )
     } catch {
-      notify.error('Error de conexión', 'Ocurrió un error al contactar al generador de favicons')
+      notify.error('Error al generar', 'No se pudo convertir la imagen a formato .ico')
     } finally {
       setGeneratingFavicon(false)
     }
+  }
+
+  // Subir imagen local desde el dispositivo y convertirla a Favicon .ico automáticamente
+  const handleUploadAndConvertFavicon = async (file: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      notify.error('Archivo no válido', 'Por favor selecciona un archivo de imagen (PNG, JPG, SVG, WebP, ICO).')
+      return
+    }
+
+    try {
+      setGeneratingFavicon(true)
+      const icoDataUrl = await convertImageToIco(file, 64)
+      setThemeData((prev) => ({ ...prev, faviconUrl: icoDataUrl }))
+      notify.success(
+        '¡Favicon generado con éxito!',
+        'La imagen fue redimensionada a 64x64 y convertida a formato Favicon .ico estándar.'
+      )
+      if (selectedBranchId) {
+        setBranches((prev) =>
+          prev.map((b) => (b.id === selectedBranchId ? { ...b, faviconUrl: icoDataUrl } : b))
+        )
+      }
+    } catch (err: any) {
+      notify.error('Error al convertir', err?.message || 'No se pudo procesar la imagen seleccionada.')
+    } finally {
+      setGeneratingFavicon(false)
+    }
+  }
+
+  // Subir imagen local para Logotipo o Isotipo
+  const handleUploadImageFile = (file: File, target: 'logoUrl' | 'isotypeUrl') => {
+    if (!file || !file.type.startsWith('image/')) {
+      notify.error('Archivo no válido', 'Por favor selecciona un archivo de imagen.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      setThemeData((prev) => ({ ...prev, [target]: dataUrl }))
+      notify.success(
+        'Imagen cargada',
+        target === 'logoUrl' ? 'Logotipo cargado exitosamente.' : 'Isotipo cargado exitosamente.'
+      )
+    }
+    reader.onerror = () => {
+      notify.error('Error', 'No se pudo leer el archivo de imagen.')
+    }
+    reader.readAsDataURL(file)
   }
 
   const selectedBranch = branches.find((b) => b.id === selectedBranchId)
@@ -1374,10 +1417,11 @@ export default function ThemeCustomizerPage() {
             </div>
 
             {/* URL de Logotipo Principal (Grande) */}
-            <div className={`p-3 rounded-2xl border space-y-1.5 ${classes.subCard}`}>
+            {/* URL y Subida de Logotipo Principal (Grande) */}
+            <div className={`p-3 rounded-2xl border space-y-2 ${classes.subCard}`}>
               <div className="flex items-center justify-between">
                 <label className={`block text-xs font-bold ${classes.textMain}`}>
-                  URL del Logotipo Principal (Grande)
+                  Logotipo Principal (Grande)
                 </label>
                 {themeData.logoUrl && (
                   <span className="text-[10px] text-emerald-600 font-bold">Logo activo</span>
@@ -1386,13 +1430,31 @@ export default function ThemeCustomizerPage() {
               <p className={`text-[10px] ${classes.textMuted}`}>
                 Se muestra grande y centrado en la barra lateral expandida con el nombre debajo.
               </p>
-              <input
-                type="url"
-                value={themeData.logoUrl}
-                onChange={(e) => setThemeData({ ...themeData, logoUrl: e.target.value })}
-                placeholder="https://ejemplo.com/logo-completo.png"
-                className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
-              />
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  value={themeData.logoUrl}
+                  onChange={(e) => setThemeData({ ...themeData, logoUrl: e.target.value })}
+                  placeholder="https://ejemplo.com/logo-completo.png o sube una imagen"
+                  className={`flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                />
+                <label className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-all hover:opacity-90 shrink-0 ${classes.buttonGhost}`}>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Subir Imagen</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleUploadImageFile(file, 'logoUrl')
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+
               {themeData.logoUrl && (
                 <div className="pt-2 flex flex-col items-center justify-center">
                   <span className={`text-[9px] font-bold uppercase tracking-wider mb-1 ${classes.textSub}`}>
@@ -1410,11 +1472,11 @@ export default function ThemeCustomizerPage() {
               )}
             </div>
 
-            {/* URL de Isologo / Isotipo (Compacto) */}
-            <div className={`p-3 rounded-2xl border space-y-1.5 ${classes.subCard}`}>
+            {/* URL y Subida de Isologo / Isotipo (Compacto) */}
+            <div className={`p-3 rounded-2xl border space-y-2 ${classes.subCard}`}>
               <div className="flex items-center justify-between">
                 <label className={`block text-xs font-bold ${classes.textMain}`}>
-                  URL de Isotipo / Isologo (Sidebar Contraído)
+                  Isotipo / Isologo (Sidebar Contraído)
                 </label>
                 {themeData.isotypeUrl && (
                   <span className="text-[10px] text-emerald-600 font-bold">Isotipo activo</span>
@@ -1423,13 +1485,31 @@ export default function ThemeCustomizerPage() {
               <p className={`text-[10px] ${classes.textMuted}`}>
                 Símbolo compacto (1:1) para la barra contraída y pantallas reducidas.
               </p>
-              <input
-                type="url"
-                value={themeData.isotypeUrl}
-                onChange={(e) => setThemeData({ ...themeData, isotypeUrl: e.target.value })}
-                placeholder="https://ejemplo.com/isotipo-icono.png"
-                className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
-              />
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  value={themeData.isotypeUrl}
+                  onChange={(e) => setThemeData({ ...themeData, isotypeUrl: e.target.value })}
+                  placeholder="https://ejemplo.com/isotipo-icono.png o sube una imagen"
+                  className={`flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                />
+                <label className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-all hover:opacity-90 shrink-0 ${classes.buttonGhost}`}>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Subir Imagen</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleUploadImageFile(file, 'isotypeUrl')
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+
               {themeData.isotypeUrl && (
                 <div className="pt-2 flex flex-col items-center justify-center">
                   <span className={`text-[9px] font-bold uppercase tracking-wider mb-1 ${classes.textSub}`}>
@@ -1447,8 +1527,8 @@ export default function ThemeCustomizerPage() {
               )}
             </div>
 
-            {/* URL y Generador de Favicon (.ico) para la Pestaña del Navegador */}
-            <div className={`p-3.5 rounded-2xl border space-y-2.5 ${classes.subCard}`}>
+            {/* URL, Subida y Generador de Favicon (.ico) para la Pestaña del Navegador */}
+            <div className={`p-3.5 rounded-2xl border space-y-3 ${classes.subCard}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm">🌐</span>
@@ -1467,32 +1547,62 @@ export default function ThemeCustomizerPage() {
                 )}
               </div>
               <p className={`text-[10px] leading-relaxed ${classes.textMuted}`}>
-                Cada sucursal puede tener su propio favicon .ico exclusivo. Se muestra en la pestaña de Chrome, Safari y Edge cuando abren el Menú Digital, el POS o la Comandera de esta sucursal.
+                Sube cualquier imagen (PNG, JPG, SVG, WebP) o ingresa un enlace; el sistema la redimensionará a 64x64 y la convertirá automáticamente en un archivo <strong className="text-violet-400">Favicon .ico</strong> estándar para la pestaña del navegador.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  value={themeData.faviconUrl}
-                  onChange={(e) => setThemeData({ ...themeData, faviconUrl: e.target.value })}
-                  placeholder="https://ejemplo.com/favicon.ico o genera uno abajo"
-                  className={`flex-1 px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
-                />
+              {/* Botón Principal: Subir Imagen desde el Dispositivo y Convertir a Favicon */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <label className="flex-1 py-2.5 px-3.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-violet-600/25 transition-all cursor-pointer active:scale-98">
+                  {generatingFavicon ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  <span>
+                    {generatingFavicon
+                      ? 'Procesando y convirtiendo a .ico...'
+                      : 'Subir imagen y convertir a Favicon (.ico)'}
+                  </span>
+                  <input
+                    type="file"
+                    disabled={generatingFavicon}
+                    accept="image/*,.ico"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleUploadAndConvertFavicon(file)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+
                 {themeData.faviconUrl && (
                   <button
                     type="button"
                     onClick={() => setThemeData({ ...themeData, faviconUrl: '' })}
-                    className="px-3 py-1.5 rounded-xl text-[10px] font-semibold border cursor-pointer hover:bg-rose-500/10 hover:border-rose-500/30 text-rose-500 transition-colors"
+                    className="px-3 py-2 rounded-xl text-xs font-semibold border cursor-pointer hover:bg-rose-500/10 hover:border-rose-500/30 text-rose-500 transition-colors"
                   >
-                    Quitar
+                    Quitar Favicon
                   </button>
                 )}
               </div>
 
-              {/* Botones de Generación Automática desde Logo o Isotipo */}
+              {/* Input manual opcional de URL */}
+              <div className="space-y-1 pt-1">
+                <span className={`text-[10px] font-medium ${classes.textSub}`}>O ingresa un enlace directo a un .ico:</span>
+                <input
+                  type="text"
+                  value={themeData.faviconUrl}
+                  onChange={(e) => setThemeData({ ...themeData, faviconUrl: e.target.value })}
+                  placeholder="https://ejemplo.com/favicon.ico"
+                  className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${classes.input}`}
+                />
+              </div>
+
+              {/* Botones de Generación Automática desde Logo o Isotipo ya cargados */}
               {(themeData.logoUrl || themeData.isotypeUrl) && (
                 <div className="pt-1 flex flex-wrap items-center gap-2">
-                  <span className={`text-[10px] font-semibold ${classes.textSub}`}>Generación rápida:</span>
+                  <span className={`text-[10px] font-semibold ${classes.textSub}`}>Generación rápida desde:</span>
                   {themeData.isotypeUrl && (
                     <button
                       type="button"
@@ -1509,7 +1619,7 @@ export default function ThemeCustomizerPage() {
                       ) : (
                         <Sparkles className="w-3 h-3 text-amber-500" />
                       )}
-                      <span>Generar .ico desde Isotipo</span>
+                      <span>Convertir Isotipo a .ico</span>
                     </button>
                   )}
                   {themeData.logoUrl && (
@@ -1528,7 +1638,7 @@ export default function ThemeCustomizerPage() {
                       ) : (
                         <Sparkles className="w-3 h-3 text-amber-500" />
                       )}
-                      <span>Generar .ico desde Logo</span>
+                      <span>Convertir Logo a .ico</span>
                     </button>
                   )}
                 </div>

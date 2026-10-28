@@ -189,7 +189,7 @@ export async function PUT(
         }
       }
 
-      // 5. Actualizar sucursales: nombre y límite de personal (maxStaff)
+      // 5. Actualizar sucursales: nombre, límite de personal (maxStaff) y módulos por sucursal
       if (Array.isArray(branchesStaffLimits) && branchesStaffLimits.length > 0) {
         for (const b of branchesStaffLimits) {
           if (b.id) {
@@ -199,6 +199,23 @@ export async function PUT(
             }
             if (typeof b.name === 'string' && b.name.trim().length > 0) {
               dataToUpdate.name = b.name.trim()
+            }
+            if (b.modules && typeof b.modules === 'object') {
+              const currentBranch = await tx.branch.findUnique({
+                where: { id: b.id },
+                select: { addressLine2: true },
+              })
+              let currentExtraConfig: Record<string, any> = {}
+              if (currentBranch?.addressLine2) {
+                try {
+                  const parsed = JSON.parse(currentBranch.addressLine2)
+                  if (parsed && typeof parsed === 'object') {
+                    currentExtraConfig = parsed
+                  }
+                } catch {}
+              }
+              currentExtraConfig.modules = b.modules
+              dataToUpdate.addressLine2 = JSON.stringify(currentExtraConfig)
             }
             if (Object.keys(dataToUpdate).length > 0) {
               await tx.branch.update({

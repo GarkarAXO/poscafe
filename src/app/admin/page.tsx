@@ -23,7 +23,7 @@ export default async function AdminPlatformPage() {
     include: {
       settings: true,
       branches: {
-        select: { id: true, name: true, code: true, maxStaff: true },
+        select: { id: true, name: true, code: true, maxStaff: true, addressLine2: true },
         where: { deletedAt: null },
       },
       users: {
@@ -77,12 +77,36 @@ export default async function AdminPlatformPage() {
     active: b.active,
     createdAt: b.createdAt.toISOString(),
     branchesCount: b.branches.length,
-    branches: b.branches.map((br) => ({
-      id: br.id,
-      name: br.name,
-      code: br.code,
-      maxStaff: br.maxStaff ?? 10,
-    })),
+    branches: b.branches.map((br) => {
+      let branchModules = {
+        pos: true,
+        comandera: true,
+        kds: true,
+        theme: true,
+        tables: true,
+        inventory: true,
+        purchases: true,
+        expenses: true,
+        kitchenStations: true,
+        reports: true,
+        users: true,
+      }
+      if (br.addressLine2) {
+        try {
+          const parsed = JSON.parse(br.addressLine2)
+          if (parsed && typeof parsed.modules === 'object') {
+            branchModules = { ...branchModules, ...parsed.modules }
+          }
+        } catch {}
+      }
+      return {
+        id: br.id,
+        name: br.name,
+        code: br.code,
+        maxStaff: br.maxStaff ?? 10,
+        modules: branchModules,
+      }
+    }),
     usersCount: b._count.users,
     productsCount: b._count.products,
     settings: b.settings

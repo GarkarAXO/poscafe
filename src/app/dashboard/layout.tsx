@@ -67,6 +67,7 @@ export default async function DashboardLayout({
           secondaryColor: true,
           buttonColor: true,
           logoUrl: true,
+          addressLine2: true,
         },
         orderBy: { createdAt: 'asc' },
       },
@@ -108,26 +109,48 @@ export default async function DashboardLayout({
     }
   }
 
-  // Enriquecer sucursales con isotypeUrl y sidebarTheme de forma resiliente
-  let enrichedBranches = business.branches.map((b) => ({
-    ...b,
-    isotypeUrl: (b as any).isotypeUrl ?? null,
-    sidebarTheme: (b as any).sidebarTheme ?? 'DARK',
-  }))
+  // Enriquecer sucursales con isotypeUrl, sidebarTheme y módulos asignados de forma resiliente
+  let enrichedBranches = business.branches.map((b) => {
+    let branchModules: Record<string, boolean> | null = null
+    if ((b as any).addressLine2) {
+      try {
+        const parsed = JSON.parse((b as any).addressLine2)
+        if (parsed && typeof parsed.modules === 'object') {
+          branchModules = parsed.modules
+        }
+      } catch {}
+    }
+    return {
+      ...b,
+      isotypeUrl: (b as any).isotypeUrl ?? null,
+      sidebarTheme: (b as any).sidebarTheme ?? 'DARK',
+      modules: branchModules,
+    }
+  })
 
   try {
     const rawBranchRows = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT id, "isotypeUrl", "sidebarTheme" FROM branches WHERE "businessId" = $1 AND active = true`,
+      `SELECT id, "isotypeUrl", "sidebarTheme", "addressLine2" FROM branches WHERE "businessId" = $1 AND active = true`,
       session.businessId
     )
     if (rawBranchRows && rawBranchRows.length > 0) {
       const map = new Map(rawBranchRows.map((r) => [r.id, r]))
       enrichedBranches = enrichedBranches.map((b) => {
         const raw = map.get(b.id)
+        let branchModules = b.modules
+        if (raw?.addressLine2) {
+          try {
+            const parsed = JSON.parse(raw.addressLine2)
+            if (parsed && typeof parsed.modules === 'object') {
+              branchModules = parsed.modules
+            }
+          } catch {}
+        }
         return {
           ...b,
           isotypeUrl: raw?.isotypeUrl ?? b.isotypeUrl,
           sidebarTheme: raw?.sidebarTheme ?? b.sidebarTheme ?? 'DARK',
+          modules: branchModules,
         }
       })
     }

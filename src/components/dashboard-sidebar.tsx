@@ -43,6 +43,7 @@ interface DashboardSidebarProps {
       logoUrl?: string | null
       isotypeUrl?: string | null
       sidebarTheme?: string | null
+      modules?: Record<string, boolean> | null
     }>
     settings?: {
       logoUrl?: string | null
@@ -568,6 +569,17 @@ export default function DashboardSidebar({
     canManageKitchen: false,
   }
 
+  // Verificación de módulos habilitados por sucursal física:
+  // Si la sucursal activa tiene una configuración explícita para este módulo, esta rige su visibilidad.
+  // De lo contrario, se adopta el valor de settings global del negocio.
+  const branchModules = (activeBranch as any)?.modules || null
+  const isBranchModuleEnabled = (moduleKey: string, fallbackSetting: boolean = true): boolean => {
+    if (branchModules && typeof branchModules[moduleKey] === 'boolean') {
+      return branchModules[moduleKey]
+    }
+    return fallbackSetting
+  }
+
   // Verificación de permiso granular: SuperAdmin tiene acceso total a todos los módulos.
   // Para los demás puestos (incluyendo administradores de sucursal), cada apartado se muestra
   // acorde a los permisos específicos asignados a su puesto en Recursos Humanos.
@@ -578,7 +590,7 @@ export default function DashboardSidebar({
     return false
   }
 
-  // Items de Operación Diaria dinámicos según módulos habilitados y permisos
+  // Items de Operación Diaria dinámicos según módulos habilitados por sucursal y permisos
   const operationItems: NavItem[] = [
     {
       name: 'Panel General',
@@ -586,13 +598,14 @@ export default function DashboardSidebar({
       icon: LayoutDashboard,
       active: pathname === '/dashboard',
       enabled:
-        isSuperAdmin ||
-        hasPerm('acceso_dashboard') ||
-        hasPerm('ver_reportes', perms.canViewReports) ||
-        hasPerm('gestionar_personal', perms.canManageUsers) ||
-        hasPerm('gestionar_catalogo', perms.canManageCatalog) ||
-        hasPerm('gestionar_configuracion', perms.canManageSettings) ||
-        hasPerm('gestionar_inventario', perms.canManageInventory),
+        isBranchModuleEnabled('dashboard', true) &&
+        (isSuperAdmin ||
+          hasPerm('acceso_dashboard') ||
+          hasPerm('ver_reportes', perms.canViewReports) ||
+          hasPerm('gestionar_personal', perms.canManageUsers) ||
+          hasPerm('gestionar_catalogo', perms.canManageCatalog) ||
+          hasPerm('gestionar_configuracion', perms.canManageSettings) ||
+          hasPerm('gestionar_inventario', perms.canManageInventory)),
     },
     {
       name: 'Terminal POS (Caja)',
@@ -601,7 +614,7 @@ export default function DashboardSidebar({
       active: pathname === '/pos',
       highlight: true,
       enabled:
-        (settings.cashRegisterEnabled ?? true) &&
+        isBranchModuleEnabled('pos', settings.cashRegisterEnabled ?? true) &&
         (isSuperAdmin ||
           hasPerm('acceso_pos', perms.canAccessPOS) ||
           hasPerm('gestionar_cajas', perms.canManageCashRegisters) ||
@@ -614,7 +627,7 @@ export default function DashboardSidebar({
       active: pathname === '/comandera',
       highlight: user.roleCodes.includes('WAITER'),
       enabled:
-        (settings.tablesEnabled ?? true) &&
+        isBranchModuleEnabled('comandera', settings.tablesEnabled ?? true) &&
         (isSuperAdmin ||
           hasPerm('acceso_comandera', perms.canAccessPOS) ||
           hasPerm('traspaso_mesas', perms.canTransferTables) ||
@@ -626,7 +639,7 @@ export default function DashboardSidebar({
       icon: MonitorPlay,
       active: pathname === '/kds',
       enabled:
-        (settings.kitchenEnabled ?? true) &&
+        isBranchModuleEnabled('kds', settings.kitchenEnabled ?? true) &&
         (isSuperAdmin ||
           hasPerm('acceso_kds', perms.canAccessKDS) ||
           hasPerm('gestionar_cocina', perms.canManageKitchen) ||
@@ -637,7 +650,7 @@ export default function DashboardSidebar({
   ].filter((item) => item.enabled)
 
   // Items de Administración ordenados según el flujo lógico:
-  // Controlados por apartado y permiso individual para dar control total sobre lo que ve el administrador de sucursal
+  // Controlados por módulo asignado a la sucursal y permiso individual
   const adminItems: NavItem[] = [
     {
       name: 'Inventario de Insumos',
@@ -645,7 +658,7 @@ export default function DashboardSidebar({
       icon: Boxes,
       active: pathname.startsWith('/dashboard/inventory'),
       enabled:
-        (settings.inventoryEnabled ?? true) &&
+        isBranchModuleEnabled('inventory', settings.inventoryEnabled ?? true) &&
         (isSuperAdmin || hasPerm('gestionar_inventario', perms.canManageInventory)),
     },
     {
@@ -654,7 +667,7 @@ export default function DashboardSidebar({
       icon: Truck,
       active: pathname.startsWith('/dashboard/purchases'),
       enabled:
-        (settings.purchasesEnabled ?? true) &&
+        isBranchModuleEnabled('purchases', settings.purchasesEnabled ?? true) &&
         (isSuperAdmin || hasPerm('gestionar_compras', perms.canManagePurchases)),
     },
     {
@@ -663,7 +676,7 @@ export default function DashboardSidebar({
       icon: Receipt,
       active: pathname.startsWith('/dashboard/expenses'),
       enabled:
-        (settings.expensesEnabled ?? true) &&
+        isBranchModuleEnabled('expenses', settings.expensesEnabled ?? true) &&
         (isSuperAdmin || hasPerm('gestionar_gastos', perms.canManageExpenses)),
     },
     {
@@ -671,7 +684,9 @@ export default function DashboardSidebar({
       href: '/dashboard/catalog',
       icon: Package,
       active: pathname.startsWith('/dashboard/catalog'),
-      enabled: isSuperAdmin || hasPerm('gestionar_catalogo', perms.canManageCatalog),
+      enabled:
+        isBranchModuleEnabled('catalog', true) &&
+        (isSuperAdmin || hasPerm('gestionar_catalogo', perms.canManageCatalog)),
     },
     {
       name: 'Áreas de Cocina',
@@ -679,7 +694,8 @@ export default function DashboardSidebar({
       icon: UtensilsCrossed,
       active: pathname.startsWith('/dashboard/kitchen-stations'),
       enabled:
-        (settings.kitchenEnabled ?? true) &&
+        isBranchModuleEnabled('kitchenStations', settings.kitchenEnabled ?? true) &&
+        isBranchModuleEnabled('kds', true) &&
         (isSuperAdmin ||
           hasPerm('gestionar_cocina', perms.canManageKitchen) ||
           hasPerm('gestionar_catalogo', perms.canManageCatalog)),
@@ -690,7 +706,7 @@ export default function DashboardSidebar({
       icon: LayoutGrid,
       active: pathname.startsWith('/dashboard/tables'),
       enabled:
-        (settings.tablesEnabled ?? true) &&
+        isBranchModuleEnabled('tables', settings.tablesEnabled ?? true) &&
         (isSuperAdmin ||
           hasPerm('traspaso_mesas', perms.canTransferTables) ||
           hasPerm('acceso_comandera', perms.canAccessPOS) ||
@@ -701,7 +717,9 @@ export default function DashboardSidebar({
       href: '/dashboard/users',
       icon: Users,
       active: pathname.startsWith('/dashboard/users'),
-      enabled: isSuperAdmin || hasPerm('gestionar_personal', perms.canManageUsers),
+      enabled:
+        isBranchModuleEnabled('users', true) &&
+        (isSuperAdmin || hasPerm('gestionar_personal', perms.canManageUsers)),
     },
     {
       name: settings.cashRegisterEnabled !== false ? 'Reportes y Arqueos' : 'Reportes de Ventas',
@@ -709,9 +727,10 @@ export default function DashboardSidebar({
       icon: BarChart3,
       active: pathname.startsWith('/dashboard/reports'),
       enabled:
-        isSuperAdmin ||
-        hasPerm('ver_reportes', perms.canViewReports) ||
-        hasPerm('gestionar_cajas', perms.canManageCashRegisters),
+        isBranchModuleEnabled('reports', true) &&
+        (isSuperAdmin ||
+          hasPerm('ver_reportes', perms.canViewReports) ||
+          hasPerm('gestionar_cajas', perms.canManageCashRegisters)),
     },
     {
       name: 'Gestión de Sucursales',
@@ -719,6 +738,7 @@ export default function DashboardSidebar({
       icon: Store,
       active: pathname.startsWith('/dashboard/branches'),
       enabled:
+        isBranchModuleEnabled('branches', settings.multiBranchEnabled !== false) &&
         settings.multiBranchEnabled !== false &&
         (isSuperAdmin || hasPerm('gestionar_configuracion', perms.canManageSettings)),
     },
@@ -728,6 +748,7 @@ export default function DashboardSidebar({
       icon: Palette,
       active: pathname.startsWith('/dashboard/theme'),
       enabled:
+        isBranchModuleEnabled('theme', settings.canCustomizeColors !== false) &&
         settings.canCustomizeColors !== false &&
         (isSuperAdmin || hasPerm('gestionar_configuracion', perms.canManageSettings)),
     },
